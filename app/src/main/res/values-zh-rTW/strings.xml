@@ -142,7 +142,7 @@
 		https://tinyurl.com/artemis-performance\n\n
 	</string>
 
-	<string name="email_recipient">artemistics.logs@gmail.com</string>
+	<string name="email_recipient"></string>
 	<string name="email_subject">Artemistics - 效能日誌</string>
 	<string name="email_chooser_title">傳送效能日誌...</string>
 	<string name="toast_no_email_clients">未安裝電子郵件用戶端。</string>

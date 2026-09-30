@@ -142,7 +142,7 @@
         https://tinyurl.com/artemis-performance\n\n
     </string>
 
-    <string name="email_recipient">artemistics.logs@gmail.com</string>
+    <string name="email_recipient"></string>
     <string name="email_subject">Artemistics - Performance Log</string>
     <string name="email_chooser_title">Send performance log...</string>
     <string name="toast_no_email_clients">No email clients installed.</string>
@@ -565,6 +565,8 @@
    	<string name="title_checkbox_forceTightThresholds">Tight Vsync (Experimental)</string>
     <string name="summary_checkbox_forceTightThresholds">Tighter VSYNC thresholds for lower latency; may increase drops.</string>
     <string name="title_checkbox_use_virtual_display">Use Virtual Display</string>
+    <string name="title_checkbox_window_only">Show only the app window</string>
+    <string name="summary_checkbox_window_only">Stream only the launched app\'s window and hide the Windows desktop. Requires the Vibepollo window-only host build.</string>
     <string name="summary_checkbox_use_virtual_display">Use Virtual Display by default.\nVirtual Display can automatically match your client side resolution and frame rate settings, giving you a seamless streaming experience.\nRequires Apollo as host streaming software.</string>
     <string name="title_checkbox_resume_without_confirm">Quick Resume</string>
     <string name="summary_checkbox_resume_without_confirm">Do not show resume menu when clicking resume button, resume the app immediately.</string>
