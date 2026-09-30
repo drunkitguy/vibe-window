@@ -114,12 +114,30 @@ jobs:
       group: publish-release
       cancel-in-progress: false
     steps:
+      # Re-check inside the publish lock: another run may have published this
+      # version while this one was building.
+      - name: Check for a complete release
+        id: published
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION_NAME: ${{ needs.check.outputs.version }}
+        run: |
+          apk="VibeWindow-${VERSION_NAME}-arm64-v8a.apk"
+          assets="$(gh release view "v${VERSION_NAME}" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' 2>/dev/null || true)"
+          if grep -qxF "$apk" <<< "$assets" && grep -qxF "$apk.sha256" <<< "$assets"; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131  # v7.0.0
+        if: steps.published.outputs.published == 'false'
         with:
           name: vibe-window-apk
           path: dist
 
       - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65  # v2.6.2
+        if: steps.published.outputs.published == 'false'
         with:
           tag_name: v${{ needs.check.outputs.version }}
           target_commitish: ${{ github.sha }}
