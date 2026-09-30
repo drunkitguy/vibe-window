@@ -59,7 +59,7 @@ android {
 
             resValue "string",
                     "obtainium_app_url",
-                    "data:text/html;base64,PGgxPlJvb3QgYnVpbGQgaXMgbm90IGF2YWlsYWJsZTwvaDE+"
+                    "https://github.com/drunkitguy/vibe-window/releases"
 
             applicationId "app.vibewindow.client"
             dimension "root"

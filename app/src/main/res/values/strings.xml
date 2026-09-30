@@ -137,9 +137,9 @@
 
     <!-- Performance Report Sharing -->
     <string name="email_prefix_message">
-        Please send this email as-is to artemistics.logs@gmail.com to support the community.\n
-        Your shared performance data will help improve and expand the dataset available at:\n
-        https://tinyurl.com/artemis-performance\n\n
+        Vibe Window performance log.
+
+
     </string>
 
     <string name="email_recipient"></string>

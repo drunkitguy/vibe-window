@@ -645,7 +645,6 @@
     <string name="rename">Переименовать</string>
     <string name="save">Сохранить</string>
     <string name="perf_overlay_drawdelay">" Задержка: %1$.2f мс"</string>
-    <string name="email_prefix_message">"\n        Пожалуйста отправьте это письмо как есть на artemistics.logs@gmail.com чтобы поддержать сообщество. \n\n        Ваши данные о производительности помогут улучшить и расширить набор данных по ссылке: \n\n        https://tinyurl.com/artemis-performance       "</string>
     <string name="title_checkbox_remember_mouse_mode">Запоминать режим мыши</string>
     <string name="title_enable_rumble">Включить вибрацию</string>
     <string name="title_prevent_packet_loss">Предотвращать потерю пакетов</string>
