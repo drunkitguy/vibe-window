@@ -41,10 +41,6 @@ android {
                 }
             }
 
-            resValue "string",
-                    "obtainium_app_url",
-                    "data:text/html;base64,PGgxPlJvb3QgYnVpbGQgaXMgbm90IGF2YWlsYWJsZTwvaDE+"
-
             applicationId "app.vibewindow.client.root"
             dimension "root"
             buildConfigField "boolean", "ROOT_BUILD", "true"
@@ -56,10 +52,6 @@ android {
                     arguments "PRODUCT_FLAVOR=nonRoot"
                 }
             }
-
-            resValue "string",
-                    "obtainium_app_url",
-                    "https://github.com/drunkitguy/vibe-window/releases"
 
             applicationId "app.vibewindow.client"
             dimension "root"
