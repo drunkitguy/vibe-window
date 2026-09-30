@@ -287,7 +287,6 @@
 \nHinweis: Die Aktivierung dieser Option kann dazu führen, dass Ihr Gamepad auf dem Host als PlayStation-Controller angezeigt wird.</string>
     <string name="pcview_menu_eol">NVIDIA GameStream End-of-Service</string>
     <string name="title_share_performance_logs_button">Leistungsdaten teilen</string>
-    <string name="email_subject">Artemistics - Performance Log</string>
     <string name="email_chooser_title">Performance Log senden...</string>
     <string name="toast_no_email_clients">Keine E-Mail-Clients installiert.</string>
     <string name="toast_no_logs">Es sind noch keine Leistungsdaten gespeichert.</string>

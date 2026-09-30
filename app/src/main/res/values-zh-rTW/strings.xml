@@ -137,7 +137,6 @@
 
 	<!-- Performance Report Sharing -->
 
-	<string name="email_subject">Artemistics - 效能日誌</string>
 	<string name="email_chooser_title">傳送效能日誌...</string>
 	<string name="toast_no_email_clients">未安裝電子郵件用戶端。</string>
 	<string name="toast_no_logs">尚未儲存任何效能數據。</string>
@@ -485,10 +484,7 @@
 	<string name="title_share_performance_logs_button">分享效能日誌</string>
 
 	<string name="title_software_update">軟體更新</string>
-	<string name="summary_software_update">Artemis Nior 版本（ClassicOldSong）－前往 GitHub Releases 取得最新版本</string>
 
-	<string name="title_follow_update">追蹤更新</string>
-	<string name="summary_follow_update">使用 Obtainium 追蹤 Artemis 更新</string>
 
 	<string name="title_special_key_layout">特殊按鍵佈局</string>
 	<string name="title_show_virtual_key">在螢幕上顯示虛擬按鍵</string>
