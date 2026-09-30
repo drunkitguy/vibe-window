@@ -1,0 +1,126 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+      - claude/clever-clarke-k7hhhj
+
+permissions: {}
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install NDK
+        run: sdkmanager --install "ndk;27.0.12077973"
+
+      - name: Read version
+        id: version
+        run: |
+          version="$(tr -d '[:space:]' < VERSION)"
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "VERSION must be MAJOR.MINOR.PATCH, got '$version'" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Build release APK
+        env:
+          VERSION_NAME: ${{ steps.version.outputs.version }}
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:assembleNonRoot_gameRelease --no-daemon --stacktrace \
+            -PwindowClientVersionName="$VERSION_NAME" \
+            -PwindowClientVersionCode="$((1000 + GITHUB_RUN_NUMBER))"
+
+      - name: Collect and verify APK
+        env:
+          VERSION_NAME: ${{ steps.version.outputs.version }}
+        run: |
+          shopt -s nullglob
+          apks=(app/build/outputs/apk/nonRoot_game/release/*.apk)
+          if [ "${#apks[@]}" -ne 1 ]; then
+            echo "Expected exactly one release APK, found ${#apks[@]}" >&2
+            exit 1
+          fi
+          mkdir -p dist
+          out="dist/VibeWindow-${VERSION_NAME}-arm64-v8a.apk"
+          cp "${apks[0]}" "$out"
+          build_tools="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)"
+          "$build_tools/apksigner" verify --print-certs "$out"
+          (cd dist && sha256sum "$(basename "$out")" > "$(basename "$out").sha256")
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vibe-window-apk
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      TAG: v${{ needs.build.outputs.version }}
+    steps:
+      - name: Check for existing release
+        id: existing
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/download-artifact@v4
+        if: steps.existing.outputs.exists == 'false'
+        with:
+          name: vibe-window-apk
+          path: dist
+
+      - uses: softprops/action-gh-release@v2
+        if: steps.existing.outputs.exists == 'false'
+        with:
+          tag_name: ${{ env.TAG }}
+          target_commitish: ${{ github.sha }}
+          name: Vibe Window ${{ needs.build.outputs.version }}
+          files: dist/*
+          fail_on_unmatched_files: true
+          make_latest: true
+          body: |
+            Android client for Vibepollo that streams only the launched app's window, never the Windows desktop.
+
+            **Requires the patched host.** Install the latest `window-host-v*` MSI from https://github.com/drunkitguy/apollo2-vibe/releases on the Windows PC first. Stock hosts stream the full display.
+
+            Install: download the APK below, open it on the device and allow installs from your browser or file manager. Verify with the `.sha256` file if you like.
+
+            Defaults: 1920x1080, 120 FPS, virtual display on, "Show only the app window" on.
+
+            Limitations: UAC prompts and the lock screen are still shown; switching from a launcher to the game window takes about a second; separate popup windows are not captured; exclusive fullscreen games may not produce frames.
+
+            Source: GPL-3.0, based on Artemis and Moonlight. See this repository.
