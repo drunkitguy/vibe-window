@@ -130,12 +130,15 @@ public final class LibraryModel {
         return hostHasPlatforms ? PlatformCatalog.PC : PlatformCatalog.GAMES;
     }
 
-    /** True when every query token appears in the app name or its group label. */
-    static boolean matches(List<String> tokens, String name, String groupLabel) {
+    /**
+     * True when every query token appears in the normalized app name or in the
+     * group's search text (its label and full platform names).
+     */
+    static boolean matches(List<String> tokens, String normalizedName, String groupSearchText) {
         if (tokens.isEmpty()) {
             return true;
         }
-        String haystack = LibraryText.normalize(name) + " " + LibraryText.normalize(groupLabel);
+        String haystack = normalizedName + " " + groupSearchText;
         for (String token : tokens) {
             if (!haystack.contains(token)) {
                 return false;
@@ -146,10 +149,12 @@ public final class LibraryModel {
 
     private static final class Bucket<T extends LibraryItem> {
         final PlatformCatalog.Platform platform;
+        final String labelKey;
         final List<Entry<T>> entries = new ArrayList<>();
 
         Bucket(PlatformCatalog.Platform platform) {
             this.platform = platform;
+            this.labelKey = LibraryText.normalize(platform.label);
         }
     }
 
@@ -171,7 +176,7 @@ public final class LibraryModel {
             if (lhs.platform.rank != rhs.platform.rank) {
                 return lhs.platform.rank - rhs.platform.rank;
             }
-            int byLabel = LibraryText.normalize(lhs.platform.label).compareTo(LibraryText.normalize(rhs.platform.label));
+            int byLabel = lhs.labelKey.compareTo(rhs.labelKey);
             if (byLabel != 0) {
                 return byLabel;
             }
@@ -235,7 +240,7 @@ public final class LibraryModel {
             for (Entry<T> entry : bucket.entries) {
                 LibrarySnapshot.AppRow<T> row = new LibrarySnapshot.AppRow<>(entry.app, platform.key, platform.label, entry.hidden);
                 all.add(row);
-                if (matches(tokens, entry.app.getAppName(), platform.label)) {
+                if (matches(tokens, entry.sortKey, platform.getSearchText())) {
                     matching.add(row);
                 }
             }

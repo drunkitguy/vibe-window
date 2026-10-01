@@ -39,6 +39,9 @@ public class GridLayoutController implements LibraryLayoutController {
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container) {
         recyclerView = (RecyclerView) inflater.inflate(R.layout.library_grid, container, false);
+        // RecyclerView makes itself focusable in touch mode; that would make the
+        // bare list the default focus instead of a card
+        recyclerView.setFocusableInTouchMode(false);
 
         layoutManager = new GridLayoutManager(host.getContext(), 2) {
             @Override
@@ -214,20 +217,30 @@ public class GridLayoutController implements LibraryLayoutController {
         private final RecyclerView recyclerView;
         private final LibraryRowAdapter adapter;
         private LibrarySnapshot<AppView.AppObject> committed;
+        // The last snapshot handed to the adapter; differs from committed while it is diffed
+        private LibrarySnapshot<AppView.AppObject> latest;
         private FocusRequest pending;
+        // A focus request made before the latest snapshot was committed
+        private FocusRequest deferred;
 
         private static final class FocusRequest {
             final String appKey;
             final String groupKey;
             final int position;
             final boolean preferHeader;
+            final boolean first;
             int attempts;
 
             FocusRequest(String appKey, String groupKey, int position, boolean preferHeader) {
+                this(appKey, groupKey, position, preferHeader, false);
+            }
+
+            FocusRequest(String appKey, String groupKey, int position, boolean preferHeader, boolean first) {
                 this.appKey = appKey;
                 this.groupKey = groupKey;
                 this.position = position;
                 this.preferHeader = preferHeader;
+                this.first = first;
             }
         }
 
@@ -288,12 +301,21 @@ public class GridLayoutController implements LibraryLayoutController {
                 }
             }
             final FocusRequest request = restore;
+            latest = snapshot;
 
             adapter.submitList(snapshot.rows, new Runnable() {
                 @Override
                 public void run() {
                     committed = snapshot;
-                    if (request != null && pending == null) {
+                    if (snapshot != latest) {
+                        // A newer snapshot is being diffed; it applies the focus
+                        return;
+                    }
+                    if (deferred != null) {
+                        pending = deferred;
+                        deferred = null;
+                    }
+                    else if (request != null && pending == null) {
                         pending = request;
                     }
                     recyclerView.requestLayout();
@@ -301,34 +323,49 @@ public class GridLayoutController implements LibraryLayoutController {
             });
         }
 
+        /** The snapshot positions refer to once every submitted list is committed. */
+        private LibrarySnapshot<AppView.AppObject> target() {
+            return latest != null ? latest : committed;
+        }
+
+        private void request(FocusRequest request) {
+            if (latest != null && latest != committed) {
+                // Apply once the rows this request refers to are in the adapter
+                deferred = request;
+            }
+            else {
+                pending = request;
+                applyPending();
+            }
+        }
+
         boolean focusApp(String appKey) {
-            if (appKey == null) {
+            LibrarySnapshot<AppView.AppObject> snapshot = target();
+            if (appKey == null || snapshot == null || snapshot.findAppPosition(appKey) < 0) {
                 return false;
             }
-            if (committed != null && committed.findAppPosition(appKey) < 0) {
-                return false;
-            }
-            pending = new FocusRequest(appKey, null, RecyclerView.NO_POSITION, false);
-            applyPending();
+            request(new FocusRequest(appKey, null, RecyclerView.NO_POSITION, false));
             return true;
         }
 
         boolean focusFirst() {
-            if (committed == null || committed.rows.isEmpty()) {
+            LibrarySnapshot<AppView.AppObject> snapshot = target();
+            if (snapshot == null || snapshot.rows.isEmpty()) {
                 return false;
             }
-            int position = 0;
-            for (int i = 0; i < committed.rows.size(); i++) {
-                LibrarySnapshot.Row row = committed.rows.get(i);
+            request(new FocusRequest(null, null, RecyclerView.NO_POSITION, false, true));
+            return true;
+        }
+
+        private static int firstFocusablePosition(LibrarySnapshot<AppView.AppObject> snapshot) {
+            for (int i = 0; i < snapshot.rows.size(); i++) {
+                LibrarySnapshot.Row row = snapshot.rows.get(i);
                 if (row instanceof LibrarySnapshot.AppRow
                         || (row instanceof LibrarySnapshot.HeaderRow && ((LibrarySnapshot.HeaderRow) row).collapsed)) {
-                    position = i;
-                    break;
+                    return i;
                 }
             }
-            pending = new FocusRequest(null, null, position, false);
-            applyPending();
-            return true;
+            return 0;
         }
 
         boolean jumpToAdjacentGroup(int direction) {
@@ -381,6 +418,9 @@ public class GridLayoutController implements LibraryLayoutController {
         private int resolve(FocusRequest request) {
             if (committed == null || committed.rows.isEmpty()) {
                 return RecyclerView.NO_POSITION;
+            }
+            if (request.first) {
+                return firstFocusablePosition(committed);
             }
             if (request.appKey != null) {
                 int position = committed.findAppPosition(request.appKey);

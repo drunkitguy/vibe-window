@@ -62,6 +62,8 @@ public class ShelfLayoutController implements LibraryLayoutController {
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container) {
         shelves = (RecyclerView) inflater.inflate(R.layout.library_shelves, container, false);
+        // Only cards and collapsed headers take focus, never the bare list
+        shelves.setFocusableInTouchMode(false);
         layoutManager = new LinearLayoutManager(host.getContext()) {
             @Override
             public boolean requestChildRectangleOnScreen(@NonNull RecyclerView parent, @NonNull View child,
@@ -246,20 +248,27 @@ public class ShelfLayoutController implements LibraryLayoutController {
             return shelf.header.requestFocus();
         }
 
-        int position = indexOfApp(group, appKey);
-        if (position < 0) {
-            position = Math.max(0, indexOfApp(group, lastFocusedByGroup.get(groupKey)));
+        // The app to focus: the requested one, else the one remembered for the shelf, else the first
+        int appIndex = indexOfApp(group, appKey);
+        if (appIndex < 0) {
+            appIndex = indexOfApp(group, lastFocusedByGroup.get(groupKey));
         }
-        if (shelf.cards.getItemCount() <= position) {
-            // The nested list has not committed this group yet
-            return false;
+        LibrarySnapshot.AppRow<AppView.AppObject> target = group.apps.get(Math.max(0, appIndex));
+
+        // Look the card up by its stable id: the nested list may still be showing older rows
+        RecyclerView.ViewHolder card = shelf.list.findViewHolderForItemId(target.getStableId());
+        if (card != null && card.getBindingAdapterPosition() != RecyclerView.NO_POSITION) {
+            return card.itemView.hasFocus() || card.itemView.requestFocus();
         }
-        RecyclerView.ViewHolder card = shelf.list.findViewHolderForAdapterPosition(position);
-        if (card == null) {
-            shelf.list.scrollToPosition(position);
-            return false;
+        List<LibrarySnapshot.Row> shown = shelf.cards.getCurrentList();
+        for (int i = 0; i < shown.size(); i++) {
+            if (shown.get(i).getStableId() == target.getStableId()) {
+                // Committed but off screen: scroll it in and try again
+                shelf.list.scrollToPosition(i);
+                break;
+            }
         }
-        return card.itemView.hasFocus() || card.itemView.requestFocus();
+        return false;
     }
 
     @Override
@@ -426,6 +435,8 @@ public class ShelfLayoutController implements LibraryLayoutController {
             shelfLayout.setInitialPrefetchItemCount(6);
             list.setLayoutManager(shelfLayout);
             list.setRecycledViewPool(cardPool);
+            // Shelves are rebound to other groups; animating that would show the old cards
+            list.setItemAnimator(null);
             list.setFocusable(true);
             list.setFocusableInTouchMode(false);
 
@@ -433,8 +444,10 @@ public class ShelfLayoutController implements LibraryLayoutController {
                     new LibraryRowAdapter.FocusListener() {
                         @Override
                         public void onRowFocused(RecyclerView.ViewHolder holder, LibrarySnapshot.Row row) {
-                            if (row instanceof LibrarySnapshot.AppRow && groupKey != null) {
-                                lastFocusedByGroup.put(groupKey, ((LibrarySnapshot.AppRow<?>) row).appKey);
+                            // Cards move between shelves through the shared pool, so file the
+                            // focus under the row's own group, not the shelf that created the card
+                            if (row instanceof LibrarySnapshot.AppRow) {
+                                lastFocusedByGroup.put(row.groupKey, ((LibrarySnapshot.AppRow<?>) row).appKey);
                             }
                         }
                     });
@@ -442,12 +455,16 @@ public class ShelfLayoutController implements LibraryLayoutController {
             list.setFocusMemory(new ShelfRecyclerView.FocusMemory() {
                 @Override
                 public int getRememberedPosition(ShelfRecyclerView shelf) {
-                    LibrarySnapshot.Group<AppView.AppObject> group = findGroup(groupKey);
-                    if (group == null) {
-                        return RecyclerView.NO_POSITION;
+                    // Positions of the rows this shelf shows right now
+                    String remembered = groupKey != null ? lastFocusedByGroup.get(groupKey) : null;
+                    List<LibrarySnapshot.Row> shown = cards.getCurrentList();
+                    for (int i = 0; remembered != null && i < shown.size(); i++) {
+                        LibrarySnapshot.Row row = shown.get(i);
+                        if (row instanceof LibrarySnapshot.AppRow && ((LibrarySnapshot.AppRow<?>) row).appKey.equals(remembered)) {
+                            return i;
+                        }
                     }
-                    int position = indexOfApp(group, lastFocusedByGroup.get(groupKey));
-                    return position >= 0 ? position : 0;
+                    return shown.isEmpty() ? RecyclerView.NO_POSITION : 0;
                 }
             });
 
@@ -497,10 +514,13 @@ public class ShelfLayoutController implements LibraryLayoutController {
             holder.list.setVisibility(group.collapsed ? View.GONE : View.VISIBLE);
 
             List<LibrarySnapshot.Row> rows = new ArrayList<LibrarySnapshot.Row>(group.apps);
-            holder.cards.submitList(group.collapsed ? new ArrayList<LibrarySnapshot.Row>() : rows);
             if (newGroup) {
+                // Drop the previous group's cards at once; the first list of a group is then
+                // inserted without diffing against unrelated cards
+                holder.cards.submitList(null);
                 holder.list.scrollToPosition(0);
             }
+            holder.cards.submitList(group.collapsed ? new ArrayList<LibrarySnapshot.Row>() : rows);
         }
     }
 }

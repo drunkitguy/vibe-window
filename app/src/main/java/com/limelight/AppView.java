@@ -62,6 +62,7 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewTreeObserver;
 import android.view.ContextMenu.ContextMenuInfo;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
@@ -110,6 +111,8 @@ public class AppView extends AppCompatActivity implements LibraryLayoutControlle
     private String query = "";
     private String lastFocusKey;
     private boolean initialFocusDone;
+    // The user asked for the search field (Y or a tap) and has not left it yet
+    private boolean searchEngaged;
 
     private EditText searchField;
     private TextView filterCountView;
@@ -392,6 +395,16 @@ public class AppView extends AppCompatActivity implements LibraryLayoutControlle
 
         setupLibraryControls();
 
+        getWindow().getDecorView().getViewTreeObserver().addOnTouchModeChangeListener(
+                new ViewTreeObserver.OnTouchModeChangeListener() {
+                    @Override
+                    public void onTouchModeChanged(boolean isInTouchMode) {
+                        if (!isInTouchMode) {
+                            onLeftTouchMode();
+                        }
+                    }
+                });
+
         // Bind to the computer manager service
         bindService(new Intent(this, ComputerManagerService.class), serviceConnection,
                 Service.BIND_AUTO_CREATE);
@@ -438,15 +451,27 @@ public class AppView extends AppCompatActivity implements LibraryLayoutControlle
                 return false;
             }
         });
+        // The field takes focus only when asked for (Y or a tap), so it never
+        // becomes the default focus of the screen or a D-pad stop by accident
+        setSearchFocusable(false);
         searchField.setOnFocusChangeListener(new View.OnFocusChangeListener() {
             @Override
             public void onFocusChange(View v, boolean hasFocus) {
+                if (!hasFocus) {
+                    searchEngaged = false;
+                    setSearchFocusable(false);
+                }
                 updateBackCallback();
             }
         });
         searchField.setOnTouchListener(new View.OnTouchListener() {
             @Override
             public boolean onTouch(View v, MotionEvent event) {
+                if (event.getAction() == MotionEvent.ACTION_DOWN && !searchField.isFocusable()) {
+                    // Let the tap focus the field and open the keyboard
+                    searchEngaged = true;
+                    setSearchFocusable(true);
+                }
                 // A tap on the clear icon at the end of the field clears the search
                 if (event.getAction() == MotionEvent.ACTION_UP && searchField.length() > 0) {
                     Drawable[] drawables = searchField.getCompoundDrawablesRelative();
@@ -457,6 +482,11 @@ public class AppView extends AppCompatActivity implements LibraryLayoutControlle
                         boolean onIcon = rtl ? event.getX() <= iconZone : event.getX() >= searchField.getWidth() - iconZone;
                         if (onIcon) {
                             clearSearch();
+                            if (!searchField.hasFocus()) {
+                                // Clearing is not a request to type
+                                searchEngaged = false;
+                                setSearchFocusable(false);
+                            }
                             return true;
                         }
                     }
@@ -586,9 +616,15 @@ public class AppView extends AppCompatActivity implements LibraryLayoutControlle
         if (initialFocusDone || controller == null || snapshot == null || snapshot.rows.isEmpty()) {
             return;
         }
-        initialFocusDone = true;
+        if (searchEngaged) {
+            // The user is already typing a search; leave the focus there
+            initialFocusDone = true;
+            return;
+        }
 
-        // The running app if any, else the last focused app, else the first card
+        // The running app if any, else the last focused app, else the first card.
+        // The controller queues the request until these rows are on screen; only
+        // an accepted request ends the initial focus, so a later list can retry.
         String key = null;
         if (lastRunningAppId != 0 && appLibrary != null) {
             AppObject running = appLibrary.findApp(lastRunningAppId);
@@ -596,11 +632,24 @@ public class AppView extends AppCompatActivity implements LibraryLayoutControlle
                 key = LibraryModel.appKey(running);
             }
         }
-        if (key == null || !controller.focusApp(key)) {
-            if (lastFocusKey == null || !controller.focusApp(lastFocusKey)) {
-                controller.focusFirst();
-            }
+        initialFocusDone = (key != null && controller.focusApp(key))
+                || (lastFocusKey != null && controller.focusApp(lastFocusKey))
+                || controller.focusFirst();
+    }
+
+    /**
+     * The first D-pad press after touch input leaves touch mode with nothing
+     * (or only the list itself) focused, and Android would then pick the first
+     * focusable view at the top left. Put focus back on the last app instead.
+     */
+    private void onLeftTouchMode() {
+        if (controller == null || (searchEngaged && searchField.hasFocus())) {
+            return;
         }
+        if (controller.hasFocus() && (controller.getCurrentAppView() != null || controller.getCurrentGroupKey() != null)) {
+            return;
+        }
+        focusLibraryContent();
     }
 
     private void rebuildSnapshot() {
@@ -687,12 +736,20 @@ public class AppView extends AppCompatActivity implements LibraryLayoutControlle
         updateBackCallback();
     }
 
+    private void setSearchFocusable(boolean focusable) {
+        searchField.setFocusable(focusable);
+        searchField.setFocusableInTouchMode(focusable);
+    }
+
     private void focusSearch() {
+        searchEngaged = true;
+        setSearchFocusable(true);
         searchField.requestFocus();
         searchField.setSelection(searchField.length());
         InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
         if (imm != null) {
-            imm.showSoftInput(searchField, InputMethodManager.SHOW_IMPLICIT);
+            // An explicit request: the user pressed Y to type
+            imm.showSoftInput(searchField, 0);
         }
     }
 

@@ -204,6 +204,20 @@ public class LibraryModelTest {
     }
 
     @Test
+    public void searchMatchesFullPlatformNames() {
+        LibrarySnapshot<TestApp> nintendo = LibraryModel.build(input(newHostLibrary()).query("nintendo"));
+        assertEquals(Arrays.asList("nintendo_gamecube", "nintendo_3ds", "nintendo_switch"), groupKeys(nintendo));
+
+        LibrarySnapshot<TestApp> sony = LibraryModel.build(input(
+                TestApp.onPlatform(1, "Sample Racer", "Sony PlayStation 2", "sony_playstation2"),
+                TestApp.onPlatform(2, "Sample Puzzle", "Nintendo Switch", "nintendo_switch")).query("sony"));
+        assertEquals(Collections.singletonList("sony_playstation2"), groupKeys(sony));
+
+        LibrarySnapshot<TestApp> windows = LibraryModel.build(input(newHostLibrary()).query("windows"));
+        assertEquals(Collections.singletonList("pc"), groupKeys(windows));
+    }
+
+    @Test
     public void searchIgnoresAccentsCaseAndZeroWidth() {
         LibrarySnapshot<TestApp> snapshot = LibraryModel.build(input(
                 new TestApp(1, "Café Example"),

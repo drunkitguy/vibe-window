@@ -32,10 +32,26 @@ public final class PlatformCatalog {
         public final String label;
         public final int rank;
 
+        // Normalized label plus the full and alternative names of the platform, for search
+        private String searchText;
+
         Platform(String key, String label, int rank) {
             this.key = key;
             this.label = label;
             this.rank = rank;
+            this.searchText = LibraryText.normalize(label);
+        }
+
+        void addSearchName(String name) {
+            String normalized = LibraryText.normalize(name);
+            if (!normalized.isEmpty() && !(" " + searchText + " ").contains(" " + normalized + " ")) {
+                searchText = searchText.isEmpty() ? normalized : searchText + " " + normalized;
+            }
+        }
+
+        /** Normalized text a search query is matched against, such as "gamecube nintendo gamecube". */
+        public String getSearchText() {
+            return searchText;
         }
 
         @Override
@@ -76,6 +92,7 @@ public final class PlatformCatalog {
         BY_NAME.put(LibraryText.normalize(label), platform);
         for (String name : names) {
             BY_NAME.put(LibraryText.normalize(name), platform);
+            platform.addSearchName(name);
         }
     }
 
@@ -83,6 +100,9 @@ public final class PlatformCatalog {
         for (String value : idsOrNames) {
             BY_ID.put(value.toLowerCase(Locale.ROOT), platform);
             BY_NAME.put(LibraryText.normalize(value), platform);
+            if (value.indexOf('_') < 0) {
+                platform.addSearchName(value);
+            }
         }
     }
 

@@ -2,8 +2,10 @@ package com.limelight.library;
 
 import java.text.Normalizer;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 /**
  * Text normalization shared by search, sorting and name matching.
@@ -25,16 +27,41 @@ public final class LibraryText {
         }
     }
 
+    // Library rebuilds normalize the same names again and again; a renamed app
+    // simply misses the cache because its text is the key
+    private static final int CACHE_SIZE = 4096;
+    private static final Map<String, String> CACHE = new LinkedHashMap<String, String>(256, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, String> eldest) {
+            return size() > CACHE_SIZE;
+        }
+    };
+
     /**
      * Lower case, accent free, zero-width free text with runs of whitespace
      * collapsed to one space and no leading or trailing whitespace.
+     * Compatibility forms (full width letters, ligatures) fold to plain ones.
      */
     public static String normalize(String text) {
         if (text == null || text.isEmpty()) {
             return "";
         }
 
-        String decomposed = Normalizer.normalize(text, Normalizer.Form.NFD);
+        synchronized (CACHE) {
+            String cached = CACHE.get(text);
+            if (cached != null) {
+                return cached;
+            }
+        }
+        String normalized = computeNormalized(text);
+        synchronized (CACHE) {
+            CACHE.put(text, normalized);
+        }
+        return normalized;
+    }
+
+    private static String computeNormalized(String text) {
+        String decomposed = Normalizer.normalize(text, Normalizer.Form.NFKD);
         StringBuilder sb = new StringBuilder(decomposed.length());
         boolean pendingSpace = false;
         for (int i = 0; i < decomposed.length(); i++) {

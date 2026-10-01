@@ -3,6 +3,7 @@ package com.limelight.library;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
@@ -37,6 +38,16 @@ public class PlatformCatalogTest {
         assertEquals("nintendo_gamecube", PlatformCatalog.resolve("", "Nintendo GameCube").key);
         assertEquals("nintendo_gamecube", PlatformCatalog.resolve("", "gamecube").key);
         assertEquals("sony_playstation2", PlatformCatalog.resolve(null, "  Sony PlayStation 2 ").key);
+    }
+
+    @Test
+    public void searchTextIncludesFullNames() {
+        String gamecube = PlatformCatalog.resolve("nintendo_gamecube", "").getSearchText();
+        assertTrue(gamecube.contains("gamecube"));
+        assertTrue(gamecube.contains("nintendo gamecube"));
+        assertTrue(PlatformCatalog.resolve("sony_psp", "").getSearchText().contains("sony playstation portable"));
+        assertFalse(PlatformCatalog.PC.getSearchText().contains("_"));
+        assertEquals("example console", PlatformCatalog.resolve("", "Example Console").getSearchText());
     }
 
     @Test

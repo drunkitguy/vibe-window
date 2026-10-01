@@ -99,6 +99,9 @@ public class WheelLayoutController implements LibraryLayoutController {
         heroSystem = root.findViewById(R.id.wheelHeroSystem);
         heroRunning = root.findViewById(R.id.wheelHeroRunning);
         wheel = root.findViewById(R.id.wheelList);
+        // The wheel takes focus for the D-pad, but never from a touch
+        wheel.setFocusable(true);
+        wheel.setFocusableInTouchMode(false);
 
         layoutManager = new LinearLayoutManager(host.getContext()) {
             @Override

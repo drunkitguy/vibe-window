@@ -15,6 +15,12 @@ public class LibraryTextTest {
         assertEquals("", LibraryText.normalize(null));
         assertEquals("", LibraryText.normalize(" ​ "));
         assertEquals("uber noel", LibraryText.normalize("Über Noël"));
+        // Compatibility forms fold to plain letters and digits
+        assertEquals("example 2", LibraryText.normalize("\uFF25\uFF58\uFF41\uFF4D\uFF50\uFF4C\uFF45 \u00B2"));
+        // Cached results stay correct for repeated and different inputs
+        assertEquals("repeat example", LibraryText.normalize("Repeat Example"));
+        assertEquals("repeat example", LibraryText.normalize("Repeat Example"));
+        assertEquals("repeat example two", LibraryText.normalize("Repeat Example Two"));
     }
 
     @Test

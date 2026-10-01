@@ -1,6 +1,6 @@
 # Library revamp plan (app list grouping, search, collapse, layouts)
 
-Status: plan only, nothing implemented. Targets client 1.1.0 and host 1.1.0.
+Status: client side (sections 5, 6, 8 and the client part of 9) implemented in Vibe Window 1.1.0, with focus and search follow-ups in 1.1.1. The host side (section 4) is delivered in the host repo as host 1.1.0 with Playnite connector 0.5.0.
 
 ## 1. Goals
 

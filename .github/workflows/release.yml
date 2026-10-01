@@ -73,10 +73,14 @@ jobs:
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;27.0.12077973"
 
-      - name: Run library unit tests
+      - name: Run unit tests
         run: |
           chmod +x gradlew
-          ./gradlew :app:testNonRoot_gameDebugUnitTest --tests 'com.limelight.library.*' --no-daemon --stacktrace
+          ./gradlew :app:testNonRoot_gameDebugUnitTest --no-daemon --stacktrace \
+            --tests 'com.limelight.library.*' \
+            --tests 'com.limelight.StartupTest' \
+            --tests 'com.limelight.StartupCrashTest' \
+            --tests 'com.limelight.profiles.ProfilesNavigationTest'
 
       - name: Build release APK
         env:
@@ -160,6 +164,8 @@ jobs:
             Install: download the APK below, open it on the device and allow installs from your browser or file manager. Verify with the `.sha256` file if you like.
 
             Defaults: 1920x1080, 120 FPS, virtual display on, "Show only the app window" on.
+
+            App library: apps are grouped by system (PC first, Apps last) and can be shown as a Grid, a Wheel or Shelves. Search covers every group, groups can be collapsed, and "Move to Group" files an app elsewhere on this device. Everything works by touch and by controller (X menu, Y search, L1/R1 groups, Start collapse, Select view menu). Grouping by system needs host `window-host-v1.1.0` or later and the Playnite connector 0.5.0 update from the host web UI (Integrations page), followed by a Playnite restart and one library sync. Older hosts show "Games" and "Apps".
 
             Limitations: UAC prompts and the lock screen are still shown; switching from a launcher to the game window takes about a second; separate popup windows are not captured; exclusive fullscreen games may not produce frames.
 
