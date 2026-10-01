@@ -22,6 +22,7 @@ public final class LibraryModel {
         final List<T> apps = new ArrayList<>();
         final Set<Integer> hiddenIds = new HashSet<>();
         boolean showHidden;
+        final Set<Integer> keepVisibleIds = new HashSet<>();
         String query = "";
         final Set<String> collapsedKeys = new HashSet<>();
         final Map<String, String> overrides = new HashMap<>();
@@ -44,6 +45,18 @@ public final class LibraryModel {
 
         public Input<T> showHidden(boolean showHidden) {
             this.showHidden = showHidden;
+            return this;
+        }
+
+        /**
+         * Hidden apps that stay listed (dimmed) anyway, such as apps hidden
+         * during the current visit, so the focused card does not vanish.
+         */
+        public Input<T> keepVisibleIds(Collection<Integer> keepVisibleIds) {
+            this.keepVisibleIds.clear();
+            if (keepVisibleIds != null) {
+                this.keepVisibleIds.addAll(keepVisibleIds);
+            }
             return this;
         }
 
@@ -193,7 +206,7 @@ public final class LibraryModel {
         Map<String, Bucket<T>> buckets = new LinkedHashMap<>();
         for (T app : input.apps) {
             boolean hidden = input.hiddenIds.contains(app.getAppId());
-            if (hidden && !input.showHidden) {
+            if (hidden && !input.showHidden && !input.keepVisibleIds.contains(app.getAppId())) {
                 continue;
             }
 

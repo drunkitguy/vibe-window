@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The AppView.AppObject bound to a library card, read by the context menu -->
+    <item name="tag_app_object" type="id" />
+</resources>

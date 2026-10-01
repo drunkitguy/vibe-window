@@ -140,6 +140,16 @@ public class LibraryModelTest {
     }
 
     @Test
+    public void appsHiddenThisVisitStayListedAndDimmed() {
+        LibrarySnapshot<TestApp> snapshot = LibraryModel.build(input(newHostLibrary())
+                .hiddenIds(Arrays.asList(1, 2)).keepVisibleIds(Collections.singletonList(1)));
+        LibrarySnapshot.Group<TestApp> pc = snapshot.findGroup("pc");
+        assertEquals(Arrays.asList("Example Game B", "Example Tool"), names(pc));
+        assertTrue(pc.apps.get(0).hidden);
+        assertFalse(pc.apps.get(1).hidden);
+    }
+
+    @Test
     public void hiddenAppsStillCountTowardPlatformSupport() {
         LibrarySnapshot<TestApp> snapshot = LibraryModel.build(input(
                 TestApp.onPlatform(1, "Sample Hidden", "Nintendo Switch", "nintendo_switch"),
