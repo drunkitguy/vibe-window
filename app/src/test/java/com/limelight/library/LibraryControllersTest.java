@@ -191,7 +191,34 @@ public class LibraryControllersTest {
                 + " focused=" + (focused != null ? focused.getClass().getSimpleName() : "none")
                 + " containerSize=" + container.getWidth() + "x" + container.getHeight()
                 + " children=" + (container.getChildCount() > 0 && container.getChildAt(0) instanceof ViewGroup
-                        ? ((ViewGroup) container.getChildAt(0)).getChildCount() : -1);
+                        ? ((ViewGroup) container.getChildAt(0)).getChildCount() : -1)
+                + " lastFocused=" + host.lastFocused
+                + " card=" + describeCard(findCard(container));
+    }
+
+    private static View findCard(View view) {
+        if (view.getTag(R.id.tag_app_object) != null) {
+            return view;
+        }
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                View card = findCard(group.getChildAt(i));
+                if (card != null) {
+                    return card;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static String describeCard(View card) {
+        if (card == null) {
+            return "none";
+        }
+        return "{focusable=" + card.isFocusable() + " shown=" + card.isShown()
+                + " layoutRequested=" + card.isLayoutRequested() + " size=" + card.getWidth() + "x" + card.getHeight()
+                + " requestFocus=" + card.requestFocus() + " focusedAfter=" + card.isFocused() + "}";
     }
 
     private void assertFocused(String appKey) {

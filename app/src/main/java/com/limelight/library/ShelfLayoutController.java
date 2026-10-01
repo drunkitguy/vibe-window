@@ -28,7 +28,8 @@ import java.util.Map;
  */
 public class ShelfLayoutController implements LibraryLayoutController {
     private static final int SHELF_CARD_WIDTH_DP = 150;
-    private static final int MAX_FOCUS_ATTEMPTS = 6;
+    private static final int MAX_FOCUS_ATTEMPTS = 15;
+    private static final int FOCUS_RETRY_MS = 20;
 
     private final Host host;
 
@@ -221,12 +222,13 @@ public class ShelfLayoutController implements LibraryLayoutController {
         if (tryFocus(groupKey, appKey)) {
             return;
         }
-        shelves.post(new Runnable() {
+        // Wait about a frame so the scroll or the nested list update is laid out first
+        shelves.postDelayed(new Runnable() {
             @Override
             public void run() {
                 attemptFocus(groupKey, appKey, generation, attempt + 1);
             }
-        });
+        }, FOCUS_RETRY_MS);
     }
 
     private boolean tryFocus(String groupKey, String appKey) {
