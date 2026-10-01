@@ -34,6 +34,7 @@ import java.util.List;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 import static org.robolectric.Shadows.shadowOf;
 
 /**
@@ -178,7 +179,8 @@ public class LibraryControllersTest {
     }
 
     private String focusedAppKey() {
-        View focused = activity.getCurrentFocus();
+        // Activity.getCurrentFocus() does not see focus inside a view set this way under Robolectric
+        View focused = container.findFocus();
         Object tag = focused != null ? focused.getTag(R.id.tag_app_object) : null;
         return tag instanceof AppView.AppObject ? LibraryModel.appKey((AppView.AppObject) tag) : null;
     }
@@ -186,7 +188,7 @@ public class LibraryControllersTest {
     /** What the window looks like, for failure messages. */
     private String describe() {
         View decor = activity.getWindow().getDecorView();
-        View focused = activity.getCurrentFocus();
+        View focused = container.findFocus();
         return "touchMode=" + decor.isInTouchMode()
                 + " focused=" + (focused != null ? focused.getClass().getSimpleName() : "none")
                 + " containerSize=" + container.getWidth() + "x" + container.getHeight()
@@ -222,7 +224,11 @@ public class LibraryControllersTest {
     }
 
     private void assertFocused(String appKey) {
-        assertEquals(describe(), appKey, focusedAppKey());
+        // Read the focus before describing, which pokes at a card
+        String actual = focusedAppKey();
+        if (!appKey.equals(actual)) {
+            fail("expected focus on " + appKey + " but was " + actual + "; " + describe());
+        }
     }
 
     private View attach(LibraryLayoutController controller) {
@@ -294,7 +300,8 @@ public class LibraryControllersTest {
 
         assertTrue(grid.jumpToAdjacentGroup(1));
         settle();
-        assertFocused("id:7");
+        // Names sort as text, so "Sample Game 10" is the first card of that group
+        assertFocused("id:10");
         assertEquals("nintendo_switch", grid.getCurrentGroupKey());
 
         // Wraps around to the first group
