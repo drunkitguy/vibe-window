@@ -50,6 +50,22 @@ public class AppViewLibraryUiTest {
         assertNotNull(activity.findViewById(R.id.libraryContainer));
         assertNotNull(activity.findViewById(R.id.profilesButton));
         assertEquals(View.VISIBLE, activity.findViewById(R.id.layoutGrid).getVisibility());
+        assertEquals(View.VISIBLE, activity.findViewById(R.id.layoutWheel).getVisibility());
+    }
+
+    @Test
+    public void layoutResourcesInflate() {
+        AppView activity = launch();
+        android.view.LayoutInflater inflater = android.view.LayoutInflater.from(activity);
+        android.widget.FrameLayout parent = new android.widget.FrameLayout(activity);
+        int[] layouts = {R.layout.library_grid, R.layout.library_group_header, R.layout.app_grid_item,
+                R.layout.app_grid_item_small, R.layout.library_wheel, R.layout.library_wheel_item};
+        for (int layout : layouts) {
+            assertNotNull(inflater.inflate(layout, parent, false));
+        }
+        View wheel = inflater.inflate(R.layout.library_wheel, parent, false);
+        assertNotNull(wheel.findViewById(R.id.wheelList));
+        assertNotNull(wheel.findViewById(R.id.wheelHeroArt));
     }
 
     @Test

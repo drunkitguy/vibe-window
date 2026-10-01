@@ -20,6 +20,7 @@ import com.limelight.library.LibraryModel;
 import com.limelight.library.LibraryPrefs;
 import com.limelight.library.LibrarySnapshot;
 import com.limelight.library.LibraryText;
+import com.limelight.library.WheelLayoutController;
 import com.limelight.nvstream.http.ComputerDetails;
 import com.limelight.nvstream.http.NvApp;
 import com.limelight.nvstream.http.NvHTTP;
@@ -498,7 +499,7 @@ public class AppView extends AppCompatActivity implements LibraryLayoutControlle
 
     // Layouts this version can show, in toggle order
     private static boolean isLayoutAvailable(String layout) {
-        return LibraryPrefs.LAYOUT_GRID.equals(layout);
+        return LibraryPrefs.LAYOUT_GRID.equals(layout) || LibraryPrefs.LAYOUT_WHEEL.equals(layout);
     }
 
     private static int getLayoutButtonId(String layout) {
@@ -531,6 +532,9 @@ public class AppView extends AppCompatActivity implements LibraryLayoutControlle
     }
 
     private LibraryLayoutController createController(String layout) {
+        if (LibraryPrefs.LAYOUT_WHEEL.equals(layout)) {
+            return new WheelLayoutController(this);
+        }
         return new GridLayoutController(this);
     }
 
