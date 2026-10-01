@@ -23,6 +23,22 @@ A stock Vibepollo, Apollo or Sunshine host ignores the window-only request and s
 
 Vibe Window installs beside Artemis and Moonlight because it uses its own application ID (`app.vibewindow.client`).
 
+## App library
+
+The app list of a PC is grouped by system, with PC first, other systems in alphabetical order and utilities such as Desktop, Playnite, Remote Input or Lossless Scaling in an "Apps" group at the end.
+
+- Layouts: Grid (default), Wheel and Shelves, picked with the buttons at the top right or the View menu (Select on a controller). The choice is remembered.
+  - Grid: group headers with the cards of each group below them.
+  - Wheel: one system at a time, a large cover of the selected app beside a wheel of titles, in the style of ES-DE or HyperSpin.
+  - Shelves: one horizontal row of cards per group, like a TV launcher.
+- Search: type in the search field (Y on a controller) to filter every group by title or system name, for example "switch". The search is kept per PC, and the field and a "7 of 21" count stay visible while it filters.
+- Collapse: tap a group header (or press Start) to fold it; the button next to the layout buttons folds or unfolds every group. The state is kept per PC.
+- Move to group: long press an app (or press X) and pick "Move to Group" to file it under another or a new group on this device. "Automatic" undoes it.
+
+Controller keys: D-pad moves, A launches (long press A opens the app menu), X opens the app menu, Y searches, L1 and R1 jump to the previous or next group or system, Start folds the current group, Select opens the View menu, and B clears the search before leaving the list. Everything also works by touch.
+
+Grouping by system needs host 1.1.0 or later and its Playnite connector 0.5.0. After installing the host, update the connector from the Integrations page of the host web UI, restart Playnite and let one library sync run. Older hosts still work: their apps appear under "Games" and "Apps".
+
 ## How it works
 
 The client adds `windowOnly=1` to the host's `/launch` and `/resume` requests. The patched host then captures the launched app's top-level window with Windows Graphics Capture, moves it onto the streamed display, and paints everything else black. Until the app's window appears, the stream is black instead of showing the desktop.
