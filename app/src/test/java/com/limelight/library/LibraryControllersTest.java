@@ -116,8 +116,11 @@ public class LibraryControllersTest {
         activity.setContentView(container, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         host = new StubHost(activity);
+        // Window focus events can put the window back in touch mode, so settle first
+        settle();
         leaveTouchMode(activity);
         settle();
+        leaveTouchMode(activity);
     }
 
     /** Puts the window in D-pad (non touch) mode, where cards can take focus. */
@@ -180,6 +183,21 @@ public class LibraryControllersTest {
         return tag instanceof AppView.AppObject ? LibraryModel.appKey((AppView.AppObject) tag) : null;
     }
 
+    /** What the window looks like, for failure messages. */
+    private String describe() {
+        View decor = activity.getWindow().getDecorView();
+        View focused = activity.getCurrentFocus();
+        return "touchMode=" + decor.isInTouchMode()
+                + " focused=" + (focused != null ? focused.getClass().getSimpleName() : "none")
+                + " containerSize=" + container.getWidth() + "x" + container.getHeight()
+                + " children=" + (container.getChildCount() > 0 && container.getChildAt(0) instanceof ViewGroup
+                        ? ((ViewGroup) container.getChildAt(0)).getChildCount() : -1);
+    }
+
+    private void assertFocused(String appKey) {
+        assertEquals(describe(), appKey, focusedAppKey());
+    }
+
     private View attach(LibraryLayoutController controller) {
         View view = controller.onCreateView(LayoutInflater.from(activity), container);
         container.addView(view);
@@ -212,7 +230,7 @@ public class LibraryControllersTest {
         // Asked right after the submit, before the diff has committed
         assertTrue(grid.focusFirst());
         settle();
-        assertEquals("id:1", focusedAppKey());
+        assertFocused("id:1");
         assertEquals("id:1", host.lastFocused);
     }
 
@@ -224,19 +242,19 @@ public class LibraryControllersTest {
         grid.submit(snapshot(apps));
         assertTrue(grid.focusApp("id:4"));
         settle();
-        assertEquals("id:4", focusedAppKey());
+        assertFocused("id:4");
 
         // A poll adds an app that sorts before the focused one
         apps.add(app(20, "Example Game 0", "PC (Windows)"));
         grid.submit(snapshot(apps));
         settle();
-        assertEquals("id:4", focusedAppKey());
+        assertFocused("id:4");
 
         // And the running state of the focused app changes
         apps.get(3).isRunning = true;
         grid.submit(snapshot(apps));
         settle();
-        assertEquals("id:4", focusedAppKey());
+        assertFocused("id:4");
     }
 
     @Test
@@ -249,13 +267,13 @@ public class LibraryControllersTest {
 
         assertTrue(grid.jumpToAdjacentGroup(1));
         settle();
-        assertEquals("id:7", focusedAppKey());
+        assertFocused("id:7");
         assertEquals("nintendo_switch", grid.getCurrentGroupKey());
 
         // Wraps around to the first group
         assertTrue(grid.jumpToAdjacentGroup(1));
         settle();
-        assertEquals("id:1", focusedAppKey());
+        assertFocused("id:1");
     }
 
     private static List<AppView.AppObject> manyShelves() {
@@ -281,7 +299,7 @@ public class LibraryControllersTest {
         shelves.submit(snapshot(twoGroups()));
         assertTrue(shelves.focusFirst());
         settle();
-        assertEquals("id:1", focusedAppKey());
+        assertFocused("id:1");
     }
 
     @Test
@@ -294,22 +312,22 @@ public class LibraryControllersTest {
         // Group 1 is ids 1 to 8: focus its fourth card
         assertTrue(shelves.focusApp("id:4"));
         settle();
-        assertEquals("id:4", focusedAppKey());
+        assertFocused("id:4");
 
         // Far down the list (shelves and cards are recycled on the way), group 12 is ids 89 to 96
         assertTrue(shelves.focusApp("id:94"));
         settle();
-        assertEquals("id:94", focusedAppKey());
+        assertFocused("id:94");
 
         // Back to group 1 (wrapping from the last group): its remembered card, not the first
         assertTrue(shelves.jumpToAdjacentGroup(1));
         settle();
-        assertEquals("id:4", focusedAppKey());
+        assertFocused("id:4");
 
         // And group 12 still remembers its own card
         assertTrue(shelves.jumpToAdjacentGroup(-1));
         settle();
-        assertEquals("id:94", focusedAppKey());
+        assertFocused("id:94");
     }
 
     @Test
@@ -320,11 +338,11 @@ public class LibraryControllersTest {
         shelves.submit(snapshot(apps));
         assertTrue(shelves.focusApp("id:5"));
         settle();
-        assertEquals("id:5", focusedAppKey());
+        assertFocused("id:5");
 
         apps.add(app(20, "Example Game 0", "PC (Windows)"));
         shelves.submit(snapshot(apps));
         settle();
-        assertEquals("id:5", focusedAppKey());
+        assertFocused("id:5");
     }
 }
