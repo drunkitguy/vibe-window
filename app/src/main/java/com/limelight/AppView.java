@@ -20,6 +20,7 @@ import com.limelight.library.LibraryModel;
 import com.limelight.library.LibraryPrefs;
 import com.limelight.library.LibrarySnapshot;
 import com.limelight.library.LibraryText;
+import com.limelight.library.ShelfLayoutController;
 import com.limelight.library.WheelLayoutController;
 import com.limelight.nvstream.http.ComputerDetails;
 import com.limelight.nvstream.http.NvApp;
@@ -486,7 +487,6 @@ public class AppView extends AppCompatActivity implements LibraryLayoutControlle
                 }
             }
         });
-        updateLayoutButtons();
 
         collapseAllButton.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -495,11 +495,6 @@ public class AppView extends AppCompatActivity implements LibraryLayoutControlle
             }
         });
         updateCollapseAllButton();
-    }
-
-    // Layouts this version can show, in toggle order
-    private static boolean isLayoutAvailable(String layout) {
-        return LibraryPrefs.LAYOUT_GRID.equals(layout) || LibraryPrefs.LAYOUT_WHEEL.equals(layout);
     }
 
     private static int getLayoutButtonId(String layout) {
@@ -525,23 +520,18 @@ public class AppView extends AppCompatActivity implements LibraryLayoutControlle
         return null;
     }
 
-    private void updateLayoutButtons() {
-        findViewById(R.id.layoutGrid).setVisibility(isLayoutAvailable(LibraryPrefs.LAYOUT_GRID) ? View.VISIBLE : View.GONE);
-        findViewById(R.id.layoutWheel).setVisibility(isLayoutAvailable(LibraryPrefs.LAYOUT_WHEEL) ? View.VISIBLE : View.GONE);
-        findViewById(R.id.layoutShelves).setVisibility(isLayoutAvailable(LibraryPrefs.LAYOUT_SHELVES) ? View.VISIBLE : View.GONE);
-    }
-
     private LibraryLayoutController createController(String layout) {
         if (LibraryPrefs.LAYOUT_WHEEL.equals(layout)) {
             return new WheelLayoutController(this);
+        }
+        else if (LibraryPrefs.LAYOUT_SHELVES.equals(layout)) {
+            return new ShelfLayoutController(this);
         }
         return new GridLayoutController(this);
     }
 
     private void switchLayout(String layout) {
-        if (!isLayoutAvailable(layout)) {
-            layout = LibraryPrefs.LAYOUT_GRID;
-        }
+        layout = LibraryPrefs.normalizeLayout(layout);
         layoutName = layout;
         libraryPrefs.setLayout(layout);
         if (layoutToggle.getCheckedButtonId() != getLayoutButtonId(layout)) {
@@ -564,9 +554,7 @@ public class AppView extends AppCompatActivity implements LibraryLayoutControlle
     }
 
     private void showLayout(String layout) {
-        if (!isLayoutAvailable(layout)) {
-            layout = LibraryPrefs.LAYOUT_GRID;
-        }
+        layout = LibraryPrefs.normalizeLayout(layout);
         layoutName = layout;
 
         if (controller != null) {
@@ -791,11 +779,9 @@ public class AppView extends AppCompatActivity implements LibraryLayoutControlle
         final String[] layouts = {LibraryPrefs.LAYOUT_GRID, LibraryPrefs.LAYOUT_WHEEL, LibraryPrefs.LAYOUT_SHELVES};
         final int[] labels = {R.string.library_layout_grid, R.string.library_layout_wheel, R.string.library_layout_shelves};
         for (int i = 0; i < layouts.length; i++) {
-            if (isLayoutAvailable(layouts[i])) {
-                MenuItem item = menu.add(1, i, i, labels[i]);
-                item.setCheckable(true);
-                item.setChecked(layouts[i].equals(layoutName));
-            }
+            MenuItem item = menu.add(1, i, i, labels[i]);
+            item.setCheckable(true);
+            item.setChecked(layouts[i].equals(layoutName));
         }
         menu.setGroupCheckable(1, true, true);
         final int collapseId = 100;
