@@ -9,6 +9,7 @@ import com.google.android.material.floatingactionbutton.ExtendedFloatingActionBu
 import com.limelight.computers.ComputerManagerListener;
 import com.limelight.computers.ComputerManagerService;
 import com.limelight.grid.AppGridAdapter;
+import com.limelight.library.LibraryItem;
 import com.limelight.nvstream.http.ComputerDetails;
 import com.limelight.nvstream.http.NvApp;
 import com.limelight.nvstream.http.NvHTTP;
@@ -679,6 +680,14 @@ public class AppView extends AppCompatActivity implements AdapterFragmentCallbac
                                 existingApp.app.setAppName(app.getAppName());
                                 updated = true;
                             }
+                            if (!existingApp.app.getPlatform().equals(app.getPlatform())) {
+                                existingApp.app.setPlatform(app.getPlatform());
+                                updated = true;
+                            }
+                            if (!existingApp.app.getPlatformId().equals(app.getPlatformId())) {
+                                existingApp.app.setPlatformId(app.getPlatformId());
+                                updated = true;
+                            }
 
                             foundExistingApp = true;
                             break;
@@ -775,7 +784,7 @@ public class AppView extends AppCompatActivity implements AdapterFragmentCallbac
         listView.requestFocus();
     }
 
-    public static class AppObject {
+    public static class AppObject implements LibraryItem {
         public final NvApp app;
         public boolean isRunning;
         public boolean isHidden;
@@ -785,6 +794,36 @@ public class AppView extends AppCompatActivity implements AdapterFragmentCallbac
                 throw new IllegalArgumentException("app must not be null");
             }
             this.app = app;
+        }
+
+        @Override
+        public int getAppId() {
+            return app.getAppId();
+        }
+
+        @Override
+        public String getAppUuid() {
+            return app.getAppUUID() != null ? app.getAppUUID() : "";
+        }
+
+        @Override
+        public String getAppName() {
+            return app.getAppName();
+        }
+
+        @Override
+        public String getPlatform() {
+            return app.getPlatform();
+        }
+
+        @Override
+        public String getPlatformId() {
+            return app.getPlatformId();
+        }
+
+        @Override
+        public boolean isRunning() {
+            return isRunning;
         }
 
         @Override

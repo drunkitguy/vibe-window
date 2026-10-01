@@ -754,6 +754,11 @@ public class NvHTTP {
                     app.setAppId(xpp.getText());
                 } else if (currentTag.peek().equals("IsHdrSupported")) {
                     app.setHdrSupported(xpp.getText().equals("1"));
+                } else if (currentTag.peek().equals("Platform")) {
+                    // Host 1.1.0 and later; text may arrive in several events
+                    app.setPlatform(app.getPlatform() + xpp.getText());
+                } else if (currentTag.peek().equals("PlatformId")) {
+                    app.setPlatformId(app.getPlatformId() + xpp.getText());
                 }
                 break;
             }
@@ -774,6 +779,10 @@ public class NvHTTP {
             if (!app.isInitialized()) {
                 LimeLog.warning("GFE returned incomplete app: "+app.getAppId()+" "+app.getAppName());
                 i.remove();
+            }
+            else {
+                app.setPlatform(app.getPlatform().trim());
+                app.setPlatformId(app.getPlatformId().trim());
             }
         }
         

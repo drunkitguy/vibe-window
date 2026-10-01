@@ -144,6 +144,13 @@ android {
 
     testOptions {
         unitTests.includeAndroidResources = true
+        unitTests.all {
+            // Show why a test failed directly in the CI log
+            testLogging {
+                events "failed"
+                exceptionFormat "full"
+            }
+        }
     }
 }
 

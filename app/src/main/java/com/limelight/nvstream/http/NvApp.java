@@ -10,6 +10,8 @@ public class NvApp {
     private int appIndex;
     private boolean initialized;
     private boolean hdrSupported;
+    private String platform = "";
+    private String platformId = "";
     
     public NvApp() {}
     
@@ -63,6 +65,14 @@ public class NvApp {
     public void setHdrSupported(boolean hdrSupported) {
         this.hdrSupported = hdrSupported;
     }
+
+    public void setPlatform(String platform) {
+        this.platform = platform != null ? platform : "";
+    }
+
+    public void setPlatformId(String platformId) {
+        this.platformId = platformId != null ? platformId : "";
+    }
     
     public String getAppName() {
         return this.appName;
@@ -80,6 +90,14 @@ public class NvApp {
         return this.appIndex;
     }
 
+    public String getPlatform() {
+        return this.platform;
+    }
+
+    public String getPlatformId() {
+        return this.platformId;
+    }
+
     public boolean isHdrSupported() {
         return this.hdrSupported;
     }
@@ -95,6 +113,9 @@ public class NvApp {
         str.append("UUID: ").append(appUUID).append("\n");
         str.append("ID: ").append(appId).append("\n");
         str.append("HDR Supported: ").append(hdrSupported ? "Yes" : "Unknown").append("\n");
+        if (!platform.isEmpty() || !platformId.isEmpty()) {
+            str.append("Platform: ").append(platform.isEmpty() ? platformId : platform).append("\n");
+        }
         return str.toString();
     }
 }
