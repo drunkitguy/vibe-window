@@ -89,7 +89,8 @@ public class GridLayoutController implements LibraryLayoutController {
 
     private void createAdapter() {
         smallIconMode = host.isSmallIconMode();
-        LibrarySnapshot<AppView.AppObject> current = focusKeeper != null ? focusKeeper.getSnapshot() : null;
+        // The newest snapshot, even if the old adapter had not finished diffing it
+        LibrarySnapshot<AppView.AppObject> current = focusKeeper != null ? focusKeeper.getTargetSnapshot() : null;
         adapter = new LibraryRowAdapter(host, LibraryRowAdapter.getCardLayoutId(smallIconMode), 0, null);
         recyclerView.setAdapter(adapter);
         focusKeeper = new FocusKeeper(recyclerView, adapter);
@@ -249,8 +250,9 @@ public class GridLayoutController implements LibraryLayoutController {
             this.adapter = adapter;
         }
 
-        LibrarySnapshot<AppView.AppObject> getSnapshot() {
-            return committed;
+        /** The last snapshot submitted, or the committed one before any submit. */
+        LibrarySnapshot<AppView.AppObject> getTargetSnapshot() {
+            return target();
         }
 
         View getFocusedItemView() {

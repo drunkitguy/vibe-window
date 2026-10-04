@@ -8,7 +8,6 @@ import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.test.platform.app.InstrumentationRegistry;
 
 import com.limelight.AppView;
 import com.limelight.R;
@@ -26,7 +25,6 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.android.controller.ActivityController;
 import org.robolectric.annotation.Config;
 
-import java.lang.reflect.Method;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -126,33 +124,7 @@ public class LibraryControllersTest {
 
     /** Puts the window in D-pad (non touch) mode, where cards can take focus. */
     private static void leaveTouchMode(Activity activity) {
-        try {
-            InstrumentationRegistry.getInstrumentation().setInTouchMode(false);
-        } catch (Throwable ignored) {
-            // Fall back to the view root below
-        }
-        View decor = activity.getWindow().getDecorView();
-        if (decor.isInTouchMode()) {
-            Object viewRoot;
-            try {
-                viewRoot = View.class.getMethod("getViewRootImpl").invoke(decor);
-            } catch (Exception e) {
-                throw new AssertionError("No view root", e);
-            }
-            for (String name : new String[] {"ensureTouchMode", "ensureTouchModeLocally"}) {
-                if (!decor.isInTouchMode()) {
-                    break;
-                }
-                try {
-                    Method ensure = viewRoot.getClass().getDeclaredMethod(name, boolean.class);
-                    ensure.setAccessible(true);
-                    ensure.invoke(viewRoot, false);
-                } catch (Exception ignored) {
-                    // Try the next way
-                }
-            }
-        }
-        assertFalse("window must be out of touch mode", decor.isInTouchMode());
+        TouchModeTestHelper.setTouchMode(activity, false);
     }
 
     /** Lets list diffs (on a background thread), layouts and posted focus requests run. */

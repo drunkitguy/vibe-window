@@ -53,6 +53,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.ContextMenu;
@@ -64,6 +65,7 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewTreeObserver;
 import android.view.ContextMenu.ContextMenuInfo;
+import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
@@ -111,8 +113,10 @@ public class AppView extends AppCompatActivity implements LibraryLayoutControlle
     private String query = "";
     private String lastFocusKey;
     private boolean initialFocusDone;
-    // The user asked for the search field (Y or a tap) and has not left it yet
-    private boolean searchEngaged;
+    // Until this uptime, the navigation key that ended touch mode is swallowed so
+    // the app whose focus was restored stays focused (0 when not armed)
+    private long swallowNavigationUntil;
+    private static final int SWALLOW_NAVIGATION_MS = 500;
 
     private EditText searchField;
     private TextView filterCountView;
@@ -451,17 +455,48 @@ public class AppView extends AppCompatActivity implements LibraryLayoutControlle
                 return false;
             }
         });
-        // The field takes focus only when asked for (Y or a tap), so it never
-        // becomes the default focus of the screen or a D-pad stop by accident
+        // The field takes focus only when asked for (Y, a tap, or an accessibility
+        // click or focus action), so it never becomes the default focus of the
+        // screen or a D-pad stop by accident. Being "engaged" is simply having focus.
         setSearchFocusable(false);
         searchField.setOnFocusChangeListener(new View.OnFocusChangeListener() {
             @Override
             public void onFocusChange(View v, boolean hasFocus) {
                 if (!hasFocus) {
-                    searchEngaged = false;
                     setSearchFocusable(false);
                 }
                 updateBackCallback();
+            }
+        });
+        searchField.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                // Clicks that do not come with a touch (TalkBack, Switch Access, keyboards)
+                if (!searchField.isFocused()) {
+                    focusSearch();
+                }
+            }
+        });
+        searchField.setAccessibilityDelegate(new View.AccessibilityDelegate() {
+            @Override
+            public boolean performAccessibilityAction(View host, int action, Bundle args) {
+                if ((action == AccessibilityNodeInfo.ACTION_CLICK || action == AccessibilityNodeInfo.ACTION_FOCUS)
+                        && !searchField.isFocused()) {
+                    focusSearch();
+                    return true;
+                }
+                return super.performAccessibilityAction(host, action, args);
+            }
+
+            @Override
+            public void onInitializeAccessibilityNodeInfo(View host, AccessibilityNodeInfo info) {
+                super.onInitializeAccessibilityNodeInfo(host, info);
+                // Offer the actions even while the field is not focusable yet
+                info.setClickable(true);
+                info.addAction(AccessibilityNodeInfo.ACTION_CLICK);
+                if (!searchField.isFocused()) {
+                    info.addAction(AccessibilityNodeInfo.ACTION_FOCUS);
+                }
             }
         });
         searchField.setOnTouchListener(new View.OnTouchListener() {
@@ -469,8 +504,11 @@ public class AppView extends AppCompatActivity implements LibraryLayoutControlle
             public boolean onTouch(View v, MotionEvent event) {
                 if (event.getAction() == MotionEvent.ACTION_DOWN && !searchField.isFocusable()) {
                     // Let the tap focus the field and open the keyboard
-                    searchEngaged = true;
                     setSearchFocusable(true);
+                }
+                else if (event.getAction() == MotionEvent.ACTION_CANCEL && !searchField.isFocused()) {
+                    // The tap did not happen after all
+                    setSearchFocusable(false);
                 }
                 // A tap on the clear icon at the end of the field clears the search
                 if (event.getAction() == MotionEvent.ACTION_UP && searchField.length() > 0) {
@@ -482,9 +520,8 @@ public class AppView extends AppCompatActivity implements LibraryLayoutControlle
                         boolean onIcon = rtl ? event.getX() <= iconZone : event.getX() >= searchField.getWidth() - iconZone;
                         if (onIcon) {
                             clearSearch();
-                            if (!searchField.hasFocus()) {
+                            if (!searchField.isFocused()) {
                                 // Clearing is not a request to type
-                                searchEngaged = false;
                                 setSearchFocusable(false);
                             }
                             return true;
@@ -616,7 +653,7 @@ public class AppView extends AppCompatActivity implements LibraryLayoutControlle
         if (initialFocusDone || controller == null || snapshot == null || snapshot.rows.isEmpty()) {
             return;
         }
-        if (searchEngaged) {
+        if (searchField.isFocused()) {
             // The user is already typing a search; leave the focus there
             initialFocusDone = true;
             return;
@@ -643,13 +680,41 @@ public class AppView extends AppCompatActivity implements LibraryLayoutControlle
      * focusable view at the top left. Put focus back on the last app instead.
      */
     private void onLeftTouchMode() {
-        if (controller == null || (searchEngaged && searchField.hasFocus())) {
+        swallowNavigationUntil = 0;
+        if (controller == null || searchField.isFocused()) {
             return;
         }
-        if (controller.hasFocus() && (controller.getCurrentAppView() != null || controller.getCurrentGroupKey() != null)) {
+        if (isLibraryContentFocused()) {
             return;
         }
         focusLibraryContent();
+        // When focus is back on the library right away, Android no longer treats the
+        // key that ended touch mode as used up and would move one step past the
+        // restored app. Swallow that key. (A request that completes later leaves the
+        // key to Android, which consumes it while restoring its own default focus.)
+        if (isLibraryContentFocused()) {
+            swallowNavigationUntil = SystemClock.uptimeMillis() + SWALLOW_NAVIGATION_MS;
+        }
+    }
+
+    private boolean isLibraryContentFocused() {
+        return controller != null && controller.hasFocus()
+                && (controller.getCurrentAppView() != null || controller.getCurrentGroupKey() != null);
+    }
+
+    private static boolean isNavigationKey(int keyCode) {
+        switch (keyCode) {
+            case KeyEvent.KEYCODE_DPAD_UP:
+            case KeyEvent.KEYCODE_DPAD_DOWN:
+            case KeyEvent.KEYCODE_DPAD_LEFT:
+            case KeyEvent.KEYCODE_DPAD_RIGHT:
+            case KeyEvent.KEYCODE_DPAD_CENTER:
+            case KeyEvent.KEYCODE_ENTER:
+            case KeyEvent.KEYCODE_NUMPAD_ENTER:
+                return true;
+            default:
+                return false;
+        }
     }
 
     private void rebuildSnapshot() {
@@ -742,7 +807,6 @@ public class AppView extends AppCompatActivity implements LibraryLayoutControlle
     }
 
     private void focusSearch() {
-        searchEngaged = true;
         setSearchFocusable(true);
         searchField.requestFocus();
         searchField.setSelection(searchField.length());
@@ -871,7 +935,11 @@ public class AppView extends AppCompatActivity implements LibraryLayoutControlle
     public boolean dispatchKeyEvent(KeyEvent event) {
         int keyCode = event.getKeyCode();
         if (event.getAction() == KeyEvent.ACTION_DOWN) {
-            if (handleLibraryKey(event)) {
+            // Only the key that ended touch mode, which arrives right away, is swallowed
+            boolean swallow = isNavigationKey(keyCode) && event.getRepeatCount() == 0
+                    && SystemClock.uptimeMillis() <= swallowNavigationUntil;
+            swallowNavigationUntil = 0;
+            if (swallow || handleLibraryKey(event)) {
                 consumedKeyDowns.add(keyCode);
                 return true;
             }
@@ -885,7 +953,7 @@ public class AppView extends AppCompatActivity implements LibraryLayoutControlle
 
     private boolean handleLibraryKey(KeyEvent event) {
         // Keys typed into the search field are left alone (X falls back to DEL, Y to SPACE)
-        if (getCurrentFocus() == searchField) {
+        if (searchField.isFocused()) {
             return false;
         }
 
