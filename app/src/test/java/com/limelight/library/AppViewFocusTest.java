@@ -190,6 +190,21 @@ public class AppViewFocusTest {
         assertEquals("id:103", focusedAppKey(activity));
         // Later presses are left to normal focus navigation
         assertFalse(pressKey(activity, KeyEvent.KEYCODE_DPAD_DOWN));
+
+        // Touch mode can also end without a key, for example when the window gets
+        // focus back after a dialog or a stream: the next press must still count
+        TouchModeTestHelper.setTouchMode(activity, true);
+        View again = activity.findViewById(android.R.id.content).findFocus();
+        if (again != null) {
+            again.clearFocus();
+        }
+        settle();
+        TouchModeTestHelper.setTouchMode(activity, false);
+        assertEquals("id:103", focusedAppKey(activity));
+        // The user presses a little later
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(50));
+        assertFalse("a key pressed after the restore is not swallowed", pressKey(activity, KeyEvent.KEYCODE_DPAD_DOWN));
+        assertEquals("id:103", focusedAppKey(activity));
     }
 
     @Test

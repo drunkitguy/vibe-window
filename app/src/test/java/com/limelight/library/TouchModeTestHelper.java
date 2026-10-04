@@ -2,7 +2,6 @@ package com.limelight.library;
 
 import android.app.Activity;
 import android.view.View;
-import android.view.ViewTreeObserver;
 
 import androidx.test.platform.app.InstrumentationRegistry;
 
@@ -14,46 +13,28 @@ import static org.junit.Assert.assertEquals;
 final class TouchModeTestHelper {
     private TouchModeTestHelper() {}
 
-    static void setTouchMode(Activity activity, final boolean inTouchMode) {
+    static void setTouchMode(Activity activity, boolean inTouchMode) {
         View decor = activity.getWindow().getDecorView();
-        final boolean[] notified = {false};
-        ViewTreeObserver.OnTouchModeChangeListener probe = new ViewTreeObserver.OnTouchModeChangeListener() {
-            @Override
-            public void onTouchModeChanged(boolean isInTouchMode) {
-                if (isInTouchMode == inTouchMode) {
-                    notified[0] = true;
-                }
-            }
-        };
-        decor.getViewTreeObserver().addOnTouchModeChangeListener(probe);
-        try {
-            // The public way first
-            try {
-                InstrumentationRegistry.getInstrumentation().setInTouchMode(inTouchMode);
-            } catch (Throwable ignored) {
-                // Not supported here; handled below
-            }
+        if (decor.isInTouchMode() == inTouchMode) {
+            return;
+        }
 
-            if (!notified[0]) {
-                // Robolectric may change the flag without telling the window's listeners,
-                // which is what the app reacts to. This is the only reflection in the tests:
-                // ViewRootImpl.ensureTouchModeLocally() applies the mode and notifies the
-                // listeners, as the platform does on real input. Flip to the other mode
-                // first when the flag already reads as the target.
-                try {
-                    Object viewRoot = View.class.getMethod("getViewRootImpl").invoke(decor);
-                    Method ensure = viewRoot.getClass().getDeclaredMethod("ensureTouchModeLocally", boolean.class);
-                    ensure.setAccessible(true);
-                    if (decor.isInTouchMode() == inTouchMode) {
-                        ensure.invoke(viewRoot, !inTouchMode);
-                    }
-                    ensure.invoke(viewRoot, inTouchMode);
-                } catch (Exception e) {
-                    throw new AssertionError("Could not change touch mode", e);
-                }
+        // The public API: under Robolectric it only records the mode for the window
+        // session (so new windows start in it) and leaves this window unchanged
+        InstrumentationRegistry.getInstrumentation().setInTouchMode(inTouchMode);
+
+        if (decor.isInTouchMode() != inTouchMode) {
+            // The only reflection in the tests: ViewRootImpl.ensureTouchModeLocally()
+            // applies the mode to this window and notifies its touch mode listeners,
+            // as the platform does on real input
+            try {
+                Object viewRoot = View.class.getMethod("getViewRootImpl").invoke(decor);
+                Method ensure = viewRoot.getClass().getDeclaredMethod("ensureTouchModeLocally", boolean.class);
+                ensure.setAccessible(true);
+                ensure.invoke(viewRoot, inTouchMode);
+            } catch (Exception e) {
+                throw new AssertionError("Could not change touch mode", e);
             }
-        } finally {
-            decor.getViewTreeObserver().removeOnTouchModeChangeListener(probe);
         }
         assertEquals("touch mode", inTouchMode, decor.isInTouchMode());
     }

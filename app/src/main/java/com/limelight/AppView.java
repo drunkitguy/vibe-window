@@ -113,10 +113,11 @@ public class AppView extends AppCompatActivity implements LibraryLayoutControlle
     private String query = "";
     private String lastFocusKey;
     private boolean initialFocusDone;
-    // Until this uptime, the navigation key that ended touch mode is swallowed so
-    // the app whose focus was restored stays focused (0 when not armed)
-    private long swallowNavigationUntil;
-    private static final int SWALLOW_NAVIGATION_MS = 500;
+    // Uptime at which focus was put back on the library as touch mode ended (0 when
+    // not armed). Only a navigation key pressed by then, which is the key that ended
+    // touch mode, is swallowed so the restored app stays focused. Touch mode can also
+    // end without a key (window focus coming back); later keys are never affected.
+    private long swallowNavigationPressedBy;
 
     private EditText searchField;
     private TextView filterCountView;
@@ -680,7 +681,7 @@ public class AppView extends AppCompatActivity implements LibraryLayoutControlle
      * focusable view at the top left. Put focus back on the last app instead.
      */
     private void onLeftTouchMode() {
-        swallowNavigationUntil = 0;
+        swallowNavigationPressedBy = 0;
         if (controller == null || searchField.isFocused()) {
             return;
         }
@@ -693,7 +694,7 @@ public class AppView extends AppCompatActivity implements LibraryLayoutControlle
         // restored app. Swallow that key. (A request that completes later leaves the
         // key to Android, which consumes it while restoring its own default focus.)
         if (isLibraryContentFocused()) {
-            swallowNavigationUntil = SystemClock.uptimeMillis() + SWALLOW_NAVIGATION_MS;
+            swallowNavigationPressedBy = SystemClock.uptimeMillis();
         }
     }
 
@@ -935,10 +936,10 @@ public class AppView extends AppCompatActivity implements LibraryLayoutControlle
     public boolean dispatchKeyEvent(KeyEvent event) {
         int keyCode = event.getKeyCode();
         if (event.getAction() == KeyEvent.ACTION_DOWN) {
-            // Only the key that ended touch mode, which arrives right away, is swallowed
+            // Only the key that ended touch mode: pressed no later than the restore
             boolean swallow = isNavigationKey(keyCode) && event.getRepeatCount() == 0
-                    && SystemClock.uptimeMillis() <= swallowNavigationUntil;
-            swallowNavigationUntil = 0;
+                    && event.getEventTime() <= swallowNavigationPressedBy;
+            swallowNavigationPressedBy = 0;
             if (swallow || handleLibraryKey(event)) {
                 consumedKeyDowns.add(keyCode);
                 return true;
