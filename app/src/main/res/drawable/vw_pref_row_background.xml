@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Settings row: transparent on the grouped card, raised with an accent ring when
+     focused by a controller, raised when pressed -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <inset android:inset="4dp">
+            <shape android:shape="rectangle">
+                <corners android:radius="@dimen/vw_radius_md" />
+                <solid android:color="@color/vw_surface_high" />
+                <stroke
+                    android:width="@dimen/vw_row_focus_stroke"
+                    android:color="@color/vw_accent" />
+            </shape>
+        </inset>
+    </item>
+    <item android:state_pressed="true">
+        <inset android:inset="4dp">
+            <shape android:shape="rectangle">
+                <corners android:radius="@dimen/vw_radius_md" />
+                <solid android:color="@color/vw_surface_high" />
+            </shape>
+        </inset>
+    </item>
+    <item>
+        <color android:color="@android:color/transparent" />
+    </item>
+</selector>

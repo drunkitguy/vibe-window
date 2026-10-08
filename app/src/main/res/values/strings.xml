@@ -787,4 +787,10 @@
     <string name="host_action_pair">Pair</string>
     <string name="host_action_wake">Wake</string>
     <string name="host_action_options">Options</string>
+
+    <!-- Settings screen -->
+    <string name="settings_screen_title">Settings</string>
+    <string name="settings_back">Back</string>
+    <!-- Overrides the androidx preference expander title -->
+    <string name="expand_button_title">Show more</string>
 </resources>

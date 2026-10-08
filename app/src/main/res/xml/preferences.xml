@@ -5,6 +5,7 @@
     app:iconSpaceReserved="false">
 
     <PreferenceCategory
+        android:icon="@drawable/ic_videocam"
         android:key="category_video_settings"
         android:title="@string/category_video_settings"
         app:initialExpandedChildrenCount="3"
@@ -226,6 +227,8 @@
     </PreferenceCategory>
 
     <PreferenceCategory
+        android:key="category_audio_settings"
+        android:icon="@drawable/ic_volume_up"
         android:title="@string/category_audio_settings"
         app:iconSpaceReserved="false">
         <ListPreference
@@ -245,6 +248,7 @@
     </PreferenceCategory>
 
     <PreferenceCategory
+        android:icon="@drawable/ic_sports_esports"
         android:key="category_gamepad_settings"
         android:title="@string/category_gamepad_settings"
         app:initialExpandedChildrenCount="1"
@@ -367,6 +371,7 @@
     </PreferenceCategory>
 
     <PreferenceCategory
+        android:icon="@drawable/ic_mouse"
         android:key="category_input_settings"
         android:title="@string/category_input_settings"
         app:initialExpandedChildrenCount="1"
@@ -495,6 +500,8 @@
     </PreferenceCategory>
 
     <PreferenceCategory
+        android:key="category_host_settings"
+        android:icon="@drawable/ic_computer"
         android:title="@string/category_host_settings"
         app:iconSpaceReserved="false">
         <CheckBoxPreference
@@ -512,6 +519,8 @@
     </PreferenceCategory>
 
     <PreferenceCategory
+        android:key="category_general_settings"
+        android:icon="@drawable/ic_tune"
         android:title="@string/category_general_settings"
         app:initialExpandedChildrenCount="1"
         app:iconSpaceReserved="false">
@@ -537,6 +546,7 @@
     </PreferenceCategory>
 
     <PreferenceCategory
+        android:icon="@drawable/ic_palette"
         android:key="category_ui_settings"
         android:title="@string/category_ui_settings"
         app:initialExpandedChildrenCount="3"
@@ -658,6 +668,7 @@
     </PreferenceCategory>
 
     <PreferenceCategory
+        android:icon="@drawable/ic_touch_app"
         android:key="category_onscreen_controls"
         android:title="@string/category_on_screen_controls_settings"
         app:initialExpandedChildrenCount="1"
@@ -748,6 +759,7 @@
     </PreferenceCategory>
 
     <PreferenceCategory
+        android:icon="@drawable/ic_keyboard"
         android:key="category_special_key_layout"
         android:title="@string/title_special_key_layout"
         app:initialExpandedChildrenCount="1"
@@ -818,6 +830,7 @@
     </PreferenceCategory>
 
     <PreferenceCategory
+        android:icon="@drawable/ic_trackpad_input"
         android:key="category_virtual_trackpad_settings"
         android:title="@string/title_virtual_trackpad_settings"
         app:initialExpandedChildrenCount="1"
@@ -895,6 +908,7 @@
     </PreferenceCategory>
 
     <PreferenceCategory
+        android:icon="@drawable/ic_speed"
         android:key="category_perf_monitor_settings"
         android:title="@string/category_perf_monitor_settings"
         app:initialExpandedChildrenCount="1"
@@ -949,6 +963,7 @@
     </PreferenceCategory>
 
     <PreferenceCategory
+        android:icon="@drawable/ic_science"
         android:key="category_advanced_settings"
         android:title="@string/category_advanced_settings"
         app:initialExpandedChildrenCount="1"
@@ -988,6 +1003,7 @@
     </PreferenceCategory>
 
     <PreferenceCategory
+        android:icon="@drawable/ic_more_horiz"
         android:key="category_settings_misc"
         android:title="@string/title_settings_misc"
         app:initialExpandedChildrenCount="1"

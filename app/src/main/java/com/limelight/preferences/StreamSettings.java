@@ -25,8 +25,11 @@ import androidx.preference.ListPreference;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceCategory;
 import androidx.preference.PreferenceFragmentCompat;
+import androidx.preference.PreferenceGroup;
 import androidx.preference.PreferenceManager;
 import androidx.preference.PreferenceScreen;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 
 import android.text.InputFilter;
 import android.text.InputType;
@@ -36,6 +39,7 @@ import android.util.Log;
 import android.util.Range;
 import android.view.Display;
 import android.view.DisplayCutout;
+import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -61,8 +65,11 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 
 public class StreamSettings extends AppCompatActivity {
@@ -99,7 +106,31 @@ public class StreamSettings extends AppCompatActivity {
 
         setContentView(R.layout.activity_stream_settings);
 
+        View backButton = findViewById(R.id.settingsBackButton);
+        if (backButton != null) {
+            backButton.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    onBackPressed();
+                }
+            });
+        }
+
 //        UiHelper.notifyNewRootView(this);
+    }
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        int keyCode = event.getKeyCode();
+        // L1 and R1 jump to the previous or next settings category
+        if ((keyCode == KeyEvent.KEYCODE_BUTTON_L1 || keyCode == KeyEvent.KEYCODE_BUTTON_R1) &&
+                prefsFragment != null && prefsFragment.getView() != null) {
+            if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                prefsFragment.jumpToCategory(keyCode == KeyEvent.KEYCODE_BUTTON_R1 ? 1 : -1);
+            }
+            return true;
+        }
+        return super.dispatchKeyEvent(event);
     }
 
     @Override
@@ -325,6 +356,129 @@ public class StreamSettings extends AppCompatActivity {
 
         public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState, boolean unused) {
             return super.onCreateView(inflater, container, savedInstanceState);
+        }
+
+        @Override
+        public void onViewCreated(@NonNull View view, Bundle savedInstanceState) {
+            super.onViewCreated(view, savedInstanceState);
+
+            setDivider(null);
+            final RecyclerView list = getListView();
+            if (list == null) {
+                return;
+            }
+
+            // Rows of each category are drawn as one rounded card
+            list.addItemDecoration(new GroupedCardDecoration(requireContext()));
+
+            // Center the content and never let it grow wider than the max width
+            final int maxWidth = getResources().getDimensionPixelSize(R.dimen.vw_settings_max_width);
+            final int gutter = getResources().getDimensionPixelSize(R.dimen.vw_gutter);
+            list.setClipToPadding(false);
+            list.addOnLayoutChangeListener(new View.OnLayoutChangeListener() {
+                @Override
+                public void onLayoutChange(final View v, int left, int top, int right, int bottom,
+                                           int oldLeft, int oldTop, int oldRight, int oldBottom) {
+                    final int padding = Math.max(gutter, (right - left - maxWidth) / 2);
+                    if (v.getPaddingLeft() != padding || v.getPaddingRight() != padding) {
+                        v.post(new Runnable() {
+                            @Override
+                            public void run() {
+                                v.setPadding(padding, v.getPaddingTop(), padding, v.getPaddingBottom());
+                            }
+                        });
+                    }
+                }
+            });
+
+            // Controller users start on the first row of the first category (resolution)
+            list.post(new Runnable() {
+                @Override
+                public void run() {
+                    if (!list.isInTouchMode() && list.getFocusedChild() == null) {
+                        focusFirstRowAfter(list, 0, 2);
+                    }
+                }
+            });
+        }
+
+        private static void focusFirstRowAfter(final RecyclerView list, final int adapterPosition, final int retries) {
+            RecyclerView.Adapter<?> adapter = list.getAdapter();
+            if (adapter == null) {
+                return;
+            }
+            for (int pos = adapterPosition; pos < adapter.getItemCount(); pos++) {
+                RecyclerView.ViewHolder holder = list.findViewHolderForAdapterPosition(pos);
+                if (holder == null) {
+                    // Not laid out yet; try again after the next layout
+                    if (retries > 0) {
+                        list.post(new Runnable() {
+                            @Override
+                            public void run() {
+                                focusFirstRowAfter(list, adapterPosition, retries - 1);
+                            }
+                        });
+                    }
+                    return;
+                }
+                if (holder.itemView.isFocusable()) {
+                    holder.itemView.requestFocus();
+                    return;
+                }
+            }
+        }
+
+        /** Scrolls to the previous (-1) or next (1) category and focuses its first row. */
+        public boolean jumpToCategory(int direction) {
+            final RecyclerView list = getListView();
+            PreferenceScreen screen = getPreferenceScreen();
+            if (list == null || screen == null ||
+                    !(list.getAdapter() instanceof PreferenceGroup.PreferencePositionCallback) ||
+                    !(list.getLayoutManager() instanceof LinearLayoutManager)) {
+                return false;
+            }
+
+            // Categories are read from the inflated screen, so removed ones are skipped
+            PreferenceGroup.PreferencePositionCallback positions =
+                    (PreferenceGroup.PreferencePositionCallback) list.getAdapter();
+            List<Integer> categoryPositions = new ArrayList<>();
+            for (int i = 0; i < screen.getPreferenceCount(); i++) {
+                Preference preference = screen.getPreference(i);
+                if (preference instanceof PreferenceCategory && preference.isVisible()) {
+                    int position = positions.getPreferenceAdapterPosition(preference);
+                    if (position != RecyclerView.NO_POSITION) {
+                        categoryPositions.add(position);
+                    }
+                }
+            }
+            if (categoryPositions.isEmpty()) {
+                return false;
+            }
+            Collections.sort(categoryPositions);
+
+            LinearLayoutManager layoutManager = (LinearLayoutManager) list.getLayoutManager();
+            int focusedPosition = RecyclerView.NO_POSITION;
+            View focused = list.getFocusedChild();
+            if (focused != null) {
+                focusedPosition = list.getChildAdapterPosition(focused);
+            }
+            if (focusedPosition == RecyclerView.NO_POSITION) {
+                // Nothing focused (touch mode): use the category shown at the top
+                focusedPosition = layoutManager.findFirstVisibleItemPosition();
+            }
+
+            int current = CategoryNavigation.currentCategoryIndex(categoryPositions, focusedPosition);
+            int target = CategoryNavigation.nextCategoryIndex(current, direction, categoryPositions.size());
+            final int headerPosition = categoryPositions.get(target);
+
+            layoutManager.scrollToPositionWithOffset(headerPosition, 0);
+            list.post(new Runnable() {
+                @Override
+                public void run() {
+                    focusFirstRowAfter(list, headerPosition + 1, 2);
+                }
+            });
+            return true;
         }
 
         @Override

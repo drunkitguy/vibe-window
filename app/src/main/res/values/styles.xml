@@ -36,6 +36,7 @@
         <item name="colorOutline">@color/vw_separator</item>
         <item name="alertDialogTheme">@style/ThemeOverlay.Vibe.Dialog</item>
         <item name="materialAlertDialogTheme">@style/ThemeOverlay.Vibe.MaterialDialog</item>
+        <item name="preferenceTheme">@style/PreferenceThemeOverlay.Vibe</item>
     </style>
 
     <style name="StreamBaseTheme" parent="AppBaseTheme">
@@ -213,6 +214,48 @@
         <item name="android:navigationBarColor">@android:color/black</item>
         <item name="android:colorBackground">@android:color/black</item>
         <item name="android:windowBackground">@android:color/black</item>
+    </style>
+
+    <!-- Settings rows, grouped cards and switches. Only layouts and styles change;
+         every preference class stays as it is. -->
+    <style name="PreferenceThemeOverlay.Vibe" parent="PreferenceThemeOverlay">
+        <item name="preferenceStyle">@style/Preference.Vibe</item>
+        <item name="checkBoxPreferenceStyle">@style/Preference.Vibe.CheckBox</item>
+        <item name="dialogPreferenceStyle">@style/Preference.Vibe.Dialog</item>
+        <item name="editTextPreferenceStyle">@style/Preference.Vibe.EditText</item>
+        <item name="preferenceCategoryStyle">@style/Preference.Vibe.Category</item>
+    </style>
+    <style name="Preference.Vibe" parent="Preference.Material">
+        <item name="android:layout">@layout/vw_pref_row</item>
+    </style>
+    <style name="Preference.Vibe.CheckBox" parent="Preference.CheckBoxPreference.Material">
+        <item name="android:layout">@layout/vw_pref_row</item>
+        <item name="android:widgetLayout">@layout/vw_pref_switch</item>
+    </style>
+    <style name="Preference.Vibe.Dialog" parent="Preference.DialogPreference.Material">
+        <item name="android:layout">@layout/vw_pref_row</item>
+    </style>
+    <style name="Preference.Vibe.EditText" parent="Preference.DialogPreference.EditTextPreference.Material">
+        <item name="android:layout">@layout/vw_pref_row</item>
+    </style>
+    <style name="Preference.Vibe.Category" parent="Preference.Category.Material">
+        <item name="android:layout">@layout/vw_pref_category</item>
+    </style>
+
+    <!-- Switch on API 29+, where the base theme is Material 3 -->
+    <style name="Widget.Vibe.Switch" parent="Widget.Material3.CompoundButton.MaterialSwitch">
+        <item name="thumbTint">@color/vw_switch_thumb</item>
+        <item name="thumbIconTint">@android:color/transparent</item>
+        <item name="trackTint">@color/vw_switch_track</item>
+        <item name="trackDecorationTint">@android:color/transparent</item>
+        <item name="android:textAppearance">@style/TextAppearance.Vibe.Body</item>
+        <item name="android:textColor">@color/vw_on_surface</item>
+    </style>
+    <!-- Same look below API 29 with the Material Components switch -->
+    <style name="Widget.Vibe.SwitchLegacy" parent="Widget.MaterialComponents.CompoundButton.Switch">
+        <item name="useMaterialThemeColors">false</item>
+        <item name="thumbTint">@color/vw_switch_thumb</item>
+        <item name="trackTint">@color/vw_switch_track</item>
     </style>
 
     <declare-styleable name="ApertureViewGroup">

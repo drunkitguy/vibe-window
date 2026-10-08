@@ -1,8 +1,50 @@
-<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Settings screen: a top bar with back and title above the preference list.
+     The fragment container keeps the id stream_settings. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
-    android:id="@+id/stream_settings"
+    android:id="@+id/stream_settings_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:background="@color/vw_bg"
+    android:orientation="vertical"
     tools:context=".preferences.StreamSettings">
 
-</RelativeLayout>
+    <LinearLayout
+        android:id="@+id/settingsTopBar"
+        android:layout_width="match_parent"
+        android:layout_height="64dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="@dimen/vw_space_3"
+        android:paddingLeft="@dimen/vw_space_3"
+        android:paddingEnd="@dimen/vw_gutter"
+        android:paddingRight="@dimen/vw_gutter">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/settingsBackButton"
+            style="@style/Widget.Vibe.RailButton"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:contentDescription="@string/settings_back"
+            app:icon="@drawable/ic_arrow_back" />
+
+        <TextView
+            android:id="@+id/settingsTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/vw_space_3"
+            android:layout_marginLeft="@dimen/vw_space_3"
+            android:accessibilityHeading="true"
+            android:text="@string/settings_screen_title"
+            android:textAppearance="@style/TextAppearance.Vibe.Display" />
+    </LinearLayout>
+
+    <FrameLayout
+        android:id="@+id/stream_settings"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+
+</LinearLayout>

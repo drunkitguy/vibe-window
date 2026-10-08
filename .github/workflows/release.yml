@@ -82,6 +82,7 @@ jobs:
             --tests 'com.limelight.StartupCrashTest' \
             --tests 'com.limelight.profiles.ProfilesNavigationTest' \
             --tests 'com.limelight.ui.*' \
+            --tests 'com.limelight.preferences.*' \
             --tests 'com.limelight.PcViewUiTest'
 
       - name: Build release APK

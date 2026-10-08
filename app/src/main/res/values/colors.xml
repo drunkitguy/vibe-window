@@ -20,6 +20,7 @@
     <color name="vw_scrim">#66000000</color>
     <color name="vw_glyph_dim">#66FFFFFF</color>
     <color name="vw_glyph_muted">#A1FFFFFF</color>
+    <color name="vw_switch_track_off">#48484A</color>
 
     <!-- The library focus color follows the accent token -->
     <color name="libraryFocus">@color/vw_accent</color>
