@@ -25,7 +25,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-@Config(sdk = {33})
+@Config(sdk = {33}, shadows = {com.limelight.shadows.ShadowMoonBridge.class})
 @RunWith(RobolectricTestRunner.class)
 public class AutoPreferencesTest {
     private Context context;
