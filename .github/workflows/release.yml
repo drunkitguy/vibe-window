@@ -80,7 +80,9 @@ jobs:
             --tests 'com.limelight.library.*' \
             --tests 'com.limelight.StartupTest' \
             --tests 'com.limelight.StartupCrashTest' \
-            --tests 'com.limelight.profiles.ProfilesNavigationTest'
+            --tests 'com.limelight.profiles.ProfilesNavigationTest' \
+            --tests 'com.limelight.ui.*' \
+            --tests 'com.limelight.PcViewUiTest'
 
       - name: Build release APK
         env:

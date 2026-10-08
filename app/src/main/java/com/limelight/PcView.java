@@ -24,6 +24,7 @@ import com.limelight.preferences.StreamSettings;
 import com.limelight.profiles.ProfilesManager;
 import com.limelight.ui.AdapterFragment;
 import com.limelight.ui.AdapterFragmentCallbacks;
+import com.limelight.ui.HostGridLayout;
 import com.limelight.utils.Dialog;
 import com.limelight.utils.HelpLauncher;
 import com.limelight.utils.ServerHelper;
@@ -38,6 +39,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.content.res.Configuration;
+import android.content.res.Resources;
+import android.database.DataSetObserver;
 import android.net.Uri;
 import android.opengl.GLSurfaceView;
 import android.os.Build;
@@ -47,6 +50,7 @@ import android.provider.Settings;
 import android.text.InputFilter;
 import android.text.InputType;
 import android.view.ContextMenu;
+import android.view.KeyEvent;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
@@ -56,9 +60,9 @@ import android.widget.AbsListView;
 import android.widget.AdapterView;
 import android.widget.AdapterView.OnItemClickListener;
 import android.widget.EditText;
-import android.widget.ImageButton;
+import android.widget.GridView;
 import android.widget.LinearLayout;
-import android.widget.RelativeLayout;
+import android.widget.TextView;
 import android.widget.Toast;
 import android.widget.AdapterView.AdapterContextMenuInfo;
 
@@ -71,7 +75,16 @@ import javax.microedition.khronos.egl.EGLConfig;
 import javax.microedition.khronos.opengles.GL10;
 
 public class PcView extends AppCompatActivity implements AdapterFragmentCallbacks {
-    private RelativeLayout noPcFoundLayout;
+    private View noPcFoundLayout;
+    private AbsListView pcListView;
+    // Host selection to restore after returning to this screen, and whether the
+    // user moved focus since then (so we never steal focus from them)
+    private String lastSelectedUuid;
+    private boolean pendingSelectionRestore = true;
+    private boolean userNavigated;
+    // Controller shortcut whose key down we consumed, so its key up is consumed too
+    private int consumedShortcutKey = KeyEvent.KEYCODE_UNKNOWN;
+    private boolean centeringObserverRegistered;
     private PcGridAdapter pcGridAdapter;
     private ShortcutHelper shortcutHelper;
     private ComputerManagerService.ComputerManagerBinder managerBinder;
@@ -139,6 +152,8 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
 
     private void initializeViews() {
         setContentView(R.layout.activity_pc_view);
+        // The grid is attached again by AdapterFragment
+        pcListView = null;
 
         UiHelper.notifyNewRootView(this);
 
@@ -154,9 +169,10 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
         pcGridAdapter.updateLayoutWithPreferences(this, PreferenceConfiguration.readPreferences(this));
 
         // Setup the list view
-        ImageButton settingsButton = findViewById(R.id.settingsButton);
-        ImageButton addComputerButton = findViewById(R.id.manuallyAddPc);
-        ImageButton helpButton = findViewById(R.id.helpButton);
+        View settingsButton = findViewById(R.id.settingsButton);
+        View addComputerButton = findViewById(R.id.manuallyAddPc);
+        View helpButton = findViewById(R.id.helpButton);
+        View noPcAddButton = findViewById(R.id.noPcAddButton);
         ExtendedFloatingActionButton profilesButton = findViewById(R.id.profilesButton);
 
         settingsButton.setOnClickListener(new OnClickListener() {
@@ -165,13 +181,17 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
                 startActivity(new Intent(PcView.this, StreamSettings.class));
             }
         });
-        addComputerButton.setOnClickListener(new OnClickListener() {
+        OnClickListener addComputerListener = new OnClickListener() {
             @Override
             public void onClick(View v) {
                 Intent i = new Intent(PcView.this, AddComputerManually.class);
                 startActivity(i);
             }
-        });
+        };
+        addComputerButton.setOnClickListener(addComputerListener);
+        if (noPcAddButton != null) {
+            noPcAddButton.setOnClickListener(addComputerListener);
+        }
         helpButton.setOnClickListener(new OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -199,11 +219,169 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
         noPcFoundLayout = findViewById(R.id.no_pc_found_layout);
         if (pcGridAdapter.getCount() == 0) {
             noPcFoundLayout.setVisibility(View.VISIBLE);
+            // Give controller users something to focus while searching
+            if (noPcAddButton != null) {
+                noPcAddButton.requestFocus();
+            }
         }
         else {
             noPcFoundLayout.setVisibility(View.INVISIBLE);
         }
+        pendingSelectionRestore = true;
+        userNavigated = false;
+        updateHeader();
         pcGridAdapter.notifyDataSetChanged();
+    }
+
+    private void updateHeader() {
+        TextView subtitle = findViewById(R.id.pcHeaderSubtitle);
+        if (subtitle == null || pcGridAdapter == null) {
+            return;
+        }
+
+        int total = pcGridAdapter.getCount();
+        int online = 0;
+        for (int i = 0; i < total; i++) {
+            ComputerObject computer = (ComputerObject) pcGridAdapter.getItem(i);
+            if (computer.details.state == ComputerDetails.State.ONLINE) {
+                online++;
+            }
+        }
+
+        if (total == 0) {
+            subtitle.setText(R.string.pcview_header_searching);
+        }
+        else {
+            subtitle.setText(getString(R.string.pcview_header_counts, total, online));
+        }
+    }
+
+    // Select the host the user had selected before, else the first online paired host.
+    // Runs once per visit, as soon as such a host is known.
+    private void applyPendingSelection() {
+        if (!pendingSelectionRestore || pcListView == null || pcGridAdapter == null) {
+            return;
+        }
+
+        int target = -1;
+        int firstOnlinePaired = -1;
+        for (int i = 0; i < pcGridAdapter.getCount(); i++) {
+            ComputerDetails details = ((ComputerObject) pcGridAdapter.getItem(i)).details;
+            if (lastSelectedUuid != null && lastSelectedUuid.equals(details.uuid)) {
+                target = i;
+                break;
+            }
+            if (firstOnlinePaired < 0 && details.state == ComputerDetails.State.ONLINE &&
+                    details.pairState == PairState.PAIRED) {
+                firstOnlinePaired = i;
+            }
+        }
+        if (target < 0) {
+            target = firstOnlinePaired;
+        }
+        if (target < 0) {
+            return;
+        }
+
+        pendingSelectionRestore = false;
+        pcListView.setSelection(target);
+        if (!userNavigated && !pcListView.hasFocus()) {
+            pcListView.requestFocus();
+        }
+    }
+
+    private void rememberSelectedHost() {
+        if (pcListView == null || pcGridAdapter == null) {
+            return;
+        }
+        int pos = pcListView.getSelectedItemPosition();
+        if (pos != AdapterView.INVALID_POSITION && pos < pcGridAdapter.getCount()) {
+            lastSelectedUuid = ((ComputerObject) pcGridAdapter.getItem(pos)).details.uuid;
+        }
+    }
+
+    // Center one to a few host cards; with more hosts the grid fills the width
+    private void updateGridCentering() {
+        if (!(pcListView instanceof GridView) || pcGridAdapter == null) {
+            return;
+        }
+        GridView grid = (GridView) pcListView;
+        int width = grid.getWidth();
+        if (width <= 0) {
+            return;
+        }
+
+        Resources res = getResources();
+        int columnWidth = res.getDimensionPixelSize(R.dimen.vw_host_column_width);
+        int spacing = res.getDimensionPixelSize(R.dimen.vw_host_grid_spacing);
+        int minPadding = res.getDimensionPixelSize(R.dimen.vw_host_grid_padding);
+        int columns = HostGridLayout.columns(width, columnWidth, spacing, minPadding, pcGridAdapter.getCount());
+        int padding = HostGridLayout.sidePadding(width, columnWidth, spacing, minPadding, columns);
+
+        if (grid.getNumColumns() != columns) {
+            grid.setNumColumns(columns);
+        }
+        if (grid.getPaddingLeft() != padding || grid.getPaddingRight() != padding) {
+            grid.setPadding(padding, grid.getPaddingTop(), padding, grid.getPaddingBottom());
+        }
+    }
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        int keyCode = event.getKeyCode();
+        if (event.getAction() == KeyEvent.ACTION_DOWN) {
+            userNavigated = true;
+        }
+
+        if (keyCode == KeyEvent.KEYCODE_BUTTON_X || keyCode == KeyEvent.KEYCODE_BUTTON_Y ||
+                keyCode == KeyEvent.KEYCODE_BUTTON_START) {
+            if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                if (event.getRepeatCount() == 0 && handleControllerShortcut(keyCode)) {
+                    consumedShortcutKey = keyCode;
+                    return true;
+                }
+                if (consumedShortcutKey == keyCode) {
+                    return true;
+                }
+            }
+            else if (event.getAction() == KeyEvent.ACTION_UP && consumedShortcutKey == keyCode) {
+                consumedShortcutKey = KeyEvent.KEYCODE_UNKNOWN;
+                return true;
+            }
+        }
+
+        return super.dispatchKeyEvent(event);
+    }
+
+    private boolean handleControllerShortcut(int keyCode) {
+        if (!completeOnCreateCalled) {
+            return false;
+        }
+
+        switch (keyCode) {
+            case KeyEvent.KEYCODE_BUTTON_X:
+                // Context menu of the selected host card
+                if (pcListView == null || !pcListView.hasFocus()) {
+                    return false;
+                }
+                View selected = pcListView.getSelectedView();
+                if (selected == null) {
+                    return false;
+                }
+                openContextMenu(selected);
+                return true;
+
+            case KeyEvent.KEYCODE_BUTTON_Y:
+                startActivity(new Intent(PcView.this, ProfilesActivity.class));
+                return true;
+
+            case KeyEvent.KEYCODE_BUTTON_START:
+                startActivity(new Intent(PcView.this, StreamSettings.class));
+                return true;
+
+            default:
+                return false;
+        }
     }
 
     @Override
@@ -376,6 +554,9 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
 
         refreshProfileButton();
 
+        pendingSelectionRestore = true;
+        userNavigated = false;
+
         inForeground = true;
         startComputerUpdates();
     }
@@ -383,6 +564,8 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
     @Override
     protected void onPause() {
         super.onPause();
+
+        rememberSelectedHost();
 
         inForeground = false;
         stopComputerUpdates(false);
@@ -848,6 +1031,7 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
                     noPcFoundLayout.setVisibility(View.VISIBLE);
                 }
 
+                updateHeader();
                 break;
             }
         }
@@ -866,6 +1050,7 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
             }
         }
 
+        boolean focusGrid = false;
         if (existingEntry != null) {
             // Replace the information in the existing entry
             existingEntry.details = details;
@@ -874,12 +1059,19 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
             // Add a new entry
             pcGridAdapter.addComputer(new ComputerObject(details));
 
-            // Remove the "Discovery in progress" view
+            // Remove the "Discovery in progress" view, moving controller focus to the grid
+            focusGrid = noPcFoundLayout.hasFocus();
             noPcFoundLayout.setVisibility(View.INVISIBLE);
         }
 
         // Notify the view that the data has changed
         pcGridAdapter.notifyDataSetChanged();
+
+        updateHeader();
+        if (focusGrid && pcListView != null) {
+            pcListView.requestFocus();
+        }
+        applyPendingSelection();
     }
 
     @Override
@@ -889,6 +1081,7 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
 
     @Override
     public void receiveAbsListView(AbsListView listView) {
+        pcListView = listView;
         listView.setAdapter(pcGridAdapter);
         listView.setOnItemClickListener(new OnItemClickListener() {
             @Override
@@ -909,6 +1102,33 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
         });
         UiHelper.applyStatusBarPadding(listView);
         registerForContextMenu(listView);
+
+        // Keep the cards centered when the size or the number of hosts changes
+        listView.addOnLayoutChangeListener(new View.OnLayoutChangeListener() {
+            @Override
+            public void onLayoutChange(View v, int left, int top, int right, int bottom,
+                                       int oldLeft, int oldTop, int oldRight, int oldBottom) {
+                if (right - left != oldRight - oldLeft) {
+                    v.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            updateGridCentering();
+                        }
+                    });
+                }
+            }
+        });
+        if (!centeringObserverRegistered) {
+            centeringObserverRegistered = true;
+            pcGridAdapter.registerDataSetObserver(new DataSetObserver() {
+                @Override
+                public void onChanged() {
+                    updateGridCentering();
+                }
+            });
+        }
+        updateGridCentering();
+        applyPendingSelection();
     }
 
     public static class ComputerObject {

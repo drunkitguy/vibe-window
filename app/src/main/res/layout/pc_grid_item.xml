@@ -1,42 +1,173 @@
 <?xml version="1.0" encoding="utf-8"?>
-<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="wrap_content"
+<!-- Host card on the PC list. The ids grid_image, grid_overlay, grid_spinner and
+     grid_text are read by GenericGridAdapter and must stay. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:padding="20dp">
-    <RelativeLayout
-        android:id="@+id/grid_image_layout"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content">
-        <ImageView
-            android:id="@+id/grid_image"
-            android:layout_centerHorizontal="true"
-            android:layout_width="125dp"
-            android:layout_height="125dp">
-        </ImageView>
-        <ImageView
-            android:id="@+id/grid_overlay"
-            android:layout_centerHorizontal="true"
-            android:layout_marginTop="28dp"
-            android:layout_width="50dp"
-            android:layout_height="50dp">
-        </ImageView>
-        <ProgressBar
-            android:id="@+id/grid_spinner"
-            android:layout_centerHorizontal="true"
-            android:layout_marginTop="28dp"
-            android:layout_width="50dp"
-            android:layout_height="50dp"
-            android:indeterminate="true">
-        </ProgressBar>
-    </RelativeLayout>
-    <TextView
-        android:id="@+id/grid_text"
-        android:layout_width="125dp"
-        android:layout_height="wrap_content"
-        android:layout_below="@id/grid_image_layout"
-        android:layout_marginTop="10dp"
-        android:layout_centerHorizontal="true"
-        android:gravity="center"
-        android:textSize="18sp" >
-    </TextView>
-</RelativeLayout>
+    android:padding="@dimen/vw_host_grid_padding"
+    android:foreground="@drawable/host_card_selector"
+    android:stateListAnimator="@animator/host_card_state">
+
+    <FrameLayout
+        android:id="@+id/host_card"
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/vw_host_card_height"
+        android:duplicateParentState="true"
+        android:background="@drawable/host_card_background">
+
+        <View
+            android:id="@+id/host_glow"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/host_card_glow"
+            android:visibility="gone" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:padding="@dimen/vw_space_4">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <FrameLayout
+                    android:id="@+id/host_icon_tile"
+                    android:layout_width="64dp"
+                    android:layout_height="64dp"
+                    android:background="@drawable/host_icon_tile">
+
+                    <ImageView
+                        android:id="@+id/grid_image"
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:layout_gravity="center"
+                        android:importantForAccessibility="no" />
+
+                    <com.google.android.material.progressindicator.CircularProgressIndicator
+                        android:id="@+id/grid_spinner"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center"
+                        android:indeterminate="true"
+                        app:indicatorColor="@color/vw_accent"
+                        app:indicatorSize="32dp"
+                        app:trackThickness="3dp" />
+
+                    <ImageView
+                        android:id="@+id/grid_overlay"
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:layout_gravity="bottom|end"
+                        android:layout_margin="4dp"
+                        android:importantForAccessibility="no" />
+                </FrameLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="@dimen/vw_space_4"
+                    android:layout_marginLeft="@dimen/vw_space_4"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/grid_text"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:ellipsize="end"
+                        android:maxLines="1"
+                        android:singleLine="true"
+                        android:textAppearance="@style/TextAppearance.Vibe.CardTitle" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/vw_space_1"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <ImageView
+                            android:id="@+id/host_status_dot"
+                            android:layout_width="16dp"
+                            android:layout_height="16dp"
+                            android:importantForAccessibility="no"
+                            android:scaleType="centerInside" />
+
+                        <TextView
+                            android:id="@+id/host_status_text"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="6dp"
+                            android:layout_marginLeft="6dp"
+                            android:ellipsize="end"
+                            android:maxLines="1"
+                            android:textAppearance="@style/TextAppearance.Vibe.Secondary.Medium" />
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+
+            <Space
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1px"
+                android:background="@color/vw_separator" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/vw_space_3"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/host_secondary_label"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:textAppearance="@style/TextAppearance.Vibe.Secondary" />
+
+                <LinearLayout
+                    android:id="@+id/host_action_pill"
+                    android:layout_width="wrap_content"
+                    android:layout_height="40dp"
+                    android:layout_marginStart="@dimen/vw_space_2"
+                    android:layout_marginLeft="@dimen/vw_space_2"
+                    android:background="@drawable/host_action_pill"
+                    android:gravity="center_vertical"
+                    android:importantForAccessibility="no"
+                    android:orientation="horizontal"
+                    android:paddingStart="14dp"
+                    android:paddingLeft="14dp"
+                    android:paddingEnd="@dimen/vw_space_4"
+                    android:paddingRight="@dimen/vw_space_4">
+
+                    <ImageView
+                        android:id="@+id/host_action_icon"
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:importantForAccessibility="no" />
+
+                    <TextView
+                        android:id="@+id/host_action_text"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        android:layout_marginLeft="6dp"
+                        android:maxLines="1"
+                        android:textAppearance="@style/TextAppearance.Vibe.Label" />
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
+    </FrameLayout>
+</FrameLayout>

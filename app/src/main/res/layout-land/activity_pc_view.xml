@@ -1,95 +1,155 @@
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:background="#1A1A1A"
+    android:background="@color/vw_bg"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     tools:context=".PcView" >
 
-    <RelativeLayout
-        android:id="@+id/pcFragmentContainer"
-        android:layout_width="fill_parent"
-        android:layout_height="wrap_content"
+    <!-- Navigation rail: Add PC, Settings, Help -->
+    <LinearLayout
+        android:id="@+id/pcRail"
+        android:layout_width="80dp"
+        android:layout_height="match_parent"
+        android:layout_alignParentStart="true"
+        android:layout_alignParentLeft="true"
         android:gravity="center"
-        android:layout_alignParentBottom="true"
-        android:layout_alignParentTop="true"
-        android:layout_toRightOf="@+id/settingsButton"
-        android:layout_toEndOf="@+id/settingsButton">
+        android:orientation="vertical">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/manuallyAddPc"
+            style="@style/Widget.Vibe.RailButton"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:contentDescription="@string/title_add_pc"
+            android:tooltipText="@string/title_add_pc"
+            android:preferKeepClear="true"
+            android:nextFocusUp="@id/manuallyAddPc"
+            android:nextFocusDown="@+id/settingsButton"
+            app:icon="@drawable/ic_add" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/settingsButton"
+            style="@style/Widget.Vibe.RailButton"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:contentDescription="@string/pcview_settings"
+            android:tooltipText="@string/pcview_settings"
+            android:preferKeepClear="true"
+            android:layout_marginTop="@dimen/vw_space_3"
+            android:nextFocusUp="@id/manuallyAddPc"
+            android:nextFocusDown="@+id/helpButton"
+            android:nextFocusForward="@+id/helpButton"
+            app:icon="@drawable/ic_settings_rounded" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/helpButton"
+            style="@style/Widget.Vibe.RailButton"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:contentDescription="@string/help"
+            android:tooltipText="@string/help"
+            android:preferKeepClear="true"
+            android:layout_marginTop="@dimen/vw_space_3"
+            android:nextFocusUp="@id/settingsButton"
+            android:nextFocusDown="@id/helpButton"
+            app:icon="@drawable/ic_help" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/pcContent"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_toEndOf="@id/pcRail"
+        android:layout_toRightOf="@id/pcRail"
+        android:orientation="vertical"
+        android:paddingTop="@dimen/vw_gutter"
+        android:paddingEnd="@dimen/vw_gutter"
+        android:paddingRight="@dimen/vw_gutter">
+
+        <TextView
+            android:id="@+id/pcHeaderTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/pcview_header_title"
+            android:textAppearance="@style/TextAppearance.Vibe.Display" />
+
+        <TextView
+            android:id="@+id/pcHeaderSubtitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/vw_space_1"
+            android:textAppearance="@style/TextAppearance.Vibe.Secondary" />
 
         <RelativeLayout
+            android:id="@+id/pcFragmentContainer"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:layout_marginTop="@dimen/vw_space_3">
+
+        <LinearLayout
             android:id="@+id/no_pc_found_layout"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_centerVertical="true"
-            android:layout_centerHorizontal="true">
-            <ProgressBar
+            android:layout_centerInParent="true"
+            android:gravity="center_horizontal"
+            android:orientation="vertical"
+            android:paddingLeft="@dimen/vw_space_4"
+            android:paddingRight="@dimen/vw_space_4">
+
+            <com.google.android.material.progressindicator.CircularProgressIndicator
                 android:id="@+id/pcs_loading"
-                android:layout_width="75dp"
-                android:layout_height="75dp"
-                android:indeterminate="true"/>
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:indeterminate="true"
+                app:indicatorColor="@color/vw_accent"
+                app:indicatorSize="48dp"
+                app:trackThickness="4dp" />
+
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_toRightOf="@+id/pcs_loading"
-                android:layout_toEndOf="@+id/pcs_loading"
-                android:layout_marginLeft="10dp"
-                android:layout_marginStart="10dp"
-                android:layout_centerVertical="true"
-                android:textAppearance="?android:attr/textAppearanceLarge"
+                android:layout_marginTop="@dimen/vw_space_4"
                 android:gravity="center"
-                android:text="@string/searching_pc"/>
+                android:maxWidth="480dp"
+                android:text="@string/pcview_searching_title"
+                android:textAppearance="@style/TextAppearance.Vibe.Section" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/vw_space_2"
+                android:gravity="center"
+                android:maxWidth="480dp"
+                android:text="@string/pcview_searching_hint"
+                android:textAppearance="@style/TextAppearance.Vibe.Secondary" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/noPcAddButton"
+                style="@style/Widget.Vibe.TonalButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/vw_space_5"
+                android:text="@string/pcview_add_pc_manually"
+                app:icon="@drawable/ic_add" />
+        </LinearLayout>
+
         </RelativeLayout>
-
-    </RelativeLayout>
-
-    <ImageButton
-        android:id="@+id/settingsButton"
-        android:layout_width="70dp"
-        android:layout_height="65dp"
-        android:cropToPadding="false"
-        android:scaleType="fitXY"
-        android:nextFocusForward="@id/helpButton"
-        android:layout_alignParentStart="true"
-        android:layout_alignParentLeft="true"
-        android:layout_alignParentTop="true"
-        android:src="@drawable/ic_settings"
-        style="?android:attr/borderlessButtonStyle"/>
-
-    <ImageButton
-        android:id="@+id/helpButton"
-        android:layout_width="70dp"
-        android:layout_height="65dp"
-        android:cropToPadding="false"
-        android:scaleType="fitXY"
-        android:nextFocusForward="@id/manuallyAddPc"
-        android:layout_alignParentStart="true"
-        android:layout_alignParentLeft="true"
-        android:layout_below="@id/settingsButton"
-        android:src="@drawable/ic_help"
-        style="?android:attr/borderlessButtonStyle"/>
-
-    <ImageButton
-        android:id="@+id/manuallyAddPc"
-        android:layout_width="70dp"
-        android:layout_height="65dp"
-        android:cropToPadding="false"
-        android:scaleType="fitXY"
-        android:layout_alignParentStart="true"
-        android:layout_alignParentLeft="true"
-        android:layout_below="@id/helpButton"
-        android:src="@drawable/ic_add"
-        style="?android:attr/borderlessButtonStyle"/>
+    </LinearLayout>
 
     <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
         android:id="@+id/profilesButton"
+        style="@style/Widget.Vibe.Fab"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_alignParentBottom="true"
         android:layout_alignParentEnd="true"
-        android:layout_marginBottom="24dp"
-        android:layout_marginEnd="24dp"
+        android:layout_alignParentRight="true"
+        android:layout_marginBottom="@dimen/vw_space_5"
+        android:layout_marginEnd="@dimen/vw_space_5"
+        android:layout_marginRight="@dimen/vw_space_5"
         android:contentDescription="@string/profile_manager_choose_profile"
-        android:layout_margin="16dp"
         app:icon="@drawable/ic_profiles" />
 
 </RelativeLayout>

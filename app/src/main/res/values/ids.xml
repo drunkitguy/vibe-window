@@ -2,4 +2,6 @@
 <resources>
     <!-- The AppView.AppObject bound to a library card, read by the context menu -->
     <item name="tag_app_object" type="id" />
+    <!-- Last tile color bound to a host card, used to crossfade state changes -->
+    <item name="tag_host_tile_color" type="id" />
 </resources>

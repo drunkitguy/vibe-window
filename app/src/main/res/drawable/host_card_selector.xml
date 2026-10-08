@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Focus ring around the selected host card: 3dp accent stroke, card radius plus 2dp,
+     drawn in the 8dp margin around the card. Hidden in touch mode. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_selected="true">
+        <inset android:inset="5dp">
+            <shape android:shape="rectangle">
+                <corners android:radius="22dp" />
+                <stroke
+                    android:width="@dimen/vw_focus_stroke"
+                    android:color="@color/vw_accent" />
+            </shape>
+        </inset>
+    </item>
+    <item>
+        <color android:color="@android:color/transparent" />
+    </item>
+</selector>
