@@ -96,7 +96,7 @@
                     android:paddingRight="10dp"
                     android:paddingBottom="2dp"
                     android:text="@string/library_running"
-                    android:textColor="#000000"
+                    android:textColor="@android:color/white"
                     android:textSize="14sp"
                     android:visibility="gone" />
             </LinearLayout>

@@ -4,6 +4,8 @@ import android.view.View;
 import android.widget.ImageView;
 import android.widget.TextView;
 
+import androidx.core.content.ContextCompat;
+
 import com.limelight.AppView;
 import com.limelight.R;
 import com.limelight.grid.assets.CachedAppAssetLoader;
@@ -43,7 +45,7 @@ public final class AppCardBinder {
                 // Show the play button overlay
                 overlayView.setImageResource(R.drawable.ic_play);
                 overlayView.setVisibility(View.VISIBLE);
-                gridMask.setBackgroundColor(0x66000000);
+                gridMask.setBackgroundColor(ContextCompat.getColor(card.getContext(), R.color.vw_scrim));
             }
             else {
                 overlayView.setVisibility(View.GONE);

@@ -2,8 +2,8 @@
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:state_focused="true">
         <shape android:shape="rectangle">
-            <corners android:radius="20dp" />
-            <solid android:color="#26FFFFFF" />
+            <corners android:radius="@dimen/vw_radius_xl" />
+            <solid android:color="@color/vw_surface_high" />
             <stroke
                 android:width="2dp"
                 android:color="@color/libraryFocus" />
@@ -11,8 +11,8 @@
     </item>
     <item>
         <shape android:shape="rectangle">
-            <corners android:radius="20dp" />
-            <solid android:color="#1AFFFFFF" />
+            <corners android:radius="@dimen/vw_radius_xl" />
+            <solid android:color="@color/vw_surface" />
         </shape>
     </item>
 </selector>

@@ -3,7 +3,7 @@
     <item android:state_selected="true">
         <shape android:shape="rectangle">
             <corners android:radius="16dp" />
-            <solid android:color="@color/libraryFocus" />
+            <solid android:color="@color/vw_accent_container" />
         </shape>
     </item>
     <item android:state_pressed="true">

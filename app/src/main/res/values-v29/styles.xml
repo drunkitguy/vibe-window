@@ -7,5 +7,6 @@
     </style>
 
     <style name="SettingsTheme" parent="AppTheme">
+        <item name="android:windowBackground">@color/vw_bg</item>
     </style>
 </resources>

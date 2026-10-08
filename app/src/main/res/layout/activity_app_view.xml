@@ -3,6 +3,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:background="@color/vw_bg"
     tools:context=".AppView">
 
     <LinearLayout
@@ -27,7 +28,7 @@
             android:maxWidth="240dp"
             android:maxLines="1"
             android:preferKeepClear="true"
-            android:textSize="22sp" />
+            android:textAppearance="@style/TextAppearance.Vibe.Title" />
 
         <androidx.appcompat.widget.AppCompatEditText
             android:id="@+id/librarySearch"
@@ -73,7 +74,7 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/layoutGrid"
-                style="?attr/materialButtonOutlinedStyle"
+                style="@style/Widget.Vibe.SegmentButton"
                 android:layout_width="48dp"
                 android:layout_height="48dp"
                 android:contentDescription="@string/library_layout_grid"
@@ -86,7 +87,7 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/layoutWheel"
-                style="?attr/materialButtonOutlinedStyle"
+                style="@style/Widget.Vibe.SegmentButton"
                 android:layout_width="48dp"
                 android:layout_height="48dp"
                 android:contentDescription="@string/library_layout_wheel"
@@ -99,7 +100,7 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/layoutShelves"
-                style="?attr/materialButtonOutlinedStyle"
+                style="@style/Widget.Vibe.SegmentButton"
                 android:layout_width="48dp"
                 android:layout_height="48dp"
                 android:contentDescription="@string/library_layout_shelves"
@@ -151,6 +152,7 @@
         android:layout_marginRight="24dp"
         android:contentDescription="@string/profile_manager_choose_profile"
         android:layout_margin="16dp"
+        style="@style/Widget.Vibe.Fab"
         app:icon="@drawable/ic_profiles" />
 
 </RelativeLayout>

@@ -31,8 +31,7 @@
         android:layout_marginLeft="8dp"
         android:ellipsize="end"
         android:maxLines="1"
-        android:textSize="18sp"
-        android:textStyle="bold" />
+        android:textAppearance="@style/TextAppearance.Vibe.Section" />
 
     <TextView
         android:id="@+id/header_count"
@@ -40,7 +39,7 @@
         android:layout_height="wrap_content"
         android:layout_marginStart="10dp"
         android:layout_marginLeft="10dp"
-        android:alpha="0.6"
         android:maxLines="1"
+        android:textColor="@color/vw_on_surface_variant"
         android:textSize="14sp" />
 </LinearLayout>

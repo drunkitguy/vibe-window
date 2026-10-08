@@ -1,5 +1,26 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="profileAccent">#FF4081</color>
-    <color name="libraryFocus">#4FC3F7</color>
+
+    <!-- Design tokens shared by the PC list, settings and the app library -->
+    <color name="vw_bg">#000000</color>
+    <color name="vw_surface">#1C1C1E</color>
+    <color name="vw_surface_high">#2C2C2E</color>
+    <color name="vw_surface_low">#111113</color>
+    <color name="vw_on_surface">#FFFFFF</color>
+    <color name="vw_on_surface_variant">#8E8E93</color>
+    <color name="vw_accent">#0A84FF</color>
+    <color name="vw_accent_container">#0071E3</color>
+    <color name="vw_accent_tonal">#3D0A84FF</color>
+    <color name="vw_success">#30D158</color>
+    <color name="vw_warning">#FF9F0A</color>
+    <color name="vw_separator">#99545458</color>
+    <color name="vw_glow">#0051A3</color>
+    <color name="vw_glow_start">#8C0051A3</color>
+    <color name="vw_scrim">#66000000</color>
+    <color name="vw_glyph_dim">#66FFFFFF</color>
+    <color name="vw_glyph_muted">#A1FFFFFF</color>
+
+    <!-- The library focus color follows the accent token -->
+    <color name="libraryFocus">@color/vw_accent</color>
 </resources>

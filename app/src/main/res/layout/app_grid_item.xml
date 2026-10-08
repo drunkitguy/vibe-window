@@ -12,8 +12,9 @@
         android:foreground="@drawable/app_card_focus"
         android:layout_margin="10dp"
         app:cardCornerRadius="12dp"
-        app:cardElevation="8dp"
-        app:cardMaxElevation="8dp">
+        app:cardBackgroundColor="@color/vw_surface"
+        app:cardElevation="0dp"
+        app:cardMaxElevation="0dp">
 
         <ImageView
             android:id="@+id/grid_image"
