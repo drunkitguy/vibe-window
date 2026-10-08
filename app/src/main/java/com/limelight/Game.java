@@ -395,6 +395,7 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
         }
 
         onExternelDisplay = currentDisplay.getDisplayId() != Display.DEFAULT_DISPLAY;
+        com.limelight.preferences.AutoResolutionAndroid.resolveInto(this, prefConfig); // Auto resolution/FPS from this display; no-op for explicit values
 
         boolean shouldInvertDecoderResolution = false;
 
