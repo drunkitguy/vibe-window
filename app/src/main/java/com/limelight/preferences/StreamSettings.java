@@ -70,11 +70,13 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 public class StreamSettings extends AppCompatActivity {
     private PreferenceConfiguration previousPrefs;
     private int previousDisplayPixelCount;
+    private int previousDisplayId = Display.INVALID_DISPLAY;
 
     private SettingsFragment prefsFragment;
 
@@ -86,6 +88,7 @@ public class StreamSettings extends AppCompatActivity {
             Display.Mode mode = getActiveDisplay(StreamSettings.this, previousPrefs).getMode();
             previousDisplayPixelCount = mode.getPhysicalWidth() * mode.getPhysicalHeight();
         }
+        previousDisplayId = AutoResolutionAndroid.getActivityDisplay(this).getDisplayId();
         prefsFragment = new SettingsFragment(PreferenceConfiguration.readPreferences(
                 this,
                 PreferenceManager.getDefaultSharedPreferences(this)
@@ -165,7 +168,13 @@ public class StreamSettings extends AppCompatActivity {
             // switching between screens on a foldable device.
             if (mode.getPhysicalWidth() * mode.getPhysicalHeight() != previousDisplayPixelCount) {
                 reloadSettings();
+                return;
             }
+        }
+
+        // Moving the window to another display refreshes the auto resolution hint
+        if (AutoResolutionAndroid.getActivityDisplay(this).getDisplayId() != previousDisplayId) {
+            reloadSettings();
         }
     }
 
@@ -340,10 +349,127 @@ public class StreamSettings extends AppCompatActivity {
                 fps = prefs.getString(PreferenceConfiguration.FPS_PREF_STRING, PreferenceConfiguration.DEFAULT_FPS);
             }
 
+            int bitrate = PreferenceConfiguration.getDefaultBitrate(res, fps);
+            if (PreferenceConfiguration.RES_AUTO.equals(res) || PreferenceConfiguration.FPS_AUTO.equals(fps)) {
+                // Use what auto resolves to on this display rather than the placeholders
+                AutoResolution.Result resolved = previewAuto(res, fps);
+                if (resolved != null) {
+                    bitrate = Math.min(PreferenceConfiguration.MAX_BITRATE_KBPS,
+                            PreferenceConfiguration.getDefaultBitrate(resolved.width, resolved.height, resolved.fps));
+                }
+            }
+
+            // The bitrate is the default again, so it follows the resolution from now on
             prefs.edit()
-                    .putInt(PreferenceConfiguration.BITRATE_PREF_STRING,
-                            PreferenceConfiguration.getDefaultBitrate(res, fps))
+                    .putInt(PreferenceConfiguration.BITRATE_PREF_STRING, bitrate)
+                    .putBoolean(PreferenceConfiguration.BITRATE_FOLLOWS_RESOLUTION_PREF_STRING, true)
                     .apply();
+        }
+
+        /** What auto resolves to for the given list values on the display settings are shown on. */
+        private AutoResolution.Result previewAuto(String res, String fps) {
+            Activity activity = getActivity();
+            if (activity == null) {
+                return null;
+            }
+            boolean autoResolution = PreferenceConfiguration.RES_AUTO.equals(res);
+            boolean autoFps = PreferenceConfiguration.FPS_AUTO.equals(fps);
+            int width = PreferenceConfiguration.AUTO_PLACEHOLDER_WIDTH;
+            int height = PreferenceConfiguration.AUTO_PLACEHOLDER_HEIGHT;
+            float frameRate = PreferenceConfiguration.AUTO_PLACEHOLDER_FPS;
+            try {
+                if (!autoResolution) {
+                    String[] parts = res.split("x");
+                    width = Integer.parseInt(parts[0]);
+                    height = Integer.parseInt(parts[1]);
+                }
+                if (!autoFps) {
+                    frameRate = Float.parseFloat(fps);
+                }
+            } catch (RuntimeException e) {
+                return null;
+            }
+            prevPrefConfig.autoResPreferExternal = getPrefs().getBoolean(
+                    PreferenceConfiguration.AUTO_RES_PREFER_EXTERNAL_PREF_STRING, true);
+            return AutoResolutionAndroid.preview(activity, prevPrefConfig, autoResolution, autoFps,
+                    width, height, frameRate);
+        }
+
+        /** First summary line of the resolution and FPS rows while they are set to auto. */
+        void updateAutoHints() {
+            if (getActivity() == null || getPreferenceScreen() == null) {
+                return;
+            }
+            SharedPreferences prefs = getPrefs();
+            String res = prefs.getString(PreferenceConfiguration.RESOLUTION_PREF_STRING, PreferenceConfiguration.DEFAULT_RESOLUTION);
+            String fps = prefs.getString(PreferenceConfiguration.FPS_PREF_STRING, PreferenceConfiguration.DEFAULT_FPS);
+            boolean autoResolution = PreferenceConfiguration.RES_AUTO.equals(res);
+            boolean autoFps = PreferenceConfiguration.FPS_AUTO.equals(fps);
+
+            String hint = null;
+            if (autoResolution || autoFps) {
+                AutoResolution.Result resolved = previewAuto(res, fps);
+                if (resolved != null) {
+                    hint = formatAutoHint(prefs, resolved);
+                }
+            }
+
+            Preference resolutionPref = findPreference(PreferenceConfiguration.RESOLUTION_PREF_STRING);
+            if (resolutionPref != null) {
+                resolutionPref.setSummary(withHint(autoResolution ? hint : null, R.string.summary_resolution_list));
+            }
+            Preference fpsPref = findPreference(PreferenceConfiguration.FPS_PREF_STRING);
+            if (fpsPref != null) {
+                fpsPref.setSummary(withHint(autoFps ? hint : null, R.string.summary_fps_list));
+            }
+        }
+
+        private CharSequence withHint(String hint, int summaryRes) {
+            String summary = getString(summaryRes);
+            return hint == null ? summary : hint + "\n" + summary;
+        }
+
+        private String formatAutoHint(SharedPreferences prefs, AutoResolution.Result resolved) {
+            String display;
+            if (resolved.mode == AutoResolution.Mode.MIRRORED_EXTERNAL) {
+                display = getString(R.string.auto_res_display_mirrored);
+            }
+            else if (resolved.targetDisplayId == Display.DEFAULT_DISPLAY) {
+                display = getString(R.string.auto_res_display_builtin);
+            }
+            else {
+                display = getString(R.string.auto_res_display_external);
+            }
+            StringBuilder hint = new StringBuilder(getString(R.string.auto_res_hint,
+                    resolved.width + "x" + resolved.height, AutoResolution.formatFps(resolved.fps), display));
+
+            if (prefs.getBoolean(PreferenceConfiguration.BITRATE_FOLLOWS_RESOLUTION_PREF_STRING, true)) {
+                int bitrate = Math.min(PreferenceConfiguration.MAX_BITRATE_KBPS,
+                        PreferenceConfiguration.getDefaultBitrate(resolved.width, resolved.height, resolved.fps));
+                String mbps = bitrate % 1000 == 0 ? Integer.toString(bitrate / 1000) :
+                        String.format(Locale.US, "%.1f", bitrate / 1000f);
+                hint.append(getString(R.string.auto_res_hint_bitrate, mbps));
+            }
+
+            int scale = 100;
+            Object scaleValue = prefs.getAll().get("seekbar_resolution_scale_factor");
+            if (scaleValue instanceof Integer) {
+                scale = (Integer) scaleValue;
+            }
+            if (scale != 100 && scale > 0) {
+                hint.append(getString(R.string.auto_res_hint_scale,
+                        (resolved.width * scale / 100) + "x" + (resolved.height * scale / 100)));
+            }
+            return hint.toString();
+        }
+
+        private void postAutoHintUpdate() {
+            new Handler().post(new Runnable() {
+                @Override
+                public void run() {
+                    updateAutoHints();
+                }
+            });
         }
 
         @NonNull
@@ -851,6 +977,7 @@ public class StreamSettings extends AppCompatActivity {
 
                     // Write the new bitrate value
                     resetBitrateToDefault(prefs, valueStr, null);
+                    postAutoHintUpdate();
 
                     // Allow the original preference change to take place
                     return true;
@@ -873,11 +1000,38 @@ public class StreamSettings extends AppCompatActivity {
 
                     // Write the new bitrate value
                     resetBitrateToDefault(prefs, null, valueStr);
+                    postAutoHintUpdate();
 
                     // Allow the original preference change to take place
                     return true;
                 }
             });
+
+            // Moving the bitrate slider is a deliberate choice: stop following the resolution
+            Preference bitratePref = findPreference(PreferenceConfiguration.BITRATE_PREF_STRING);
+            if (bitratePref != null) {
+                bitratePref.setOnPreferenceChangeListener(new Preference.OnPreferenceChangeListener() {
+                    @Override
+                    public boolean onPreferenceChange(Preference preference, Object newValue) {
+                        getPrefs().edit()
+                                .putBoolean(PreferenceConfiguration.BITRATE_FOLLOWS_RESOLUTION_PREF_STRING, false)
+                                .apply();
+                        postAutoHintUpdate();
+                        return true;
+                    }
+                });
+            }
+            Preference preferExternalPref = findPreference(PreferenceConfiguration.AUTO_RES_PREFER_EXTERNAL_PREF_STRING);
+            if (preferExternalPref != null) {
+                preferExternalPref.setOnPreferenceChangeListener(new Preference.OnPreferenceChangeListener() {
+                    @Override
+                    public boolean onPreferenceChange(Preference preference, Object newValue) {
+                        postAutoHintUpdate();
+                        return true;
+                    }
+                });
+            }
+            updateAutoHints();
 
             findPreference("checkbox_enable_perf_logging").setOnPreferenceChangeListener(new Preference.OnPreferenceChangeListener() {
                 @Override
@@ -1028,7 +1182,12 @@ public class StreamSettings extends AppCompatActivity {
                     float bitrateValue = Float.parseFloat(value) * 1000;
                     int bitrate = (int) bitrateValue;
                     SharedPreferences prefs = getPrefs();
-                    prefs.edit().putInt(PreferenceConfiguration.BITRATE_PREF_STRING, bitrate).apply();
+                    // A custom bitrate no longer follows the resolution
+                    prefs.edit()
+                            .putInt(PreferenceConfiguration.BITRATE_PREF_STRING, bitrate)
+                            .putBoolean(PreferenceConfiguration.BITRATE_FOLLOWS_RESOLUTION_PREF_STRING, false)
+                            .apply();
+                    postAutoHintUpdate();
                     Toast.makeText(getActivity(), getString(R.string.pref_set_success), Toast.LENGTH_SHORT).show();
                     return true;
                 });

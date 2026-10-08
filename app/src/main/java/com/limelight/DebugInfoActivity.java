@@ -22,6 +22,8 @@ import android.widget.Toast;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.limelight.preferences.AutoResolutionAndroid;
+import com.limelight.preferences.PreferenceConfiguration;
 import com.limelight.utils.DeviceUtils;
 
 import java.util.ArrayList;
@@ -63,6 +65,13 @@ public class DebugInfoActivity extends AppCompatActivity implements View.OnClick
         bt_vibrator.setText(getString(R.string.debug_info_test_device_vibration, content));
 
         showSimlateAmp();
+
+        // Displays section: lets users check how auto resolution sees their monitors
+        TextView displaysInfo = findViewById(R.id.tx_displays_info);
+        if (displaysInfo != null) {
+            displaysInfo.setText(AutoResolutionAndroid.describeDisplays(this,
+                    PreferenceConfiguration.readPreferences(this)));
+        }
     }
 
     private void showSimlateAmp() {

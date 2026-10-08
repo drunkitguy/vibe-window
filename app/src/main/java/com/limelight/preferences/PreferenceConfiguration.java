@@ -6,6 +6,8 @@ import android.content.pm.PackageManager;
 import android.os.Build;
 import android.view.Display;
 
+import androidx.preference.PreferenceManager;
+
 import com.limelight.nvstream.jni.MoonBridge;
 import com.limelight.profiles.ProfilesManager;
 
@@ -42,6 +44,11 @@ public class PreferenceConfiguration {
     static final String RESOLUTION_PREF_STRING = "list_resolution";
     static final String FPS_PREF_STRING = "list_fps";
     static final String BITRATE_PREF_STRING = "seekbar_bitrate_kbps";
+    // Internal flag: the bitrate is the default for the current resolution, so auto may raise or lower it
+    static final String BITRATE_FOLLOWS_RESOLUTION_PREF_STRING = "bitrate_follows_resolution";
+    static final String AUTO_RES_PREFER_EXTERNAL_PREF_STRING = "checkbox_auto_res_prefer_external";
+    // One-time migration of the old defaults to auto, stored in the base preferences only
+    static final String MIGRATED_AUTO_DISPLAY_PREF_STRING = "migrated_auto_display_v120";
     private static final String BITRATE_PREF_OLD_STRING = "seekbar_bitrate";
     private static final String METERED_BITRATE_PREF_STRING = "seekbar_metered_bitrate_kbps";
     private static final String ENABLE_ULTRA_LOW_LATENCY_PREF_STRING = "checkbox_ultra_low_latency";
@@ -140,8 +147,22 @@ public class PreferenceConfiguration {
 
     private static final String CHECKBOX_ENABLE_COMMIT_TEXT = "checkbox_enable_commit_text";
 
-    static final String DEFAULT_RESOLUTION = "1920x1080";
-    static final String DEFAULT_FPS = "120";
+    public static final String RES_AUTO = "auto";
+    public static final String FPS_AUTO = "auto";
+    // Values used for "auto" until the stream start resolves it against the display
+    public static final int AUTO_PLACEHOLDER_WIDTH = 1920;
+    public static final int AUTO_PLACEHOLDER_HEIGHT = 1080;
+    public static final int AUTO_PLACEHOLDER_FPS = 60;
+    // Defaults of 1.1.3 and earlier, migrated to auto once
+    static final String LEGACY_DEFAULT_RESOLUTION = "1920x1080";
+    static final String LEGACY_DEFAULT_FPS = "120";
+    // Maximum of the bitrate seek bar
+    public static final int MAX_BITRATE_KBPS = 300000;
+
+    static final String DEFAULT_RESOLUTION = RES_AUTO;
+    static final String DEFAULT_FPS = FPS_AUTO;
+    private static final boolean DEFAULT_BITRATE_FOLLOWS_RESOLUTION = true;
+    private static final boolean DEFAULT_AUTO_RES_PREFER_EXTERNAL = true;
     private static final boolean DEFAULT_ENABLE_ULTRA_LOW_LATENCY = false;
     private static final boolean DEFAULT_ENFORCE_DISPLAY_MODE = false;
     private static final boolean DEFAULT_USE_VIRTUAL_DISPLAY = true;
@@ -233,6 +254,11 @@ public class PreferenceConfiguration {
 
     public int width, height, bitrate;
     public float fps;
+    // "Auto (match display)": width, height and fps hold placeholders until resolved at stream start
+    public boolean autoResolution, autoFps;
+    public boolean autoResPreferExternal;
+    // The bitrate (and a derived metered bitrate) may follow the resolved resolution
+    public boolean bitrateFollowsResolution, meteredBitrateDerived;
 //    public String customBitrate;
     public boolean forceTightThresholds = false; // default off
     public boolean enableUltraLowLatency;
@@ -498,9 +524,15 @@ public class PreferenceConfiguration {
     }
 
     public static int getDefaultBitrate(String resString, String fpsString) {
-        int width = getWidthFromResolutionString(resString);
-        int height = getHeightFromResolutionString(resString);
-        int fps = Math.round(Float.parseFloat(fpsString));
+        // "auto" maps to the placeholders here; the stream start uses the resolved values
+        int width = RES_AUTO.equals(resString) ? AUTO_PLACEHOLDER_WIDTH : getWidthFromResolutionString(resString);
+        int height = RES_AUTO.equals(resString) ? AUTO_PLACEHOLDER_HEIGHT : getHeightFromResolutionString(resString);
+        float fps = FPS_AUTO.equals(fpsString) ? AUTO_PLACEHOLDER_FPS : Float.parseFloat(fpsString);
+        return getDefaultBitrate(width, height, fps);
+    }
+
+    public static int getDefaultBitrate(int width, int height, float fpsValue) {
+        int fps = Math.round(fpsValue);
 
         // This logic is shamelessly stolen from Moonlight Qt:
         // https://github.com/moonlight-stream/moonlight-qt/blob/master/app/settings/streamingpreferences.cpp
@@ -690,6 +722,7 @@ private static int getFramePacingValue(Context context) {
         SharedPreferences prefs = ProfilesManager.getInstance().getOverlayingSharedPreferences(context);
         prefs.edit()
                 .remove(BITRATE_PREF_STRING)
+                .remove(BITRATE_FOLLOWS_RESOLUTION_PREF_STRING)
                 .remove(BITRATE_PREF_OLD_STRING)
                 .remove(LEGACY_RES_FPS_PREF_STRING)
                 .remove(RESOLUTION_PREF_STRING)
@@ -712,6 +745,47 @@ private static int getFramePacingValue(Context context) {
         // https://www.nvidia.com/en-us/geforce/forums/notifications/comment/155192/
         return Build.MANUFACTURER.equalsIgnoreCase("NVIDIA") &&
                 Build.FINGERPRINT.contains("PPR1.180610.011/4079208_2235.1395");
+    }
+
+    /**
+     * Moves installs that still use the old defaults (1920x1080, 120 FPS and the default
+     * bitrate for them) to "Auto (match display)", once. Works on the base preferences
+     * only; profile overlays are never migrated. Any other combination is a deliberate
+     * choice and is left alone.
+     *
+     * @return true if the stored values were changed
+     */
+    public static boolean migrateToAutoDisplayDefaults(Context context) {
+        return migrateToAutoDisplayDefaults(PreferenceManager.getDefaultSharedPreferences(context));
+    }
+
+    static boolean migrateToAutoDisplayDefaults(SharedPreferences prefs) {
+        if (prefs.getBoolean(MIGRATED_AUTO_DISPLAY_PREF_STRING, false)) {
+            return false;
+        }
+
+        boolean migrate = false;
+        if (LEGACY_DEFAULT_RESOLUTION.equals(prefs.getString(RESOLUTION_PREF_STRING, null)) &&
+                LEGACY_DEFAULT_FPS.equals(prefs.getString(FPS_PREF_STRING, null))) {
+            Object storedBitrate = prefs.getAll().get(BITRATE_PREF_STRING);
+            if (storedBitrate == null) {
+                // Never stored means the default was in use, unless a legacy value exists
+                migrate = !prefs.contains(BITRATE_PREF_OLD_STRING);
+            }
+            else {
+                migrate = storedBitrate instanceof Integer &&
+                        (Integer) storedBitrate == getDefaultBitrate(1920, 1080, 120);
+            }
+        }
+
+        SharedPreferences.Editor editor = prefs.edit().putBoolean(MIGRATED_AUTO_DISPLAY_PREF_STRING, true);
+        if (migrate) {
+            editor.putString(RESOLUTION_PREF_STRING, RES_AUTO)
+                    .putString(FPS_PREF_STRING, FPS_AUTO)
+                    .putBoolean(BITRATE_FOLLOWS_RESOLUTION_PREF_STRING, true);
+        }
+        editor.apply();
+        return migrate;
     }
 
     public static PreferenceConfiguration readPreferences(Context context) {
@@ -793,16 +867,34 @@ private static int getFramePacingValue(Context context) {
             // Use the new preference location
             String resStr = prefs.getString(RESOLUTION_PREF_STRING, PreferenceConfiguration.DEFAULT_RESOLUTION);
 
-            // Convert legacy resolution strings to the new style
-            if (!resStr.contains("x")) {
-                resStr = PreferenceConfiguration.convertFromLegacyResolutionString(resStr);
-                prefs.edit().putString(RESOLUTION_PREF_STRING, resStr).apply();
+            if (RES_AUTO.equals(resStr)) {
+                // Resolved at stream start; never run "auto" through the legacy conversion below
+                config.autoResolution = true;
+                config.width = AUTO_PLACEHOLDER_WIDTH;
+                config.height = AUTO_PLACEHOLDER_HEIGHT;
+            }
+            else {
+                // Convert legacy resolution strings to the new style
+                if (!resStr.contains("x")) {
+                    resStr = PreferenceConfiguration.convertFromLegacyResolutionString(resStr);
+                    prefs.edit().putString(RESOLUTION_PREF_STRING, resStr).apply();
+                }
+
+                config.width = PreferenceConfiguration.getWidthFromResolutionString(resStr);
+                config.height = PreferenceConfiguration.getHeightFromResolutionString(resStr);
             }
 
-            config.width = PreferenceConfiguration.getWidthFromResolutionString(resStr);
-            config.height = PreferenceConfiguration.getHeightFromResolutionString(resStr);
-            config.fps = Float.parseFloat(prefs.getString(FPS_PREF_STRING, PreferenceConfiguration.DEFAULT_FPS));
+            String fpsStr = prefs.getString(FPS_PREF_STRING, PreferenceConfiguration.DEFAULT_FPS);
+            if (FPS_AUTO.equals(fpsStr)) {
+                config.autoFps = true;
+                config.fps = AUTO_PLACEHOLDER_FPS;
+            }
+            else {
+                config.fps = Float.parseFloat(fpsStr);
+            }
         }
+        config.autoResPreferExternal = prefs.getBoolean(AUTO_RES_PREFER_EXTERNAL_PREF_STRING, DEFAULT_AUTO_RES_PREFER_EXTERNAL);
+        config.bitrateFollowsResolution = prefs.getBoolean(BITRATE_FOLLOWS_RESOLUTION_PREF_STRING, DEFAULT_BITRATE_FOLLOWS_RESOLUTION);
 
         if (prefs.contains(LEGACY_STRETCH_PREF_STRING)) {
             boolean stretch = prefs.getBoolean(LEGACY_STRETCH_PREF_STRING, false);
@@ -842,6 +934,7 @@ private static int getFramePacingValue(Context context) {
         }
 
         config.meteredBitrate = prefs.getInt((METERED_BITRATE_PREF_STRING), 0);
+        config.meteredBitrateDerived = config.meteredBitrate == 0;
         if (config.meteredBitrate == 0) {
             config.meteredBitrate = config.bitrate / 4;
             prefs.edit().putInt(METERED_BITRATE_PREF_STRING, 0).apply();

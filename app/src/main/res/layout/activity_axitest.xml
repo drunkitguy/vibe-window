@@ -61,10 +61,32 @@
         android:layout_height="match_parent"
         android:layout_marginTop="10dp">
 
-        <TextView
-            android:id="@+id/tx_game_pad_info"
+        <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="wrap_content" />
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/tx_game_pad_info"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+
+            <!-- Displays: how auto resolution sees every display -->
+            <TextView
+                android:id="@+id/tx_displays_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="@string/debug_info_displays_title"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tx_displays_info"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textIsSelectable="true"
+                android:typeface="monospace" />
+        </LinearLayout>
     </ScrollView>
 
 

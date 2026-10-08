@@ -793,4 +793,17 @@
     <string name="settings_back">Back</string>
     <!-- Overrides the androidx preference expander title -->
     <string name="expand_button_title">Show more</string>
+
+    <!-- Auto resolution -->
+    <string name="resolution_auto">Auto (match display)</string>
+    <string name="fps_auto">Auto (match display)</string>
+    <string name="title_checkbox_auto_res_prefer_external">Use the external display\'s resolution when mirrored</string>
+    <string name="summary_checkbox_auto_res_prefer_external">With Auto, stream at the resolution of a larger external monitor or TV that mirrors this screen</string>
+    <string name="auto_res_hint">Currently %1$s at %2$s FPS on %3$s</string>
+    <string name="auto_res_hint_bitrate">, %1$s Mbps</string>
+    <string name="auto_res_hint_scale">, host virtual display %1$s</string>
+    <string name="auto_res_display_builtin">the built-in display</string>
+    <string name="auto_res_display_external">the external display</string>
+    <string name="auto_res_display_mirrored">the external display, mirrored</string>
+    <string name="debug_info_displays_title">Displays</string>
 </resources>

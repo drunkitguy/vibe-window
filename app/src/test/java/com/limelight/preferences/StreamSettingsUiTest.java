@@ -113,6 +113,49 @@ public class StreamSettingsUiTest {
     }
 
     @Test
+    public void autoIsTheFirstResolutionAndFpsEntry() {
+        StreamSettings.SettingsFragment fragment = launch();
+        ListPreference resolution = fragment.findPreference("list_resolution");
+        ListPreference fps = fragment.findPreference("list_fps");
+        assertEquals("auto", resolution.getEntryValues()[0].toString());
+        assertEquals(fragment.getString(R.string.resolution_auto), resolution.getEntries()[0].toString());
+        assertEquals("auto", fps.getEntryValues()[0].toString());
+        assertEquals("auto", resolution.getValue());
+        assertEquals("auto", fps.getValue());
+        assertTrue("Auto rows show what auto resolves to",
+                resolution.getSummary().toString().startsWith("Currently "));
+        // The new switch sits in the video category
+        assertNotNull(fragment.findPreference("checkbox_auto_res_prefer_external"));
+    }
+
+    @Test
+    public void choosingAutoMakesTheBitrateFollowTheResolution() {
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(
+                ApplicationProvider.getApplicationContext());
+        prefs.edit().putString("list_resolution", "1280x720").putString("list_fps", "60")
+                .putInt("seekbar_bitrate_kbps", 9000)
+                .putBoolean("bitrate_follows_resolution", false).commit();
+
+        StreamSettings.SettingsFragment fragment = launch();
+        ListPreference resolution = fragment.findPreference("list_resolution");
+        assertTrue(resolution.callChangeListener("auto"));
+        assertTrue(prefs.getBoolean("bitrate_follows_resolution", false));
+        assertTrue(prefs.getInt("seekbar_bitrate_kbps", 0) != 9000);
+    }
+
+    @Test
+    public void movingTheBitrateStopsFollowing() {
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(
+                ApplicationProvider.getApplicationContext());
+        prefs.edit().putBoolean("bitrate_follows_resolution", true).commit();
+
+        StreamSettings.SettingsFragment fragment = launch();
+        Preference bitrate = fragment.findPreference("seekbar_bitrate_kbps");
+        bitrate.callChangeListener(15000);
+        assertTrue(!prefs.getBoolean("bitrate_follows_resolution", true));
+    }
+
+    @Test
     public void checkboxRowsShowASwitchBoundToTheStoredValue() {
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(
                 ApplicationProvider.getApplicationContext());
