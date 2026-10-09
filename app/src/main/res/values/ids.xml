@@ -4,4 +4,6 @@
     <item name="tag_app_object" type="id" />
     <!-- Last tile color bound to a host card, used to crossfade state changes -->
     <item name="tag_host_tile_color" type="id" />
+    <!-- Cached child views of a host card -->
+    <item name="tag_host_views" type="id" />
 </resources>

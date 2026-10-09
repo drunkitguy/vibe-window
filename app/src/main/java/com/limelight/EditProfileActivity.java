@@ -2,6 +2,7 @@ package com.limelight;
 
 import android.content.SharedPreferences;
 import android.os.Bundle;
+import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -83,6 +84,20 @@ public class EditProfileActivity extends AppCompatActivity {
             .commit();
 
         UiHelper.notifyNewRootView(this);
+    }
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        int keyCode = event.getKeyCode();
+        // L1 and R1 jump to the previous or next settings category, as in the settings screen
+        if ((keyCode == KeyEvent.KEYCODE_BUTTON_L1 || keyCode == KeyEvent.KEYCODE_BUTTON_R1) &&
+                prefsFragment != null && prefsFragment.getView() != null) {
+            if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                prefsFragment.jumpToCategory(keyCode == KeyEvent.KEYCODE_BUTTON_R1 ? 1 : -1);
+            }
+            return true;
+        }
+        return super.dispatchKeyEvent(event);
     }
 
     @Override

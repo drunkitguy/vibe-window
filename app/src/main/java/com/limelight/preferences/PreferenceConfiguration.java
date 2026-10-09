@@ -621,9 +621,14 @@ public class PreferenceConfiguration {
 
     private static FormatOption getVideoFormatValue(Context context) {
         SharedPreferences prefs = ProfilesManager.getInstance().getOverlayingSharedPreferences(context);
+        return videoFormatFromString(prefs.getString(VIDEO_FORMAT_PREF_STRING, DEFAULT_VIDEO_FORMAT));
+    }
 
-        String str = prefs.getString(VIDEO_FORMAT_PREF_STRING, DEFAULT_VIDEO_FORMAT);
-        if (str.equals("auto")) {
+    static FormatOption videoFormatFromString(String str) {
+        if (str == null) {
+            return FormatOption.AUTO;
+        }
+        else if (str.equals("auto")) {
             return FormatOption.AUTO;
         }
         else if (str.equals("forceav1")) {
@@ -786,6 +791,19 @@ private static int getFramePacingValue(Context context) {
         }
         editor.apply();
         return migrate;
+    }
+
+    /**
+     * A fresh configuration holding only what the auto resolver reads, taken from the
+     * given preferences without writing to them. Used for previews in settings.
+     */
+    static PreferenceConfiguration forAutoPreview(SharedPreferences prefs) {
+        PreferenceConfiguration config = new PreferenceConfiguration();
+        config.autoResPreferExternal = prefs.getBoolean(AUTO_RES_PREFER_EXTERNAL_PREF_STRING, DEFAULT_AUTO_RES_PREFER_EXTERNAL);
+        config.videoFormat = videoFormatFromString(prefs.getString(VIDEO_FORMAT_PREF_STRING, DEFAULT_VIDEO_FORMAT));
+        config.enableHdr = prefs.getBoolean(ENABLE_HDR_PREF_STRING, DEFAULT_ENABLE_HDR);
+        config.bitrateFollowsResolution = prefs.getBoolean(BITRATE_FOLLOWS_RESOLUTION_PREF_STRING, DEFAULT_BITRATE_FOLLOWS_RESOLUTION);
+        return config;
     }
 
     public static PreferenceConfiguration readPreferences(Context context) {

@@ -169,6 +169,19 @@ public class AutoResolutionTest {
     }
 
     @Test
+    public void dci4kIsKeptAsIs() {
+        Result result = AutoResolution.resolve(auto(external(5, 4096, 2160, 60f, false)));
+        assertSize(result, 4096, 2160, 60);
+        assertEquals(AutoResolution.Clamp.NONE, result.clamp);
+    }
+
+    @Test
+    public void fiveK16by9IsClampedTo4k() {
+        Result result = AutoResolution.resolve(auto(external(5, 5120, 2880, 60f, false)));
+        assertSize(result, 3840, 2160, 60);
+    }
+
+    @Test
     public void eightKIsClampedTo4k() {
         Result result = AutoResolution.resolve(auto(external(5, 7680, 4320, 60f, false)));
         assertSize(result, 3840, 2160, 60);

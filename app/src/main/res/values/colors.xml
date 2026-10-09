@@ -8,9 +8,12 @@
     <color name="vw_surface_high">#2C2C2E</color>
     <color name="vw_surface_low">#111113</color>
     <color name="vw_on_surface">#FFFFFF</color>
-    <color name="vw_on_surface_variant">#8E8E93</color>
+    <!-- Secondary text; lighter than iOS gray so it passes 4.5:1 on every surface, including vw_surface_high -->
+    <color name="vw_on_surface_variant">#A1A1A6</color>
     <color name="vw_accent">#0A84FF</color>
     <color name="vw_accent_container">#0071E3</color>
+    <!-- Accent for text: passes 4.5:1 on vw_surface_high and on vw_accent_tonal over vw_surface -->
+    <color name="vw_accent_text">#54A8FF</color>
     <color name="vw_accent_tonal">#3D0A84FF</color>
     <color name="vw_success">#30D158</color>
     <color name="vw_warning">#FF9F0A</color>

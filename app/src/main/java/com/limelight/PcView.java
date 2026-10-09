@@ -258,10 +258,15 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
         }
     }
 
-    // Select the host the user had selected before, else the first online paired host.
-    // Runs once per visit, as soon as such a host is known.
+    // Select the host the user had selected before, else the first online paired host,
+    // else the first host until an online paired one shows up. Never overrides a
+    // selection the user made.
     private void applyPendingSelection() {
         if (!pendingSelectionRestore || pcListView == null || pcGridAdapter == null) {
+            return;
+        }
+        if (userNavigated) {
+            pendingSelectionRestore = false;
             return;
         }
 
@@ -281,13 +286,19 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
         if (target < 0) {
             target = firstOnlinePaired;
         }
-        if (target < 0) {
+        if (target >= 0) {
+            pendingSelectionRestore = false;
+        }
+        else if (pcGridAdapter.getCount() > 0) {
+            // Nothing online and paired yet: start on the first host and keep looking
+            target = 0;
+        }
+        else {
             return;
         }
 
-        pendingSelectionRestore = false;
         pcListView.setSelection(target);
-        if (!userNavigated && !pcListView.hasFocus()) {
+        if (!pcListView.hasFocus()) {
             pcListView.requestFocus();
         }
     }
@@ -314,17 +325,30 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
         }
 
         Resources res = getResources();
-        int columnWidth = res.getDimensionPixelSize(R.dimen.vw_host_column_width);
-        int spacing = res.getDimensionPixelSize(R.dimen.vw_host_grid_spacing);
-        int minPadding = res.getDimensionPixelSize(R.dimen.vw_host_grid_padding);
-        int columns = HostGridLayout.columns(width, columnWidth, spacing, minPadding, pcGridAdapter.getCount());
-        int padding = HostGridLayout.sidePadding(width, columnWidth, spacing, minPadding, columns);
+        HostGridLayout layout = HostGridLayout.compute(width,
+                res.getDimensionPixelSize(R.dimen.vw_host_column_min_width),
+                res.getDimensionPixelSize(R.dimen.vw_host_column_width),
+                res.getDimensionPixelSize(R.dimen.vw_host_grid_spacing),
+                res.getDimensionPixelSize(R.dimen.vw_host_grid_padding),
+                pcGridAdapter.getCount());
 
-        if (grid.getNumColumns() != columns) {
-            grid.setNumColumns(columns);
+        if (grid.getColumnWidth() != layout.columnWidth) {
+            grid.setColumnWidth(layout.columnWidth);
         }
-        if (grid.getPaddingLeft() != padding || grid.getPaddingRight() != padding) {
-            grid.setPadding(padding, grid.getPaddingTop(), padding, grid.getPaddingBottom());
+        if (grid.getNumColumns() != layout.columns) {
+            grid.setNumColumns(layout.columns);
+        }
+        if (grid.getPaddingLeft() != layout.sidePadding || grid.getPaddingRight() != layout.sidePadding) {
+            grid.setPadding(layout.sidePadding, grid.getPaddingTop(), layout.sidePadding, grid.getPaddingBottom());
+        }
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (!hasFocus) {
+            // The key up of a consumed shortcut may go to another window (a menu or dialog)
+            consumedShortcutKey = KeyEvent.KEYCODE_UNKNOWN;
         }
     }
 
@@ -568,6 +592,7 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
         super.onPause();
 
         rememberSelectedHost();
+        consumedShortcutKey = KeyEvent.KEYCODE_UNKNOWN;
 
         inForeground = false;
         stopComputerUpdates(false);

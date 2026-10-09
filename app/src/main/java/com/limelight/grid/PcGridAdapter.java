@@ -87,19 +87,21 @@ public class PcGridAdapter extends GenericGridAdapter<PcView.ComputerObject> {
                 break;
         }
 
-        View tile = parentView.findViewById(R.id.host_icon_tile);
+        CardViews views = CardViews.of(parentView);
+
+        View tile = views.tile;
         if (tile != null) {
             bindTileColor(tile, details.uuid, ContextCompat.getColor(ctx, tileColorRes(card.tile)));
         }
 
-        View glow = parentView.findViewById(R.id.host_glow);
+        View glow = views.glow;
         if (glow != null) {
             glow.setVisibility(card.glow ? View.VISIBLE : View.GONE);
         }
 
         String statusText = ctx.getString(statusTextRes(card.statusText));
-        ImageView statusIcon = parentView.findViewById(R.id.host_status_dot);
-        TextView statusView = parentView.findViewById(R.id.host_status_text);
+        ImageView statusIcon = views.statusIcon;
+        TextView statusView = views.statusText;
         int statusColor = ContextCompat.getColor(ctx, statusColorRes(card.statusIcon));
         if (statusIcon != null) {
             statusIcon.setImageResource(statusIconRes(card.statusIcon));
@@ -110,14 +112,14 @@ public class PcGridAdapter extends GenericGridAdapter<PcView.ComputerObject> {
             statusView.setTextColor(statusColor);
         }
 
-        TextView secondary = parentView.findViewById(R.id.host_secondary_label);
+        TextView secondary = views.secondary;
         if (secondary != null) {
             secondary.setText(secondaryTextRes(card.secondaryText));
         }
 
-        View pill = parentView.findViewById(R.id.host_action_pill);
-        ImageView pillIcon = parentView.findViewById(R.id.host_action_icon);
-        TextView pillText = parentView.findViewById(R.id.host_action_text);
+        View pill = views.pill;
+        ImageView pillIcon = views.pillIcon;
+        TextView pillText = views.pillText;
         if (pill != null && pillIcon != null && pillText != null) {
             int fill;
             int content;
@@ -128,7 +130,7 @@ public class PcGridAdapter extends GenericGridAdapter<PcView.ComputerObject> {
                     break;
                 case TONAL:
                     fill = R.color.vw_accent_tonal;
-                    content = R.color.vw_accent;
+                    content = R.color.vw_accent_text;
                     break;
                 default:
                     fill = R.color.vw_surface_high;
@@ -144,6 +146,36 @@ public class PcGridAdapter extends GenericGridAdapter<PcView.ComputerObject> {
         }
 
         parentView.setContentDescription(details.name + ", " + statusText);
+    }
+
+    // Child views of a host card, looked up once per recycled view
+    private static final class CardViews {
+        View tile;
+        View glow;
+        ImageView statusIcon;
+        TextView statusText;
+        TextView secondary;
+        View pill;
+        ImageView pillIcon;
+        TextView pillText;
+
+        static CardViews of(View card) {
+            Object tag = card.getTag(R.id.tag_host_views);
+            if (tag instanceof CardViews) {
+                return (CardViews) tag;
+            }
+            CardViews views = new CardViews();
+            views.tile = card.findViewById(R.id.host_icon_tile);
+            views.glow = card.findViewById(R.id.host_glow);
+            views.statusIcon = card.findViewById(R.id.host_status_dot);
+            views.statusText = card.findViewById(R.id.host_status_text);
+            views.secondary = card.findViewById(R.id.host_secondary_label);
+            views.pill = card.findViewById(R.id.host_action_pill);
+            views.pillIcon = card.findViewById(R.id.host_action_icon);
+            views.pillText = card.findViewById(R.id.host_action_text);
+            card.setTag(R.id.tag_host_views, views);
+            return views;
+        }
     }
 
     private static final class TileTag {

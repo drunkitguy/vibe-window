@@ -80,7 +80,8 @@ jobs:
             --tests 'com.limelight.library.*' \
             --tests 'com.limelight.StartupTest' \
             --tests 'com.limelight.StartupCrashTest' \
-            --tests 'com.limelight.profiles.ProfilesNavigationTest' \
+            --tests 'com.limelight.profiles.*' \
+            --tests 'com.limelight.LayoutInflationTest' \
             --tests 'com.limelight.ui.*' \
             --tests 'com.limelight.preferences.*' \
             --tests 'com.limelight.PcViewUiTest'

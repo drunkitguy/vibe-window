@@ -15,7 +15,8 @@ public final class AutoResolution {
     /** Policy limits that keep auto inside what hosts and NvConnection accept. */
     public static final int MAX_LONG_EDGE = 4096;
     public static final int MAX_SHORT_EDGE = 2160;
-    public static final long MAX_PIXELS = 3840L * 2160L;
+    // DCI 4K (4096x2160) is the largest size kept as is
+    public static final long MAX_PIXELS = 4096L * 2160L;
 
     public static final int MIN_WIDTH = 640;
     public static final int MIN_HEIGHT = 360;

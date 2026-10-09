@@ -1,6 +1,5 @@
 package com.limelight.preferences;
 
-import android.annotation.SuppressLint;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
@@ -10,12 +9,12 @@ import android.view.View;
 
 import androidx.annotation.NonNull;
 import androidx.core.content.ContextCompat;
-import androidx.preference.Preference;
-import androidx.preference.PreferenceCategory;
-import androidx.preference.PreferenceGroupAdapter;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.limelight.R;
+
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * Draws the settings rows of each category as one rounded card, with hairlines
@@ -37,6 +36,10 @@ public class GroupedCardDecoration extends RecyclerView.ItemDecoration {
     private final float dividerInset;
     private final Path path = new Path();
     private final RectF rect = new RectF();
+    // Corner radii for Path.addRoundRect, indexed by roundsTop + 2 * roundsBottom
+    private final float[][] radii = new float[4][];
+    // View types of category headers, learned from the header views (vw_pref_category)
+    private final Set<Integer> headerViewTypes = new HashSet<>();
 
     public GroupedCardDecoration(Context context) {
         cardPaint.setColor(ContextCompat.getColor(context, R.color.vw_surface));
@@ -45,6 +48,11 @@ public class GroupedCardDecoration extends RecyclerView.ItemDecoration {
         dividerPaint.setStyle(Paint.Style.FILL);
         radius = context.getResources().getDimension(R.dimen.vw_radius_lg);
         dividerInset = context.getResources().getDimension(R.dimen.vw_space_4);
+        for (int i = 0; i < radii.length; i++) {
+            float top = (i & 1) != 0 ? radius : 0;
+            float bottom = (i & 2) != 0 ? radius : 0;
+            radii[i] = new float[] {top, top, top, top, bottom, bottom, bottom, bottom};
+        }
     }
 
     /**
@@ -80,22 +88,30 @@ public class GroupedCardDecoration extends RecyclerView.ItemDecoration {
         return position == POSITION_FIRST || position == POSITION_MIDDLE;
     }
 
-    @SuppressLint("RestrictedApi")
-    private static boolean isRow(RecyclerView.Adapter<?> adapter, int position) {
+    private boolean isRow(RecyclerView.Adapter<?> adapter, int position) {
         if (adapter == null || position < 0 || position >= adapter.getItemCount()) {
             return false;
         }
-        if (adapter instanceof PreferenceGroupAdapter) {
-            Preference preference = ((PreferenceGroupAdapter) adapter).getItem(position);
-            return preference != null && !(preference instanceof PreferenceCategory);
-        }
-        return true;
+        return !headerViewTypes.contains(adapter.getItemViewType(position));
     }
 
     @Override
     public void onDraw(@NonNull Canvas c, @NonNull RecyclerView parent, @NonNull RecyclerView.State state) {
         RecyclerView.Adapter<?> adapter = parent.getAdapter();
         int childCount = parent.getChildCount();
+
+        // Category headers inflate vw_pref_category; remember their view type so headers
+        // outside the visible area are recognized too
+        for (int i = 0; i < childCount; i++) {
+            View child = parent.getChildAt(i);
+            if (child.getId() == R.id.vw_pref_category) {
+                RecyclerView.ViewHolder holder = parent.getChildViewHolder(child);
+                if (holder != null && holder.getItemViewType() != RecyclerView.INVALID_TYPE) {
+                    headerViewTypes.add(holder.getItemViewType());
+                }
+            }
+        }
+
         for (int i = 0; i < childCount; i++) {
             View child = parent.getChildAt(i);
             int adapterPosition = parent.getChildAdapterPosition(child);
@@ -114,15 +130,10 @@ public class GroupedCardDecoration extends RecyclerView.ItemDecoration {
             float right = child.getRight() + child.getTranslationX();
             float top = child.getTop() + child.getTranslationY();
             float bottom = child.getBottom() + child.getTranslationY();
-            float topRadius = roundsTop(position) ? radius : 0;
-            float bottomRadius = roundsBottom(position) ? radius : 0;
-
             rect.set(left, top, right, bottom);
             path.reset();
-            path.addRoundRect(rect, new float[] {
-                    topRadius, topRadius, topRadius, topRadius,
-                    bottomRadius, bottomRadius, bottomRadius, bottomRadius
-            }, Path.Direction.CW);
+            path.addRoundRect(rect, radii[(roundsTop(position) ? 1 : 0) + (roundsBottom(position) ? 2 : 0)],
+                    Path.Direction.CW);
             c.drawPath(path, cardPaint);
 
             if (hasDividerBelow(position)) {

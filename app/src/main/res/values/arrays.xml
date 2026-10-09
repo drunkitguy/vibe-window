@@ -11,7 +11,10 @@
     </string-array>
 
     <!-- Keep this in sync with PreferenceConfiguration.isNativeResolution()!
-         "auto" is resolved at stream start and never reaches that function. -->
+         The string "auto" never reaches that function, but the size it resolves to at
+         stream start does: a display size that is not one of the entries below (for
+         example 2400x1080) is treated as native, so Game streams the full panel,
+         including cutout areas, and picks a matching display mode. -->
     <string-array name="resolution_values" translatable="false">
         <item>auto</item>
         <item>640x360</item>

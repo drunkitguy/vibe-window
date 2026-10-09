@@ -13,6 +13,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.app.Activity;
 import android.os.Handler;
+import android.os.Looper;
 import android.os.Vibrator;
 
 import androidx.annotation.NonNull;
@@ -389,10 +390,28 @@ public class StreamSettings extends AppCompatActivity {
             } catch (RuntimeException e) {
                 return null;
             }
-            prevPrefConfig.autoResPreferExternal = getPrefs().getBoolean(
-                    PreferenceConfiguration.AUTO_RES_PREFER_EXTERNAL_PREF_STRING, true);
-            return AutoResolutionAndroid.preview(activity, prevPrefConfig, autoResolution, autoFps,
-                    width, height, frameRate);
+            // A fresh configuration from the current (or profile) preferences for every preview
+            return AutoResolutionAndroid.preview(activity, PreferenceConfiguration.forAutoPreview(getPrefs()),
+                    autoResolution, autoFps, width, height, frameRate);
+        }
+
+        /** The bitrate that "follows the resolution" would use for the current list values, or -1. */
+        private int followedBitrate(SharedPreferences prefs) {
+            String res = prefs.getString(PreferenceConfiguration.RESOLUTION_PREF_STRING, PreferenceConfiguration.DEFAULT_RESOLUTION);
+            String fps = prefs.getString(PreferenceConfiguration.FPS_PREF_STRING, PreferenceConfiguration.DEFAULT_FPS);
+            try {
+                if (PreferenceConfiguration.RES_AUTO.equals(res) || PreferenceConfiguration.FPS_AUTO.equals(fps)) {
+                    AutoResolution.Result resolved = previewAuto(res, fps);
+                    if (resolved == null) {
+                        return -1;
+                    }
+                    return Math.min(PreferenceConfiguration.MAX_BITRATE_KBPS,
+                            PreferenceConfiguration.getDefaultBitrate(resolved.width, resolved.height, resolved.fps));
+                }
+                return PreferenceConfiguration.getDefaultBitrate(res, fps);
+            } catch (RuntimeException e) {
+                return -1;
+            }
         }
 
         /** First summary line of the resolution and FPS rows while they are set to auto. */
@@ -411,6 +430,22 @@ public class StreamSettings extends AppCompatActivity {
                 AutoResolution.Result resolved = previewAuto(res, fps);
                 if (resolved != null) {
                     hint = formatAutoHint(prefs, resolved);
+
+                    // Keep the stored bitrate (and the slider) at the value the stream will use.
+                    // Only for the base settings: profiles are never changed behind the user's back.
+                    if (getPreferenceManager().getPreferenceDataStore() == null &&
+                            prefs.getBoolean(PreferenceConfiguration.BITRATE_FOLLOWS_RESOLUTION_PREF_STRING, true)) {
+                        int followed = Math.min(PreferenceConfiguration.MAX_BITRATE_KBPS,
+                                PreferenceConfiguration.getDefaultBitrate(resolved.width, resolved.height, resolved.fps));
+                        Object stored = prefs.getAll().get(PreferenceConfiguration.BITRATE_PREF_STRING);
+                        if (!(stored instanceof Integer) || (Integer) stored != followed) {
+                            prefs.edit().putInt(PreferenceConfiguration.BITRATE_PREF_STRING, followed).apply();
+                            Preference bitratePref = findPreference(PreferenceConfiguration.BITRATE_PREF_STRING);
+                            if (bitratePref instanceof SeekBarPreference) {
+                                ((SeekBarPreference) bitratePref).setProgress(followed);
+                            }
+                        }
+                    }
                 }
             }
 
@@ -464,7 +499,7 @@ public class StreamSettings extends AppCompatActivity {
         }
 
         private void postAutoHintUpdate() {
-            new Handler().post(new Runnable() {
+            new Handler(Looper.getMainLooper()).post(new Runnable() {
                 @Override
                 public void run() {
                     updateAutoHints();
@@ -1013,10 +1048,14 @@ public class StreamSettings extends AppCompatActivity {
                 bitratePref.setOnPreferenceChangeListener(new Preference.OnPreferenceChangeListener() {
                     @Override
                     public boolean onPreferenceChange(Preference preference, Object newValue) {
-                        getPrefs().edit()
-                                .putBoolean(PreferenceConfiguration.BITRATE_FOLLOWS_RESOLUTION_PREF_STRING, false)
-                                .apply();
-                        postAutoHintUpdate();
+                        // OK without moving the slider keeps following; only a new value stops it
+                        SharedPreferences prefs = getPrefs();
+                        if (newValue instanceof Integer && (Integer) newValue != followedBitrate(prefs)) {
+                            prefs.edit()
+                                    .putBoolean(PreferenceConfiguration.BITRATE_FOLLOWS_RESOLUTION_PREF_STRING, false)
+                                    .apply();
+                            postAutoHintUpdate();
+                        }
                         return true;
                     }
                 });

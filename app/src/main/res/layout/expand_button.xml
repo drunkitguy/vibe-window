@@ -29,7 +29,7 @@
             android:ellipsize="end"
             android:maxLines="1"
             android:textAppearance="@style/TextAppearance.Vibe.Body"
-            android:textColor="@color/vw_accent" />
+            android:textColor="@color/vw_accent_text" />
 
         <TextView
             android:id="@android:id/summary"
@@ -53,7 +53,7 @@
             android:layout_width="24dp"
             android:layout_height="24dp"
             android:importantForAccessibility="no"
-            android:src="@drawable/ic_expand_more"
+            android:src="@drawable/ic_arrow_down_24dp"
             android:tint="@color/vw_accent" />
     </FrameLayout>
 </LinearLayout>

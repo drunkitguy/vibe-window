@@ -1,6 +1,7 @@
 package com.limelight;
 
 import android.content.Context;
+import android.content.res.Resources;
 import android.view.LayoutInflater;
 
 import androidx.test.core.app.ApplicationProvider;
@@ -14,7 +15,7 @@ import org.robolectric.annotation.Config;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 
-@Config(sdk = {33})
+@Config(sdk = {33}, shadows = {com.limelight.shadows.ShadowMoonBridge.class, com.limelight.shadows.ShadowGameManager.class})
 @RunWith(RobolectricTestRunner.class)
 public class LayoutInflationTest {
     @BeforeClass
@@ -25,15 +26,25 @@ public class LayoutInflationTest {
     @Test
     public void allLayoutsInflateSuccessfully() throws IllegalAccessException {
         Context base = ApplicationProvider.getApplicationContext();
-        Context context = new androidx.appcompat.view.ContextThemeWrapper(base,
-                androidx.appcompat.R.style.Theme_AppCompat);
+        // Inflate with the themes the app really uses: Material components need them
+        Context appContext = new androidx.appcompat.view.ContextThemeWrapper(base, R.style.AppTheme);
+        Context settingsContext = new androidx.appcompat.view.ContextThemeWrapper(base, R.style.SettingsTheme);
+        Resources res = base.getResources();
         for (int layoutId : getAllLayoutResourceIds()) {
+            String name = res.getResourceEntryName(layoutId);
+            Context context = name.startsWith("vw_pref_") || name.equals("expand_button") ||
+                    name.equals("activity_stream_settings") || name.equals("activity_edit_profile") ?
+                    settingsContext : appContext;
             try {
                 LayoutInflater.from(context).inflate(layoutId, null);
             } catch (android.view.InflateException e) {
                 // Retry with a dummy FrameLayout for <merge> root layouts
                 android.widget.FrameLayout dummyRoot = new android.widget.FrameLayout(context);
-                LayoutInflater.from(context).inflate(layoutId, dummyRoot, true);
+                try {
+                    LayoutInflater.from(context).inflate(layoutId, dummyRoot, true);
+                } catch (RuntimeException retry) {
+                    throw new AssertionError("Layout " + name + " failed to inflate", e);
+                }
             }
         }
     }

@@ -206,6 +206,57 @@ public class StreamSettingsUiTest {
     }
 
     @Test
+    public void shoulderButtonsMoveFocusToTheFirstRowOfTheCategory() {
+        StreamSettings.SettingsFragment fragment = launch();
+        RecyclerView list = fragment.getListView();
+        com.limelight.PcViewUiTest.exitTouchMode(list);
+        int audioPosition = adapterPosition(list, fragment.findPreference("category_audio_settings"));
+        int gamepadPosition = adapterPosition(list, fragment.findPreference("category_gamepad_settings"));
+
+        activity.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_BUTTON_R1));
+        idle();
+        View focused = list.getFocusedChild();
+        assertNotNull("R1 should focus a row", focused);
+        assertEquals(audioPosition + 1, list.getChildAdapterPosition(focused));
+
+        activity.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_BUTTON_R1));
+        idle();
+        assertEquals(gamepadPosition + 1, list.getChildAdapterPosition(list.getFocusedChild()));
+
+        activity.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_BUTTON_L1));
+        idle();
+        assertEquals(audioPosition + 1, list.getChildAdapterPosition(list.getFocusedChild()));
+    }
+
+    @Test
+    @Config(sdk = {28})
+    public void checkboxRowsUseTheMaterialComponentsSwitchBeforeAndroid10() {
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(
+                ApplicationProvider.getApplicationContext());
+        prefs.edit().putBoolean("checkbox_enable_audiofx", true).commit();
+
+        StreamSettings.SettingsFragment fragment = launch();
+        RecyclerView list = fragment.getListView();
+        int position = adapterPosition(list, fragment.findPreference("checkbox_enable_audiofx"));
+        View widget = bindRow(list, position).itemView.findViewById(android.R.id.checkbox);
+        assertEquals("com.google.android.material.switchmaterial.SwitchMaterial", widget.getClass().getName());
+        assertTrue(((CompoundButton) widget).isChecked());
+    }
+
+    @Test
+    public void confirmingTheBitrateWithoutChangingItKeepsFollowing() {
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(
+                ApplicationProvider.getApplicationContext());
+        StreamSettings.SettingsFragment fragment = launch();
+        int followed = prefs.getInt("seekbar_bitrate_kbps", -1);
+        assertTrue("Settings store the bitrate auto will use", followed > 0);
+        assertTrue(prefs.getBoolean("bitrate_follows_resolution", false));
+
+        fragment.findPreference("seekbar_bitrate_kbps").callChangeListener(followed);
+        assertTrue(prefs.getBoolean("bitrate_follows_resolution", false));
+    }
+
+    @Test
     public void shoulderButtonsMoveBetweenCategories() {
         StreamSettings.SettingsFragment fragment = launch();
         RecyclerView list = fragment.getListView();

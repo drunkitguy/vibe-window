@@ -22,6 +22,18 @@ import java.util.Locale;
  * result into a {@link PreferenceConfiguration}. Game calls {@link #resolveInto} once
  * at stream start. With explicit resolution and FPS it returns before touching any
  * display or codec API, so explicit choices behave exactly as before.
+ *
+ * <p>Fully External Display Mode: Game runs this first and afterwards overrides width,
+ * height and FPS with the external display's current mode (Game.java, right after the
+ * call). That override does not touch the bitrate. When the bitrate follows the
+ * resolution, it was computed here for the auto result on the activity's display; in
+ * that mode ExternalDisplayControlActivity launches Game on the external display, so the
+ * auto result is that display's mode within the host limits (if Android places Game on
+ * the built-in display instead, the bitrate is the one for the built-in panel). The
+ * bitrate then matches the streamed size except when the policy or decoder clamp
+ * lowered the auto result (for example a 5K monitor streamed at its native size uses
+ * the bitrate for 4096x1728). Explicit settings keep their own bitrate in this mode
+ * exactly as before.</p>
  */
 public final class AutoResolutionAndroid {
 
@@ -151,8 +163,14 @@ public final class AutoResolutionAndroid {
         request.fps = fps;
         request.preferExternalWhenMirrored = prefConfig.autoResPreferExternal;
         request.activityDisplay = source.activityDisplay(activity);
-        request.otherDisplays = source.otherDisplays(activity,
-                request.activityDisplay != null ? request.activityDisplay.id : Display.INVALID_DISPLAY);
+        try {
+            request.otherDisplays = source.otherDisplays(activity,
+                    request.activityDisplay != null ? request.activityDisplay.id : Display.INVALID_DISPLAY);
+        } catch (Throwable t) {
+            // A display service hiccup must not cost the activity display's own modes
+            LimeLog.warning("Auto resolution: other displays unavailable: " + t);
+            request.otherDisplays = new ArrayList<>();
+        }
         if (withDecoder) {
             try {
                 request.caps = source.decoderCaps(activity, prefConfig);
@@ -397,66 +415,152 @@ public final class AutoResolutionAndroid {
             // Idempotent: returns early when already initialized
             MediaCodecHelper.initialize(activity, GlPreferences.readPreferences(activity).glRenderer);
 
-            String mimeType;
-            MediaCodecInfo decoder;
-            switch (prefConfig.videoFormat) {
-                case FORCE_AV1:
-                    mimeType = "video/av01";
-                    break;
-                case FORCE_H264:
-                    mimeType = "video/avc";
-                    break;
-                default:
-                    mimeType = MediaCodecHelper.findProbableSafeDecoder("video/hevc", -1) != null ?
-                            "video/hevc" : "video/avc";
-                    break;
+            // Mirror MediaCodecDecoderRenderer: AVC as in findAvcDecoder()
+            MediaCodecInfo avc = MediaCodecHelper.findProbableSafeDecoder("video/avc",
+                    MediaCodecInfo.CodecProfileLevel.AVCProfileHigh);
+            if (avc == null) {
+                avc = MediaCodecHelper.findFirstDecoder("video/avc");
             }
-            decoder = MediaCodecHelper.findProbableSafeDecoder(mimeType, -1);
-            if (decoder == null && !"video/avc".equals(mimeType)) {
-                mimeType = "video/avc";
-                decoder = MediaCodecHelper.findProbableSafeDecoder(mimeType, -1);
+            AutoResolution.DecoderCaps avcCaps = capsFor(avc, "video/avc");
+
+            // AV1 is only used when forced (findAv1Decoder())
+            if (prefConfig.videoFormat == PreferenceConfiguration.FormatOption.FORCE_AV1) {
+                AutoResolution.DecoderCaps av1Caps =
+                        capsFor(MediaCodecHelper.findProbableSafeDecoder("video/av01", -1), "video/av01");
+                if (av1Caps != null) {
+                    return av1Caps;
+                }
             }
-            if (decoder == null) {
-                return null;
+            if (prefConfig.videoFormat == PreferenceConfiguration.FormatOption.FORCE_H264) {
+                return avcCaps;
             }
 
-            final MediaCodecInfo.VideoCapabilities caps =
-                    decoder.getCapabilitiesForType(mimeType).getVideoCapabilities();
-            if (caps == null) {
-                return null;
+            // HEVC as in findHevcDecoder(): a whitelisted decoder, or forced, or HDR is always
+            // used. Over 4K never happens here (the policy clamp stops at 4096). Otherwise a
+            // non-whitelisted HEVC decoder is used only where AVC cannot meet the stream and
+            // HEVC can, which is exactly "either decoder supports it".
+            MediaCodecInfo hevc = MediaCodecHelper.findProbableSafeDecoder("video/hevc", -1);
+            AutoResolution.DecoderCaps hevcCaps = capsFor(hevc, "video/hevc");
+            if (hevcCaps == null) {
+                return avcCaps;
             }
-            return new AutoResolution.DecoderCaps() {
-                @Override
-                public boolean trustworthy() {
-                    // Same rule as the settings screen: ignore decoders that do not report 720p
-                    Range<Integer> widths = caps.getSupportedWidths();
-                    return widths != null && widths.contains(1280);
-                }
-
-                @Override
-                public boolean isSizeSupported(int width, int height) {
-                    return caps.isSizeSupported(width, height);
-                }
-
-                @Override
-                public boolean isSizeAndRateSupported(int width, int height, float fps) {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                        List<MediaCodecInfo.VideoCapabilities.PerformancePoint> points =
-                                caps.getSupportedPerformancePoints();
-                        if (points != null) {
-                            MediaCodecInfo.VideoCapabilities.PerformancePoint target =
-                                    new MediaCodecInfo.VideoCapabilities.PerformancePoint(width, height, Math.round(fps));
-                            for (MediaCodecInfo.VideoCapabilities.PerformancePoint point : points) {
-                                if (point.covers(target)) {
-                                    return true;
-                                }
-                            }
-                            return false;
-                        }
-                    }
-                    return caps.areSizeAndRateSupported(width, height, fps);
-                }
-            };
+            if (MediaCodecHelper.decoderIsWhitelistedForHevc(hevc) ||
+                    prefConfig.videoFormat == PreferenceConfiguration.FormatOption.FORCE_HEVC ||
+                    prefConfig.enableHdr || avcCaps == null) {
+                return hevcCaps;
+            }
+            return eitherOf(avcCaps, hevcCaps);
         }
+    }
+
+    /** Decoder capabilities of one codec, or null when there is no such decoder. */
+    static AutoResolution.DecoderCaps capsFor(MediaCodecInfo decoder, String mimeType) {
+        if (decoder == null) {
+            return null;
+        }
+        final MediaCodecInfo.VideoCapabilities caps =
+                decoder.getCapabilitiesForType(mimeType).getVideoCapabilities();
+        if (caps == null) {
+            return null;
+        }
+        final RateSource rates = new RateSource() {
+            @Override
+            public List<MediaCodecInfo.VideoCapabilities.PerformancePoint> performancePoints() {
+                return Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ? caps.getSupportedPerformancePoints() : null;
+            }
+
+            @Override
+            public Range<Double> achievableFrameRates(int width, int height) {
+                return caps.getAchievableFrameRatesFor(width, height);
+            }
+
+            @Override
+            public boolean areSizeAndRateSupported(int width, int height, double fps) {
+                return caps.areSizeAndRateSupported(width, height, fps);
+            }
+        };
+        return new AutoResolution.DecoderCaps() {
+            @Override
+            public boolean trustworthy() {
+                // Same rule as the settings screen: ignore decoders that do not report 720p
+                Range<Integer> widths = caps.getSupportedWidths();
+                return widths != null && widths.contains(1280);
+            }
+
+            @Override
+            public boolean isSizeSupported(int width, int height) {
+                return caps.isSizeSupported(width, height);
+            }
+
+            @Override
+            public boolean isSizeAndRateSupported(int width, int height, float fps) {
+                return rateSupported(Build.VERSION.SDK_INT, rates, width, height, fps);
+            }
+        };
+    }
+
+    /** Supported if either decoder supports it; trusted if either reports trustworthy data. */
+    static AutoResolution.DecoderCaps eitherOf(final AutoResolution.DecoderCaps first,
+                                               final AutoResolution.DecoderCaps second) {
+        return new AutoResolution.DecoderCaps() {
+            @Override
+            public boolean trustworthy() {
+                return first.trustworthy() || second.trustworthy();
+            }
+
+            @Override
+            public boolean isSizeSupported(int width, int height) {
+                return first.isSizeSupported(width, height) || second.isSizeSupported(width, height);
+            }
+
+            @Override
+            public boolean isSizeAndRateSupported(int width, int height, float fps) {
+                return first.isSizeAndRateSupported(width, height, fps) ||
+                        second.isSizeAndRateSupported(width, height, fps);
+            }
+        };
+    }
+
+    /** The parts of VideoCapabilities the rate check reads; replaced in tests. */
+    interface RateSource {
+        List<MediaCodecInfo.VideoCapabilities.PerformancePoint> performancePoints();
+
+        Range<Double> achievableFrameRates(int width, int height);
+
+        boolean areSizeAndRateSupported(int width, int height, double fps);
+    }
+
+    /**
+     * Same order as MediaCodecDecoderRenderer.decoderCanMeetPerformancePoint(): performance
+     * points when the decoder reports any (an empty list counts as none), then achievable
+     * frame rates, then areSizeAndRateSupported().
+     */
+    @TargetApi(Build.VERSION_CODES.Q)
+    static boolean rateSupported(int sdkInt, RateSource source, int width, int height, float fps) {
+        if (sdkInt >= Build.VERSION_CODES.Q) {
+            List<MediaCodecInfo.VideoCapabilities.PerformancePoint> points = source.performancePoints();
+            if (points != null && !points.isEmpty()) {
+                MediaCodecInfo.VideoCapabilities.PerformancePoint target =
+                        new MediaCodecInfo.VideoCapabilities.PerformancePoint(width, height, Math.round(fps));
+                for (MediaCodecInfo.VideoCapabilities.PerformancePoint point : points) {
+                    if (point.covers(target)) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+        }
+        if (sdkInt >= Build.VERSION_CODES.M) {
+            try {
+                Range<Double> range = source.achievableFrameRates(width, height);
+                if (range != null) {
+                    return fps <= range.getUpper();
+                }
+            } catch (IllegalArgumentException e) {
+                // Size not supported at any frame rate
+                return false;
+            }
+        }
+        return source.areSizeAndRateSupported(width, height, fps);
     }
 }
