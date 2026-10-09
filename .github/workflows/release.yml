@@ -169,13 +169,21 @@ jobs:
 
             Defaults: Auto resolution and frame rate (match the display), virtual display on, "Show only the app window" on.
 
-            **New in 1.2.0**
+            **New in 1.2**
 
-            - Auto resolution and frame rate: "Auto (match display)" is the new first entry and default of the Video resolution and Video frame rate lists. At every stream start it uses the size and refresh rate of the screen the app is on, keeps that screen's shape, and stays within what the host and the video decoder support. With "Use Virtual Display" on, the host creates its virtual display at that size, so the picture fills the screen. When the built-in screen is mirrored to a larger external monitor or TV, Auto uses that display's resolution; turn off "Use the external display's resolution when mirrored" (Video Settings, Show more) to stream at the built-in screen's size. The settings rows show what Auto currently resolves to.
+            - Auto resolution and frame rate: "Auto (match display)" is the new first entry and default of the Video resolution and Video frame rate lists. At every stream start it uses the size and refresh rate of the screen the app is on, keeps that screen's shape, and stays within common host limits (up to 4K) and what the video decoder reports. On phones, Auto uses the full panel, including cutout areas. With "Use Virtual Display" on, the host creates its virtual display at that size, so the picture fills the screen. When the built-in screen is mirrored to a larger external monitor or TV, Auto uses that display's resolution; turn off "Use the external display's resolution when mirrored" (Video Settings, Show more) to stream at the built-in screen's size. The settings rows show what Auto currently resolves to.
             - One-time migration: installs that were still on the old defaults (1920x1080, 120 FPS and the default bitrate for them) switch to Auto once. Any other resolution, frame rate or bitrate you picked, and every profile, is kept as it was.
             - Fixed resolution: to stream at a fixed size again, open Settings, Video Settings, Video resolution (and Video frame rate) and pick an entry such as 1920x1080 or 120 FPS. Fixed, native and custom entries behave exactly as in 1.1.3.
             - Checking monitor behaviour: Settings, Debug Info now has a Displays section that lists every display (state, flags, current and supported modes, HDR types) and what Auto would choose and why. Open it with and without an external monitor connected to see whether your device mirrors or extends the screen.
             - Refreshed look for the PC list, settings and app library: host cards that show each PC's status and what A or a tap does, grouped settings with switches, and controller shortcuts (Start opens Settings, Y opens Profiles, X opens a PC's menu, L1/R1 jump between settings sections).
+
+            **Fixes in 1.2.1**
+
+            - Host cards size themselves to the screen: two PCs fit side by side on handheld landscape screens, and cards no longer clip on narrow phones in portrait.
+            - Higher contrast for secondary text, tonal buttons, "Show more" and dialog buttons; system dialogs now match the new look.
+            - Auto checks the same video decoder the stream will use, and keeps the built-in screen's refresh rate if the list of other displays cannot be read. 4096x2160 displays stream at their full size.
+            - The bitrate shown in Settings is the one Auto will use; confirming the slider without moving it keeps it following the resolution.
+            - L1/R1 also jump between sections while editing a profile.
 
             App library: apps are grouped by system (PC first, Apps last) and can be shown as a Grid, a Wheel or Shelves. Search covers every group, groups can be collapsed, and "Move to Group" files an app elsewhere on this device. Everything works by touch and by controller (X menu, Y search, L1/R1 groups, Start collapse, Select view menu). Grouping by system needs host `window-host-v1.1.0` or later and the Playnite connector 0.5.0 update from the host web UI (Integrations page), followed by a Playnite restart and one library sync. Older hosts show "Games" and "Apps".
 
