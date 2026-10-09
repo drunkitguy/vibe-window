@@ -177,6 +177,11 @@ jobs:
             - Checking monitor behaviour: Settings, Debug Info now has a Displays section that lists every display (state, flags, current and supported modes, HDR types) and what Auto would choose and why. Open it with and without an external monitor connected to see whether your device mirrors or extends the screen.
             - Refreshed look for the PC list, settings and app library: host cards that show each PC's status and what A or a tap does, grouped settings with switches, and controller shortcuts (Start opens Settings, Y opens Profiles, X opens a PC's menu, L1/R1 jump between settings sections).
 
+            **Fixes in 1.2.2**
+
+            - The PC list no longer jumps back to the first PC on every status update while you scroll it by touch and no PC is online.
+            - Settings section cards keep correct rounded corners when the list is restored part way down.
+
             **Fixes in 1.2.1**
 
             - Host cards size themselves to the screen: two PCs fit side by side on handheld landscape screens, and cards no longer clip on narrow phones in portrait.
