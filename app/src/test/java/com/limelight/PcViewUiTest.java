@@ -207,8 +207,13 @@ public class PcViewUiTest {
 
     /** Leaves touch mode the way a controller key press does. */
     public static void exitTouchMode(View view) {
+        setTouchMode(view, false);
+    }
+
+    /** Sets the window's touch mode, as a touch (true) or a key press (false) does. */
+    public static void setTouchMode(View view, boolean inTouchMode) {
         Object attachInfo = ReflectionHelpers.getField(view, "mAttachInfo");
-        ReflectionHelpers.setField(attachInfo, "mInTouchMode", false);
+        ReflectionHelpers.setField(attachInfo, "mInTouchMode", inTouchMode);
     }
 
     private void assertTwoColumnsWithoutClipping() throws Exception {
@@ -264,7 +269,8 @@ public class PcViewUiTest {
         }
         idle();
         GridView grid = grid(activity);
-        assertTrue("Robolectric starts in touch mode", grid.isInTouchMode());
+        setTouchMode(grid, true);
+        assertTrue(grid.isInTouchMode());
 
         // The user touches and scrolls the list
         long now = android.os.SystemClock.uptimeMillis();
