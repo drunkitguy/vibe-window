@@ -53,6 +53,7 @@ import android.view.ContextMenu;
 import android.view.KeyEvent;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ContextMenu.ContextMenuInfo;
 import android.view.View.OnClickListener;
@@ -81,6 +82,8 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
     // user moved focus since then (so we never steal focus from them)
     private String lastSelectedUuid;
     private boolean pendingSelectionRestore = true;
+    // The first-host fallback selection is applied at most once per visit
+    private boolean fallbackSelectionApplied;
     private boolean userNavigated;
     // Controller shortcut whose key down we consumed, so its key up is consumed too
     private int consumedShortcutKey = KeyEvent.KEYCODE_UNKNOWN;
@@ -230,6 +233,7 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
             noPcFoundLayout.setVisibility(View.INVISIBLE);
         }
         pendingSelectionRestore = true;
+        fallbackSelectionApplied = false;
         userNavigated = false;
         updateHeader();
         pcGridAdapter.notifyDataSetChanged();
@@ -289,8 +293,10 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
         if (target >= 0) {
             pendingSelectionRestore = false;
         }
-        else if (pcGridAdapter.getCount() > 0) {
-            // Nothing online and paired yet: start on the first host and keep looking
+        else if (pcGridAdapter.getCount() > 0 && !fallbackSelectionApplied && !pcListView.isInTouchMode()) {
+            // Nothing online and paired yet: start a controller user on the first host, once,
+            // and keep looking for an online paired host
+            fallbackSelectionApplied = true;
             target = 0;
         }
         else {
@@ -341,6 +347,15 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
         if (grid.getPaddingLeft() != layout.sidePadding || grid.getPaddingRight() != layout.sidePadding) {
             grid.setPadding(layout.sidePadding, grid.getPaddingTop(), layout.sidePadding, grid.getPaddingBottom());
         }
+    }
+
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent event) {
+        // Touching or scrolling the list is navigation too: never move the selection after it
+        if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+            userNavigated = true;
+        }
+        return super.dispatchTouchEvent(event);
     }
 
     @Override
@@ -581,6 +596,7 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
         refreshProfileButton();
 
         pendingSelectionRestore = true;
+        fallbackSelectionApplied = false;
         userNavigated = false;
 
         inForeground = true;

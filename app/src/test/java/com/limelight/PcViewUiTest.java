@@ -247,6 +247,78 @@ public class PcViewUiTest {
     }
 
     @Test
+    @Config(qualifiers = "w640dp-h360dp-land")
+    public void pollingNeverMovesATouchUsersScrollPosition() throws Exception {
+        PcView activity = Robolectric.buildActivity(PcView.class).setup().get();
+        idle();
+        Method update = PcView.class.getDeclaredMethod("updateComputer", ComputerDetails.class);
+        update.setAccessible(true);
+        ComputerDetails[] hosts = new ComputerDetails[6];
+        for (int i = 0; i < hosts.length; i++) {
+            hosts[i] = new ComputerDetails();
+            hosts[i].uuid = "offline-" + i;
+            hosts[i].name = "Offline " + i;
+            hosts[i].state = ComputerDetails.State.OFFLINE;
+            hosts[i].pairState = PairingManager.PairState.PAIRED;
+            update.invoke(activity, hosts[i]);
+        }
+        idle();
+        GridView grid = grid(activity);
+        assertTrue("Robolectric starts in touch mode", grid.isInTouchMode());
+
+        // The user touches and scrolls the list
+        long now = android.os.SystemClock.uptimeMillis();
+        android.view.MotionEvent down = android.view.MotionEvent.obtain(now, now,
+                android.view.MotionEvent.ACTION_DOWN, 10, 10, 0);
+        activity.dispatchTouchEvent(down);
+        down.recycle();
+        grid.scrollListBy(grid.getHeight());
+        idle();
+        int first = grid.getFirstVisiblePosition();
+        assertTrue("The list should have scrolled", first > 0);
+
+        // Two polling updates later the position is unchanged
+        for (int round = 0; round < 2; round++) {
+            for (ComputerDetails host : hosts) {
+                update.invoke(activity, host);
+            }
+            idle();
+        }
+        assertEquals(first, grid.getFirstVisiblePosition());
+    }
+
+    @Test
+    @Config(qualifiers = "w640dp-h360dp-land")
+    public void pollingAppliesTheFirstHostFallbackOnlyOnce() throws Exception {
+        PcView activity = Robolectric.buildActivity(PcView.class).setup().get();
+        idle();
+        GridView grid = grid(activity);
+        exitTouchMode(grid);
+        Method update = PcView.class.getDeclaredMethod("updateComputer", ComputerDetails.class);
+        update.setAccessible(true);
+        ComputerDetails[] hosts = new ComputerDetails[4];
+        for (int i = 0; i < hosts.length; i++) {
+            hosts[i] = new ComputerDetails();
+            hosts[i].uuid = "offline-" + i;
+            hosts[i].name = "Offline " + i;
+            hosts[i].state = ComputerDetails.State.OFFLINE;
+            hosts[i].pairState = PairingManager.PairState.PAIRED;
+            update.invoke(activity, hosts[i]);
+        }
+        idle();
+        assertEquals(0, grid.getSelectedItemPosition());
+
+        // Move the selection without key events, then poll again
+        grid.setSelection(3);
+        idle();
+        for (ComputerDetails host : hosts) {
+            update.invoke(activity, host);
+        }
+        idle();
+        assertEquals(3, grid.getSelectedItemPosition());
+    }
+
+    @Test
     @Config(qualifiers = "w731dp-h411dp-land")
     public void xButtonOpensTheSelectedHostsMenu() throws Exception {
         RecordingPcView activity = Robolectric.buildActivity(RecordingPcView.class).setup().get();

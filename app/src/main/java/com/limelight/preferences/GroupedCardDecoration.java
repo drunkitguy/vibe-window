@@ -88,6 +88,17 @@ public class GroupedCardDecoration extends RecyclerView.ItemDecoration {
         return position == POSITION_FIRST || position == POSITION_MIDDLE;
     }
 
+    /** Marks a view type as a category header, e.g. seeded from the adapter before the first draw. */
+    public void addHeaderViewType(int viewType) {
+        if (viewType != RecyclerView.INVALID_TYPE) {
+            headerViewTypes.add(viewType);
+        }
+    }
+
+    boolean isHeaderViewType(int viewType) {
+        return headerViewTypes.contains(viewType);
+    }
+
     private boolean isRow(RecyclerView.Adapter<?> adapter, int position) {
         if (adapter == null || position < 0 || position >= adapter.getItemCount()) {
             return false;

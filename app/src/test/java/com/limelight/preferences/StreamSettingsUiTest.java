@@ -258,6 +258,72 @@ public class StreamSettingsUiTest {
     }
 
     @Test
+    public void openingSettingsKeepsAManualBitrate() {
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(
+                ApplicationProvider.getApplicationContext());
+        prefs.edit().putString("list_resolution", "auto").putString("list_fps", "auto")
+                .putInt("seekbar_bitrate_kbps", 12345)
+                .putBoolean("bitrate_follows_resolution", false).commit();
+
+        launch();
+        assertEquals(12345, prefs.getInt("seekbar_bitrate_kbps", -1));
+        assertTrue(!prefs.getBoolean("bitrate_follows_resolution", true));
+    }
+
+    @Test
+    public void openingAProfileWithAutoLeavesItsBitrateUnchanged() throws Exception {
+        java.lang.reflect.Field instance = com.limelight.profiles.ProfilesManager.class.getDeclaredField("instance");
+        instance.setAccessible(true);
+        instance.set(null, null);
+        com.limelight.profiles.ProfilesManager manager = com.limelight.profiles.ProfilesManager.getInstance();
+        manager.load(ApplicationProvider.getApplicationContext());
+
+        java.util.Map<String, Object> options = new java.util.HashMap<>();
+        options.put("list_resolution", "auto");
+        options.put("list_fps", "auto");
+        options.put("seekbar_bitrate_kbps", 12345);
+        com.limelight.profiles.SettingsProfile profile = new com.limelight.profiles.SettingsProfile(
+                java.util.UUID.randomUUID(), "Profile", 0, 0, options);
+        manager.add(profile);
+
+        android.content.Intent intent = new android.content.Intent(
+                ApplicationProvider.getApplicationContext(), com.limelight.EditProfileActivity.class);
+        intent.putExtra("profileUuid", profile.getUuid().toString());
+        com.limelight.EditProfileActivity editor =
+                Robolectric.buildActivity(com.limelight.EditProfileActivity.class, intent).setup().get();
+        idle();
+
+        assertNotNull(editor.getSupportFragmentManager().findFragmentById(R.id.preferences_container));
+        assertEquals(12345, editor.getInMemoryPrefs().getInt("seekbar_bitrate_kbps", -1));
+        assertEquals(12345, profile.getOptions().get("seekbar_bitrate_kbps"));
+        instance.set(null, null);
+    }
+
+    @Test
+    public void cardDecorationKnowsTheHeaderTypeBeforeTheFirstDraw() {
+        StreamSettings.SettingsFragment fragment = launch();
+        RecyclerView list = fragment.getListView();
+        GroupedCardDecoration decoration = null;
+        for (int i = 0; i < list.getItemDecorationCount(); i++) {
+            if (list.getItemDecorationAt(i) instanceof GroupedCardDecoration) {
+                decoration = (GroupedCardDecoration) list.getItemDecorationAt(i);
+            }
+        }
+        assertNotNull(decoration);
+        RecyclerView.Adapter<?> adapter = list.getAdapter();
+        int gamepadHeader = adapterPosition(list, fragment.findPreference("category_gamepad_settings"));
+        int resolutionRow = adapterPosition(list, fragment.findPreference("list_resolution"));
+        assertTrue(decoration.isHeaderViewType(adapter.getItemViewType(gamepadHeader)));
+        assertTrue(!decoration.isHeaderViewType(adapter.getItemViewType(resolutionRow)));
+
+        // A fresh decoration seeded the same way, before any draw
+        GroupedCardDecoration fresh = new GroupedCardDecoration(fragment.requireContext());
+        fresh.addHeaderViewType(adapter.getItemViewType(adapterPosition(list,
+                fragment.findPreference("category_video_settings"))));
+        assertTrue(fresh.isHeaderViewType(adapter.getItemViewType(gamepadHeader)));
+    }
+
+    @Test
     public void shoulderButtonsMoveBetweenCategories() {
         StreamSettings.SettingsFragment fragment = launch();
         RecyclerView list = fragment.getListView();

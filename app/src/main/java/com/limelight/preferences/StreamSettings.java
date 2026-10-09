@@ -529,8 +529,25 @@ public class StreamSettings extends AppCompatActivity {
                 return;
             }
 
-            // Rows of each category are drawn as one rounded card
-            list.addItemDecoration(new GroupedCardDecoration(requireContext()));
+            // Rows of each category are drawn as one rounded card. Seed the header view type
+            // from the adapter so even a list restored mid-category draws correct corners.
+            GroupedCardDecoration decoration = new GroupedCardDecoration(requireContext());
+            RecyclerView.Adapter<?> adapter = list.getAdapter();
+            PreferenceScreen screen = getPreferenceScreen();
+            if (adapter instanceof PreferenceGroup.PreferencePositionCallback && screen != null) {
+                for (int i = 0; i < screen.getPreferenceCount(); i++) {
+                    Preference preference = screen.getPreference(i);
+                    if (preference instanceof PreferenceCategory && preference.isVisible()) {
+                        int position = ((PreferenceGroup.PreferencePositionCallback) adapter)
+                                .getPreferenceAdapterPosition(preference);
+                        if (position != RecyclerView.NO_POSITION) {
+                            decoration.addHeaderViewType(adapter.getItemViewType(position));
+                            break;
+                        }
+                    }
+                }
+            }
+            list.addItemDecoration(decoration);
 
             // Center the content and never let it grow wider than the max width
             final int maxWidth = getResources().getDimensionPixelSize(R.dimen.vw_settings_max_width);
