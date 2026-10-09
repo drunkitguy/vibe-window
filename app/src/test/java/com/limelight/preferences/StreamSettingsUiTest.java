@@ -250,10 +250,11 @@ public class StreamSettingsUiTest {
         StreamSettings.SettingsFragment fragment = launch();
         int followed = prefs.getInt("seekbar_bitrate_kbps", -1);
         assertTrue("Settings store the bitrate auto will use", followed > 0);
-        assertTrue(prefs.getBoolean("bitrate_follows_resolution", false));
+        // Absent means following (the default)
+        assertTrue(prefs.getBoolean("bitrate_follows_resolution", true));
 
         fragment.findPreference("seekbar_bitrate_kbps").callChangeListener(followed);
-        assertTrue(prefs.getBoolean("bitrate_follows_resolution", false));
+        assertTrue(prefs.getBoolean("bitrate_follows_resolution", true));
     }
 
     @Test
