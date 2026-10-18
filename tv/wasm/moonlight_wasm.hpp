@@ -302,6 +302,29 @@ class MoonlightInstance {
 
 extern MoonlightInstance* g_Instance;
 
+// Input latency counters for the stats overlay. The input thread writes them; the video
+// decoder thread reads and resets the per-window ones about once per second.
+struct InputStats {
+  std::atomic<uint32_t> pollCount{0};
+  std::atomic<uint32_t> pollIntervalTotalUs{0};
+  std::atomic<uint32_t> pollIntervalMaxUs{0};
+  std::atomic<uint32_t> sampleAgeCount{0};
+  std::atomic<uint32_t> sampleAgeTotalUs{0};
+  std::atomic<uint32_t> sampleAgeMaxUs{0};
+  std::atomic<uint32_t> packetsSent{0};
+  std::atomic<uint32_t> sendStalls{0}; // since the stream started
+  std::atomic<int> padType{-1}; // LI_CTYPE_* of the first active pad, -1 when there is none
+  std::atomic<int> padStandard{-1}; // 1 for the standard mapping, 0 for non-standard
+};
+
+extern InputStats g_InputStats;
+
+void ResetInputStats(bool resetStalls);
+void RecordPollInterval(uint32_t intervalUs);
+int FormatInputStats(char* output, int length);
+bool AnyGamepadAnnounced();
+void setGamepadCount(int count);
+
 void PostToJs(std::string msg);
 void PostToJsAsync(std::string msg);
 void PostPromiseMessage(int callbackId, const std::string& type, const std::string& response);

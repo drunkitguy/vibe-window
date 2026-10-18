@@ -336,7 +336,7 @@ int MoonlightInstance::VidDecSetup(int videoFormat, int width, int height, int r
   s_FramePacingEnabled = g_Instance->m_FramePacingEnabled;
 
   // Preallocate space for the performance stats string
-  s_StatString.resize(1000);
+  s_StatString.resize(2048);
 
   // Clear active window video statistics to start fresh
   memset(&m_ActiveWndVideoStats, 0, sizeof(m_ActiveWndVideoStats));
@@ -495,8 +495,9 @@ int MoonlightInstance::VidDecSubmitDecodeUnit(PDECODE_UNIT decodeUnit) {
       AddVideoStats(m_ActiveWndVideoStats, lastTwoWndStats);
       // Convert the aggregated stats to a display string
       FormatVideoStats(lastTwoWndStats, s_StatString.data(), s_StatString.length());
-      // Send the formatted stats string to the JS frontend for overlay display
-      PostToJs(std::string("StatMsg: ") + s_StatString.data());
+      // Send the formatted stats string to the JS frontend for overlay display, without
+      // stalling this decoder thread on the main thread (and then measuring that stall)
+      PostToJsAsync(std::string("StatUpdate: ") + s_StatString.data());
       // Clear the stats string buffer for the next use
       std::fill(s_StatString.begin(), s_StatString.end(), 0);
     }
@@ -751,6 +752,9 @@ void MoonlightInstance::FormatVideoStats(VIDEO_STATS& stats, char* output, int l
     }
     offset += ret;
   }
+
+  // Append the gamepad and input send statistics
+  offset += FormatInputStats(&output[offset], length - offset);
 }
 
 void MoonlightInstance::TogglePerformanceStats() {

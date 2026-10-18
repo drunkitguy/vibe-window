@@ -155,6 +155,10 @@ function attachListeners() {
 
   Controller.startWatching();
   window.addEventListener('gamepadinputchanged', (e) => {
+    // The gamepad drives the game during a stream, never the menus behind it
+    if (isInGame === true) {
+      return;
+    }
     isGamepadActive = true;
     const changes = e.detail.changes;
     // Iterate through each change in the gamepad input
@@ -230,6 +234,8 @@ function changeUiModeForWasmLoad() {
 }
 
 function moduleDidLoad() {
+  // Tell the input thread whether any gamepad is connected (it skips sampling otherwise)
+  Controller.reportGamepadCount();
   loadHTTPCerts();
 }
 
@@ -457,6 +463,8 @@ function showHostsMode() {
 
   Navigation.start();
   Navigation.pop();
+  // The menus are back, so watch the gamepad for navigation again
+  Controller.startWatching();
   // Stop any existing polls before starting new ones to prevent setInterval leaks.
   // Without this, navigating back to the host view multiple times accumulates
   // duplicate polling intervals for each host, which causes race conditions in
@@ -2577,6 +2585,8 @@ function showAppsMode() {
   // it slows down box art loading and we don't update the UI live anyway.
   stopPollingHosts();
   Navigation.start();
+  // The menus are back, so watch the gamepad for navigation again
+  Controller.startWatching();
 }
 
 // Show the Apps grid
@@ -2920,6 +2930,14 @@ function showStreamMode() {
   $('#loadingSpinner').css('display', 'inline-block');
 
   isInGame = true;
+  // Stop the UI gamepad watcher and any menu key repeat: during the stream the gamepad
+  // belongs to the input thread, which needs the main thread to be free
+  Controller.stopWatching();
+  repeatAction = null;
+  clearTimeout(repeatTimeout);
+  clearTimeout(navigationTimeout);
+  // Make sure the input thread knows about pads connected before the stream
+  Controller.reportGamepadCount();
   fullscreenWasmModule();
   handleOnScreenOverlays();
   Navigation.stop();

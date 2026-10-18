@@ -185,15 +185,55 @@ void MoonlightInstance::CloseMediaSource() {
   m_SourceAttached = false;
 }
 
+// Number of connected gamepads, reported by platform/gamepad.js on the main thread
+static std::atomic<int> s_GamepadCount{0};
+
+void setGamepadCount(int count) {
+  s_GamepadCount.store(count > 0 ? count : 0);
+}
+
 void* MoonlightInstance::InputThreadFunc(void* context) {
   MoonlightInstance* me = (MoonlightInstance*)context;
+  using Clock = std::chrono::steady_clock;
+
+  // Poll every 4 ms, matching the browser's 250 Hz gamepad sampling on Tizen 6.0 and newer.
+  // The loop sleeps until the next deadline, so the time spent polling does not add up.
+  const auto kPollPeriod = std::chrono::milliseconds(4);
+  // Without a known gamepad, still look for one now and then, in case the browser's
+  // connect event was missed
+  const auto kProbePeriod = std::chrono::milliseconds(500);
+
+  auto next = Clock::now();
+  auto nextProbe = next;
+  auto lastPoll = next;
+  bool polledLastTime = false;
 
   while (me->m_Running) {
-    me->PollGamepads();
+    const auto start = Clock::now();
+
+    // Sampling costs a blocking main-thread hop, so only do it when there is a gamepad
+    if (s_GamepadCount.load() > 0 || AnyGamepadAnnounced() || start >= nextProbe) {
+      if (polledLastTime) {
+        RecordPollInterval(static_cast<uint32_t>(std::chrono::duration_cast<std::chrono::microseconds>(start - lastPoll).count()));
+      }
+      lastPoll = start;
+      polledLastTime = true;
+      nextProbe = start + kProbePeriod;
+      me->PollGamepads();
+    } else {
+      polledLastTime = false;
+    }
+
     me->ReportMouseMovement();
 
-    // Poll every 5 ms
-    usleep(5 * 1000);
+    next += kPollPeriod;
+    const auto now = Clock::now();
+    if (next <= now) {
+      // Running late (the main thread was busy): poll again right away, without a burst
+      next = now;
+      continue;
+    }
+    usleep(static_cast<useconds_t>(std::chrono::duration_cast<std::chrono::microseconds>(next - now).count()));
   }
 
   return NULL;
@@ -718,11 +758,18 @@ void PostToJs(std::string msg) {
   }, msg.c_str());
 }
 
+// Post a message without waiting for the main thread. The string is copied, because the
+// caller's copy is gone by the time the main thread runs this; the JS side frees it.
 void PostToJsAsync(std::string msg) {
+  char* copy = strdup(msg.c_str());
+  if (copy == NULL) {
+    return;
+  }
   MAIN_THREAD_ASYNC_EM_ASM({
     const msg = UTF8ToString($0);
+    _free($0);
     handleMessage(msg);
-  }, msg.c_str());
+  }, copy);
 }
 
 void PostPromiseMessage(int callbackId, const std::string& type, const std::string& response) {
@@ -750,4 +797,5 @@ EMSCRIPTEN_BINDINGS(handle_message) {
   emscripten::function("stun", &stun);
   emscripten::function("pair", &pair);
   emscripten::function("wakeOnLan", &wakeOnLan);
+  emscripten::function("setGamepadCount", &setGamepadCount);
 }

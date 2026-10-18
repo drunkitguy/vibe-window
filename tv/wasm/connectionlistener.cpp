@@ -73,16 +73,22 @@ void MoonlightInstance::ClLogMessage(const char* format, ...) {
   // fprintf(stderr, ...) processes message in parts, so logs from different
   // threads may interleave. Send whole message at once to minimize this.
   emscripten_log(EM_LOG_CONSOLE, "%s", message);
+
+  // moonlight-common-c logs this when a control message (which carries input) waited more
+  // than 10 ms for the network; count it for the stats overlay
+  if (strstr(message, "Control message took over 10 ms") != NULL) {
+    g_InputStats.sendStalls.fetch_add(1);
+  }
 }
 
 void MoonlightInstance::ClConnectionStatusUpdate(int connectionStatus) {
   if (g_Instance->m_DisableWarningsEnabled == false) {
     switch (connectionStatus) {
       case CONN_STATUS_OKAY:
-        PostToJs(std::string("NoWarningMsg: ") + std::string("Connection to PC has been improved."));
+        PostToJsAsync(std::string("NoWarningMsg: ") + std::string("Connection to PC has been improved."));
         break;
       case CONN_STATUS_POOR:
-        PostToJs(std::string("WarningMsg: ") + std::string("Slow connection to PC.\nReduce your bitrate!"));
+        PostToJsAsync(std::string("WarningMsg: ") + std::string("Slow connection to PC.\nReduce your bitrate!"));
         break;
       default:
         break;

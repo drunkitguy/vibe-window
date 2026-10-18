@@ -390,6 +390,17 @@ function handleMessage(msg) {
     // Show the performance statistics overlay
     $('#performance-stats').css('background', 'rgba(0, 0, 0, 0.5)');
     $('#performance-stats').text(translateBackendMessage(msg.replace('StatMsg: ', '')));
+  } else if (msg.indexOf('StatUpdate: ') === 0) {
+    // Periodic stats from the decoder thread arrive asynchronously, so one can arrive just
+    // after the overlay was turned off: only update the text while the overlay is on
+    if ($('#performanceStatsSwitch').prop('checked') && isInGame === true) {
+      $('#performance-stats').css('background', 'rgba(0, 0, 0, 0.5)');
+      $('#performance-stats').text(translateBackendMessage(msg.replace('StatUpdate: ', '')));
+    }
+  } else if (msg.indexOf('gamepadLayoutWarning: ') === 0) {
+    // A pad without the standard mapping (often a 2.4 GHz dongle in DInput/HID mode)
+    console.warn('%c[messages.js, handleMessage]', 'color: gray;', 'Warning: Gamepad layout not recognized: ' + msg.replace('gamepadLayoutWarning: ', ''));
+    snackbarLogLong('Controller layout not recognized. Switch the controller or dongle to X-input mode for best results.');
   } else if (msg.indexOf('controllerRumble: ') === 0) {
     const eventData = msg.split(' ')[1].split(',');
     const gamepadIdx = parseInt(eventData[0]);

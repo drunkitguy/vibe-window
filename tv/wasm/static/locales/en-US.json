@@ -379,5 +379,6 @@
   "Leave the stream?": "Leave the stream?",
   "Stop streaming returns to the app list. The app keeps running on the PC.": "Stop streaming returns to the app list. The app keeps running on the PC.",
   "Stop streaming": "Stop streaming",
-  "Exit app": "Exit app"
+  "Exit app": "Exit app",
+  "Controller layout not recognized. Switch the controller or dongle to X-input mode for best results.": "Controller layout not recognized. Switch the controller or dongle to X-input mode for best results."
 }
