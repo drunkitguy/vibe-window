@@ -107,6 +107,7 @@ function attachListeners() {
   $('#ipAddressTextInput').on('input', updateIpAddressInputValidationState);
   $('#sortAppsListSwitch').on('click', saveSortAppsList);
   $('#optimizeGamesSwitch').on('click', saveOptimizeGames);
+  $('#windowOnlySwitch').on('click', saveWindowOnly);
   $('#removeAllHostsBtn').on('click', deleteAllHostsDialog);
   $('#rumbleFeedbackSwitch').on('click', saveRumbleFeedback);
   $('#mouseEmulationSwitch').on('click', saveMouseEmulation);
@@ -1857,26 +1858,37 @@ function navigationGuideDialog() {
   });
 }
 
-// Fetch the latest version and release notes from GitHub API
+// Fetch the latest version and release notes from GitHub API.
+// The repository also publishes the Android app, whose release is the repository's "latest",
+// so look through the releases for the newest TV one (tag tv-v<version>).
 function fetchLatestRelease() {
-  // Check if the REPO_OWNER and REPO_NAME are set to placeholders and apply fallback values
-  const repoOwner = (REPO_OWNER === '__REPO_OWNER__') ? 'brightcraft' : REPO_OWNER;
-  const repoName = (REPO_NAME === '__REPO_NAME__') ? 'moonlight-tizen' : REPO_NAME;
+  // The Dockerfile replaces every occurrence of the placeholders, so compare against strings
+  // it cannot rewrite; otherwise every build would fall back to the defaults below
+  const ownerPlaceholder = '__REPO_' + 'OWNER__';
+  const namePlaceholder = '__REPO_' + 'NAME__';
+  const repoOwner = (REPO_OWNER === ownerPlaceholder) ? 'drunkitguy' : REPO_OWNER;
+  const repoName = (REPO_NAME === namePlaceholder) ? 'vibe-window' : REPO_NAME;
+  const tagPrefix = 'tv-v';
 
-  // GitHub API endpoint to get the latest released version
-  const apiUrl = `https://api.github.com/repos/${repoOwner}/${repoName}/releases/latest`;
+  // GitHub API endpoint listing the most recent releases, newest first
+  const apiUrl = `https://api.github.com/repos/${repoOwner}/${repoName}/releases?per_page=30`;
 
-  // Fetch the latest release data from the GitHub API
+  // Fetch the release list from the GitHub API
   return fetch(apiUrl).then(response => {
     if (!response.ok) {
       throw new Error('Network response failed: ' + response.statusText);
     }
     // Parse JSON response
     return response.json();
-  }).then(data => {
+  }).then(releases => {
+    const release = Array.isArray(releases) ? releases.find(r => r && !r.draft && !r.prerelease &&
+      typeof r.tag_name === 'string' && r.tag_name.startsWith(tagPrefix)) : null;
+    if (!release) {
+      throw new Error('No TV release found');
+    }
     // Get the latest version and release notes from the released update
-    let latestVersion = data.tag_name.startsWith('v') ? data.tag_name.slice(1) : data.tag_name;
-    const releaseNotes = extractReleaseNotes(data.body) || t('• No relevant changes found.');
+    const latestVersion = release.tag_name.slice(tagPrefix.length);
+    const releaseNotes = extractReleaseNotes(release.body || '') || t('• No relevant changes found.');
     return { latestVersion, releaseNotes };
   });
 }
@@ -3057,6 +3069,8 @@ function startGame(host, appID) {
       // Frame pacing mode for the Wasm module: 0 = Off, 1 = Legacy, 2 = Adaptive
       const framePacing = getFramePacingModeNumber();
       const optimizeGames = $('#optimizeGamesSwitch').parent().hasClass('is-checked') ? 1 : 0;
+      // Window-only capture on a Vibepollo host, sent on both launch and resume
+      const windowOnly = $('#windowOnlySwitch').parent().hasClass('is-checked') ? 1 : 0;
       const rumbleFeedback = $('#rumbleFeedbackSwitch').parent().hasClass('is-checked') ? 1 : 0;
       const mouseEmulation = $('#mouseEmulationSwitch').parent().hasClass('is-checked') ? 1 : 0;
       const flipABfaceButtons = $('#flipABfaceButtonsSwitch').parent().hasClass('is-checked') ? 1 : 0;
@@ -3115,7 +3129,8 @@ function startGame(host, appID) {
           hdrMode, // Auto HDR video streaming
           playHostAudio, // Play audio on host and client device
           0x030002, // Surround channel mask << 16 | Surround channel count
-          gamepadMask // Connect gamepad mask
+          gamepadMask, // Connect gamepad mask
+          windowOnly // Capture only the app window (Vibepollo hosts)
         ).then(function(launchResult) {
           $xml = $($.parseXML(launchResult.toString()));
           $root = $xml.find('root');
@@ -3162,7 +3177,8 @@ function startGame(host, appID) {
         hdrMode, // Auto HDR video streaming
         playHostAudio, // Play audio on host and client device
         0x030002, // Surround channel mask << 16 | Surround channel count
-        gamepadMask // Connect gamepad mask
+        gamepadMask, // Connect gamepad mask
+        windowOnly // Capture only the app window (Vibepollo hosts)
       ).then(function(launchResult) {
         $xml = $($.parseXML(launchResult.toString()));
         $root = $xml.find('root');
@@ -3655,6 +3671,14 @@ function saveSortAppsList() {
   }, 100);
 }
 
+function saveWindowOnly() {
+  setTimeout(() => {
+    const chosenWindowOnly = $('#windowOnlySwitch').parent().hasClass('is-checked');
+    console.log('%c[index.js, saveWindowOnly]', 'color: green;', 'Saving window-only capture state: ' + chosenWindowOnly);
+    storeData('windowOnly', chosenWindowOnly, null);
+  }, 100);
+}
+
 function saveOptimizeGames() {
   setTimeout(() => {
     const chosenOptimizeGames = $('#optimizeGamesSwitch').parent().hasClass('is-checked');
@@ -4003,15 +4027,16 @@ function savePerformanceStats() {
 
 // Reset all settings to their default state and save the value data
 function restoreDefaultsSettingsValues() {
-  const defaultResolution = '1280:720';
-  $('#selectResolution').text('1280 x 720 (720p)').attr('data-value', defaultResolution).data('value', defaultResolution);
+  const defaultResolution = '1920:1080';
+  $('#selectResolution').text(t('1920 x 1080 (1080p)')).attr('data-value', defaultResolution).data('value', defaultResolution);
   storeData('resolution', defaultResolution, null);
 
   const defaultFramerate = '60';
   $('#selectFramerate').text('60 FPS').attr('data-value', defaultFramerate).data('value', defaultFramerate);
   storeData('frameRate', defaultFramerate, null);
 
-  const defaultBitrate = '10';
+  // The standard preset for 1080p at 60 FPS (standardBitratePresets)
+  const defaultBitrate = '20';
   $('#selectBitrate').html(defaultBitrate + ' Mbps');
   $('#bitrateSlider')[0].MaterialSlider.change(defaultBitrate);
   storeData('bitrate', defaultBitrate, null);
@@ -4031,6 +4056,10 @@ function restoreDefaultsSettingsValues() {
   const defaultOptimizeGames = false;
   document.querySelector('#optimizeGamesBtn').MaterialSwitch.off();
   storeData('optimizeGames', defaultOptimizeGames, null);
+
+  const defaultWindowOnly = true;
+  document.querySelector('#windowOnlyBtn').MaterialSwitch.on();
+  storeData('windowOnly', defaultWindowOnly, null);
 
   const defaultRumbleFeedback = false;
   document.querySelector('#rumbleFeedbackBtn').MaterialSwitch.off();
@@ -4228,7 +4257,8 @@ function loadUserDataCb() {
 
   console.log('%c[index.js, loadUserDataCb]', 'color: green;', 'Load stored bitrate preferences.');
   getData('bitrate', function(previousValue) {
-    $('#bitrateSlider')[0].MaterialSlider.change(previousValue.bitrate != null ? previousValue.bitrate : '10');
+    // First run: the standard preset for the default 1080p at 60 FPS
+    $('#bitrateSlider')[0].MaterialSlider.change(previousValue.bitrate != null ? previousValue.bitrate : '20');
     // Update the video bitrate field based on the given value
     $('#selectBitrate').html($('#bitrateSlider').val() + ' Mbps');
   });
@@ -4273,6 +4303,15 @@ function loadUserDataCb() {
       document.querySelector('#sortAppsListBtn').MaterialSwitch.off();
     } else {
       document.querySelector('#sortAppsListBtn').MaterialSwitch.on();
+    }
+  });
+
+  console.log('%c[index.js, loadUserDataCb]', 'color: green;', 'Load stored windowOnly preferences.');
+  getData('windowOnly', function(previousValue) {
+    if (previousValue.windowOnly == false) {
+      document.querySelector('#windowOnlyBtn').MaterialSwitch.off();
+    } else {
+      document.querySelector('#windowOnlyBtn').MaterialSwitch.on(); // On by default
     }
   });
 

@@ -384,5 +384,8 @@
   "Off": "Off",
   "Legacy": "Legacy",
   "Adaptive": "Adaptive",
-  "- Adaptive smooths network jitter and never holds a frame longer than one frame time. Legacy is the original pacer. Off shows every frame as soon as it arrives.": "- Adaptive smooths network jitter and never holds a frame longer than one frame time. Legacy is the original pacer. Off shows every frame as soon as it arrives."
+  "- Adaptive smooths network jitter and never holds a frame longer than one frame time. Legacy is the original pacer. Off shows every frame as soon as it arrives.": "- Adaptive smooths network jitter and never holds a frame longer than one frame time. Legacy is the original pacer. Off shows every frame as soon as it arrives.",
+  "Show only the app window": "Show only the app window",
+  "- Streams only the launched app's window instead of the whole desktop. Needs a Vibepollo host; other hosts ignore it and stream the full display.": "- Streams only the launched app's window instead of the whole desktop. Needs a Vibepollo host; other hosts ignore it and stream the full display.",
+  "Ask the host to capture only the app window while streaming": "Ask the host to capture only the app window while streaming"
 }

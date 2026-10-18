@@ -1219,6 +1219,7 @@ const Views = {
   },
   HostSettings: {
     view: new ListView(() => [
+      'windowOnlyBtn',
       'sortAppsListBtn',
       'optimizeGamesBtn',
       'removeAllHostsBtn'

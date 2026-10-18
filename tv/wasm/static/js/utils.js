@@ -963,21 +963,25 @@ NvHTTP.prototype = {
     }
   },
 
-  launchApp: function(appId, mode, sops, rikey, rikeyid, enableHdr, localAudio, surroundAudioInfo, gamepadMask) {
+  // windowOnly (0 or 1) asks a Vibepollo host to capture only the launched app's window.
+  // Hosts that do not know the argument ignore it.
+  launchApp: function(appId, mode, sops, rikey, rikeyid, enableHdr, localAudio, surroundAudioInfo, gamepadMask, windowOnly) {
     return sendMessage('openUrl', [
       this._baseUrlHttps + '/launch?' + this._buildUidStr() + '&appid=' + appId + '&mode=' + mode +
       '&additionalStates=1&sops=' + sops + '&rikey=' + rikey + '&rikeyid=' + rikeyid + '&hdrMode=' + enableHdr +
       '&localAudioPlayMode=' + localAudio + '&surroundAudioInfo=' + surroundAudioInfo +
-      '&remoteControllersBitmap=' + gamepadMask + '&gcmap=' + gamepadMask, this.ppkstr, false
+      '&remoteControllersBitmap=' + gamepadMask + '&gcmap=' + gamepadMask +
+      '&windowOnly=' + (windowOnly ? 1 : 0), this.ppkstr, false
     ]);
   },
 
-  resumeApp: function(mode, sops, rikey, rikeyid, enableHdr, localAudio, surroundAudioInfo, gamepadMask) {
+  resumeApp: function(mode, sops, rikey, rikeyid, enableHdr, localAudio, surroundAudioInfo, gamepadMask, windowOnly) {
     return sendMessage('openUrl', [
       this._baseUrlHttps + '/resume?' + this._buildUidStr() + '&mode=' + mode +
       '&additionalStates=1&sops=' + sops + '&rikey=' + rikey + '&rikeyid=' + rikeyid + '&hdrMode=' + enableHdr +
       '&localAudioPlayMode=' + localAudio + '&surroundAudioInfo=' + surroundAudioInfo +
-      '&remoteControllersBitmap=' + gamepadMask + '&gcmap=' + gamepadMask, this.ppkstr, false
+      '&remoteControllersBitmap=' + gamepadMask + '&gcmap=' + gamepadMask +
+      '&windowOnly=' + (windowOnly ? 1 : 0), this.ppkstr, false
     ]);
   },
 

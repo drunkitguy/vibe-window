@@ -104,7 +104,7 @@
                 - Increase to improve image clarity or decrease for better performance on lower-end devices and slower networks.
               </span>
               <div id="videoResolutionMenu">
-                <button type="button" id="selectResolution" class="mdl-button mdl-js-button mdl-js-ripple-effect" data-value="1280:720" data-i18n="1280 x 720 (720p)">1280 x 720 (720p)</button>
+                <button type="button" id="selectResolution" class="mdl-button mdl-js-button mdl-js-ripple-effect" data-value="1920:1080" data-i18n="1920 x 1080 (1080p)">1920 x 1080 (1080p)</button>
               </div>
               <ul class="videoResolutionMenu mdl-menu mdl-menu--bottom-left mdl-js-menu mdl-js-ripple-effect" for="selectResolution">
                 <li class="mdl-menu__item" data-value="854:480" data-i18n="854 x 480 (480p)">854 x 480 (480p)</li>
@@ -133,11 +133,11 @@
                 - Increase for better image quality or decrease to improve performance on slower connections.
               </span>
               <div id="videoBitrateMenu">
-                <button type="button" id="selectBitrate" class="mdl-button mdl-js-button mdl-js-ripple-effect">10 Mbps</button>
+                <button type="button" id="selectBitrate" class="mdl-button mdl-js-button mdl-js-ripple-effect">20 Mbps</button>
               </div>
               <div class="videoBitrateMenu mdl-menu mdl-menu--bottom-left mdl-js-menu mdl-js-ripple-effect" for="selectBitrate">
                 <span id="bitrateLowestValue">0.5</span>
-                <input type="range" id="bitrateSlider" class="mdl-slider mdl-js-slider" min="0.5" max="150" step="0.5" value="10">
+                <input type="range" id="bitrateSlider" class="mdl-slider mdl-js-slider" min="0.5" max="150" step="0.5" value="20">
                 <span id="bitrateHighestValue">150</span>
               </div>
             </div>
@@ -183,6 +183,20 @@
             </div>
           </div>
           <div id="hostSettings" class="settings-options">
+            <div class="setting-option">
+              <label data-i18n="Show only the app window">Show only the app window</label>
+              <span class="mdl-list__item-text-body" data-i18n="- Streams only the launched app's window instead of the whole desktop. Needs a Vibepollo host; other hosts ignore it and stream the full display.">
+                - Streams only the launched app's window instead of the whole desktop. Needs a Vibepollo host; other hosts ignore it and stream the full display.
+              </span>
+              <div id="windowOnlyMenu">
+                <label id="windowOnlyBtn" class="mdl-switch mdl-js-switch mdl-js-ripple-effect" for="windowOnlySwitch">
+                  <input type="checkbox" id="windowOnlySwitch" class="mdl-switch__input" checked>
+                  <span class="mdl-switch__label" data-i18n="Ask the host to capture only the app window while streaming">
+                    Ask the host to capture only the app window while streaming
+                  </span>
+                </label>
+              </div>
+            </div>
             <div class="setting-option">
               <label data-i18n="Sort the list of apps">Sort the list of apps</label>
               <span class="mdl-list__item-text-body" data-i18n="- Sorts the list of host apps from ascending order (A to Z) to descending order (Z to A) based on their titles.">
