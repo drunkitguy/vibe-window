@@ -369,5 +369,15 @@
   "Unsupported Feature": "Unsupported Feature",
   "Game Mode (Ultra Low Latency) is not supported on Tizen %1$s due to platform limitations and lack of support from the WASM player.": "Game Mode (Ultra Low Latency) is not supported on Tizen %1$s due to platform limitations and lack of support from the WASM player.",
   "Attempting to enable this option will have no effect, as the decoder will force a fallback to standard Low Latency mode to maintain streaming stability.<br><br>": "Attempting to enable this option will have no effect, as the decoder will force a fallback to standard Low Latency mode to maintain streaming stability.<br><br>",
-  "Since the Game Mode cannot be enabled, you may experience slightly higher latency while streaming. To further reduce latency, it is highly recommended to open your TV's Picture Settings menu and disable post-processing features such as <b>Picture Clarity</b>, <b>Contrast Enhancer</b>, and other video enhancements.": "Since the Game Mode cannot be enabled, you may experience slightly higher latency while streaming. To further reduce latency, it is highly recommended to open your TV's Picture Settings menu and disable post-processing features such as <b>Picture Clarity</b>, <b>Contrast Enhancer</b>, and other video enhancements."
+  "Since the Game Mode cannot be enabled, you may experience slightly higher latency while streaming. To further reduce latency, it is highly recommended to open your TV's Picture Settings menu and disable post-processing features such as <b>Picture Clarity</b>, <b>Contrast Enhancer</b>, and other video enhancements.": "Since the Game Mode cannot be enabled, you may experience slightly higher latency while streaming. To further reduce latency, it is highly recommended to open your TV's Picture Settings menu and disable post-processing features such as <b>Picture Clarity</b>, <b>Contrast Enhancer</b>, and other video enhancements.",
+  "Back button during stream": "Back button during stream",
+  "- Ask shows Cancel, Stop streaming and Exit app. Send Esc to PC passes Back to the PC as the Esc key.": "- Ask shows Cancel, Stop streaming and Exit app. Send Esc to PC passes Back to the PC as the Esc key.",
+  "Ask": "Ask",
+  "Send Esc to PC": "Send Esc to PC",
+  "Exit Vibe Window?": "Exit Vibe Window?",
+  "Are you sure you want to exit?": "Are you sure you want to exit?",
+  "Leave the stream?": "Leave the stream?",
+  "Stop streaming returns to the app list. The app keeps running on the PC.": "Stop streaming returns to the app list. The app keeps running on the PC.",
+  "Stop streaming": "Stop streaming",
+  "Exit app": "Exit app"
 }

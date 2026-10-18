@@ -169,6 +169,14 @@
       }
     }
 
+    const selectStreamBack = document.getElementById('selectStreamBack');
+    if (selectStreamBack) {
+      const selectedItem = document.querySelector(`.streamBackMenu li[data-value="${selectStreamBack.dataset.value}"]`);
+      if (selectedItem) {
+        selectStreamBack.textContent = t(selectedItem.getAttribute('data-i18n') || selectedItem.textContent.trim());
+      }
+    }
+
     const selectAudio = document.getElementById('selectAudio');
     if (selectAudio) {
       const selectedItem = document.querySelector(`.audioConfigMenu li[data-value="${selectAudio.dataset.value}"]`);

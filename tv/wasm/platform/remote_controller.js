@@ -26,8 +26,10 @@ function remoteControllerHandler(e) {
       Navigation.accept();
       break;
     case tvKey.KEY_RETURN:
-      // Go back or cancel the operation
-      Navigation.back();
+      // Keep the platform's default Back action from running, then go back, cancel,
+      // or ask to exit (see handleReturnKey). The Exit key is never registered.
+      e.preventDefault();
+      handleReturnKey();
       break;
     case tvKey.KEY_VOLUME_UP:
       // Increase the volume

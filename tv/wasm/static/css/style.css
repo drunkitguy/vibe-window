@@ -467,6 +467,15 @@ body {
     font-size: 1.4rem;
     letter-spacing: 0.5px;
 }
+/* Stream Back dialog: three buttons side by side, shown as Exit app, Stop streaming, Cancel */
+#cancelStreamBack, #stopStreamBack, #exitAppStreamBack {
+    width: 31%;
+    height: 40px;
+    margin: 0 1% 20px 1%;
+    font-size: 1.4rem;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
 /* Warning dialog buttons - side by side when both visible, full width when only closeWarning is visible */
 #warningDialog .mdl-dialog__actions #continueWarning,
 #warningDialog .mdl-dialog__actions #closeWarning {

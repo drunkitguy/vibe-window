@@ -226,6 +226,19 @@
           </div>
           <div id="inputSettings" class="settings-options">
             <div class="setting-option">
+              <label data-i18n="Back button during stream">Back button during stream</label>
+              <span class="mdl-list__item-text-body" data-i18n="- Ask shows Cancel, Stop streaming and Exit app. Send Esc to PC passes Back to the PC as the Esc key.">
+                - Ask shows Cancel, Stop streaming and Exit app. Send Esc to PC passes Back to the PC as the Esc key.
+              </span>
+              <div id="streamBackMenu">
+                <button type="button" id="selectStreamBack" class="mdl-button mdl-js-button mdl-js-ripple-effect" data-value="ask" data-i18n="Ask">Ask</button>
+              </div>
+              <ul class="streamBackMenu mdl-menu mdl-menu--bottom-left mdl-js-menu mdl-js-ripple-effect" for="selectStreamBack">
+                <li class="mdl-menu__item" data-value="ask" data-i18n="Ask">Ask</li>
+                <li class="mdl-menu__item" data-value="esc" data-i18n="Send Esc to PC">Send Esc to PC</li>
+              </ul>
+            </div>
+            <div class="setting-option">
               <label data-i18n="Rumble feedback">Rumble feedback</label>
               <span class="mdl-list__item-text-body"></span>
               <div id="rumbleFeedbackMenu">
@@ -808,15 +821,30 @@
   </div>
   <div id="exitAppDialogOverlay" class="dialog-overlay">
     <dialog id="exitAppDialog" class="mdl-dialog">
-      <h3 id="exitAppDialogTitle" class="mdl-dialog__title" data-i18n="Exit Moonlight">Exit Moonlight</h3>
+      <h3 id="exitAppDialogTitle" class="mdl-dialog__title" data-i18n="Exit Vibe Window?">Exit Vibe Window?</h3>
       <div class="mdl-dialog__content">
-        <p id="exitAppDialogText" data-i18n="Are you sure you want to exit Moonlight?">
-          Are you sure you want to exit Moonlight?
+        <p id="exitAppDialogText" data-i18n="Are you sure you want to exit?">
+          Are you sure you want to exit?
         </p>
       </div>
       <div class="mdl-dialog__actions">
         <button type="button" id="cancelExitApp" class="mdl-button mdl-js-button mdl-button--raised mdl-button--colored mdl-js-ripple-effect" data-i18n="Cancel">Cancel</button>
         <button type="button" id="continueExitApp" class="mdl-button mdl-js-button mdl-button--raised mdl-button--colored mdl-js-ripple-effect" data-i18n="Exit">Exit</button>
+      </div>
+    </dialog>
+  </div>
+  <div id="streamBackDialogOverlay" class="dialog-overlay">
+    <dialog id="streamBackDialog" class="mdl-dialog">
+      <h3 id="streamBackDialogTitle" class="mdl-dialog__title" data-i18n="Leave the stream?">Leave the stream?</h3>
+      <div class="mdl-dialog__content">
+        <p id="streamBackDialogText" data-i18n="Stop streaming returns to the app list. The app keeps running on the PC.">
+          Stop streaming returns to the app list. The app keeps running on the PC.
+        </p>
+      </div>
+      <div class="mdl-dialog__actions">
+        <button type="button" id="cancelStreamBack" class="mdl-button mdl-js-button mdl-button--raised mdl-button--colored mdl-js-ripple-effect" data-i18n="Cancel">Cancel</button>
+        <button type="button" id="stopStreamBack" class="mdl-button mdl-js-button mdl-button--raised mdl-button--colored mdl-js-ripple-effect" data-i18n="Stop streaming">Stop streaming</button>
+        <button type="button" id="exitAppStreamBack" class="mdl-button mdl-js-button mdl-button--raised mdl-button--colored mdl-js-ripple-effect" data-i18n="Exit app">Exit app</button>
       </div>
     </dialog>
   </div>

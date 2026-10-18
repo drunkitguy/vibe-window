@@ -533,10 +533,8 @@ const Views = {
       clickElement(this.view.current());
     },
     back: function() {
-      // Navigate to the Hosts view
-      Navigation.change(Views.Hosts);
-      // Set focus on the first navigation item in Hosts view when transitioning from HostsNav view
-      focusElement(Views.Hosts.view.current());
+      // The top bar is part of the home screen, so Back asks to exit right away
+      exitAppDialog();
     },
     press: function() {},
     switch: function() {
@@ -582,9 +580,8 @@ const Views = {
       }
     },
     back: function() {
-      // Return to the Hosts view
-      Navigation.change(Views.Hosts);
-      focusElement(Views.Hosts.view.current());
+      // The host menu icon is part of the home screen, so Back asks to exit right away
+      exitAppDialog();
     },
     press: function() {},
     switch: function() {
@@ -790,6 +787,8 @@ const Views = {
     },
   },
   DeleteHostDialog: {
+    // Open with the safe choice (cancelDeleteHost) focused
+    defaultIndex: 1,
     view: new ListView(() => [
       'continueDeleteHost',
       'cancelDeleteHost'
@@ -1228,6 +1227,7 @@ const Views = {
   },
   InputSettings: {
     view: new ListView(() => [
+      'selectStreamBack',
       'rumbleFeedbackBtn',
       'mouseEmulationBtn',
       'flipABfaceButtonsBtn',
@@ -1260,6 +1260,38 @@ const Views = {
     switch: function() {
       focusElement(this.view.current());
     },
+    enter: function() {
+      mark(this.view.current());
+    },
+    leave: function() {
+      unmark(this.view.current());
+    },
+  },
+  SelectStreamBackMenu: {
+    isActive: () => isPopupMenuActive('streamBackMenu'),
+    view: new ListView(() =>
+      document.getElementById('streamBackMenu')
+      .parentNode.children[3].children[1].children),
+    up: function() {
+      this.view.prevOption();
+    },
+    down: function() {
+      this.view.nextOption();
+    },
+    left: function() {},
+    right: function() {},
+    accept: function() {
+      clickElement(this.view.current());
+      closeActiveVisibleMenu();
+      setTimeout(() => focusElement('selectStreamBack'), 250);
+    },
+    back: function() {
+      closePopupMenu('selectStreamBack');
+      closeActiveVisibleMenu();
+      focusElement('selectStreamBack');
+    },
+    press: function() {},
+    switch: function() {},
     enter: function() {
       mark(this.view.current());
     },
@@ -1627,6 +1659,8 @@ const Views = {
     },
   },
   RestoreDefaultsDialog: {
+    // Open with the safe choice (cancelRestoreDefaults) focused
+    defaultIndex: 1,
     view: new ListView(() => [
       'continueRestoreDefaults',
       'cancelRestoreDefaults'
@@ -1742,6 +1776,8 @@ const Views = {
     },
   },
   QuitAppDialog: {
+    // Open with the safe choice (cancelQuitApp) focused
+    defaultIndex: 1,
     view: new ListView(() => [
       'continueQuitApp',
       'cancelQuitApp'
@@ -1776,6 +1812,11 @@ const Views = {
     },
   },
   WarningDialog: {
+    // Open with Close focused, which cancels when Continue is also shown
+    defaultIndex: function() {
+      const index = this.view.func().indexOf('closeWarning');
+      return index < 0 ? 0 : index;
+    },
     view: new ListView(() => {
       // Dynamically return the visible buttons
       var buttons = [];
@@ -1812,9 +1853,7 @@ const Views = {
       focusElement(this.view.current());
     },
     enter: function() {
-      // Default to Continue button (index 0) when both buttons are visible
-      // Otherwise default to the only visible Close button (index 0)
-      this.view.index = 0;
+      // The default (Close) is set when the dialog opens, see defaultIndex
       mark(this.view.current());
       setTimeout(() => focusElement(this.view.current()), 100);
     },
@@ -1824,6 +1863,8 @@ const Views = {
     },
   },
   RestartMoonlightDialog: {
+    // Open with the safe choice (cancelRestartApp) focused
+    defaultIndex: 1,
     view: new ListView(() => [
       'continueRestartApp',
       'cancelRestartApp'
@@ -1858,6 +1899,8 @@ const Views = {
     },
   },
   ExitMoonlightDialog: {
+    // Open with Cancel focused
+    defaultIndex: 1,
     view: new ListView(() => [
       'continueExitApp',
       'cancelExitApp'
@@ -1866,11 +1909,11 @@ const Views = {
     down: function() {},
     left: function() {
       this.view.prev();
-      focusElement('continueExitApp');
+      focusElement(this.view.current());
     },
     right: function() {
       this.view.next();
-      focusElement('cancelExitApp');
+      focusElement(this.view.current());
     },
     accept: function() {
       clickElement(this.view.current());
@@ -1891,10 +1934,50 @@ const Views = {
       setTimeout(() => blurElement(this.view.current()), 100);
     },
   },
+  StreamBackDialog: {
+    // Open with Cancel focused
+    defaultIndex: 2,
+    view: new ListView(() => [
+      'exitAppStreamBack',
+      'stopStreamBack',
+      'cancelStreamBack'
+    ]),
+    up: function() {},
+    down: function() {},
+    left: function() {
+      this.view.prev();
+      focusElement(this.view.current());
+    },
+    right: function() {
+      this.view.next();
+      focusElement(this.view.current());
+    },
+    accept: function() {
+      clickElement(this.view.current());
+    },
+    back: function() {
+      resolveElement('cancelStreamBack').click();
+    },
+    press: function() {},
+    switch: function() {
+      focusElement(this.view.current());
+    },
+    enter: function() {
+      mark(this.view.current());
+      setTimeout(() => focusElement(this.view.current()), 100);
+    },
+    leave: function() {
+      unmark(this.view.current());
+      setTimeout(() => blurElement(this.view.current()), 100);
+    },
+  },
 };
 
 const Navigation = (function() {
   let hasFocus = false;
+  // A dialog that takes every navigation key, even while navigation is stopped
+  // (stream, loading screens), so Back can always reach the exit confirmation
+  let modalView = null;
 
   function loseFocus() {
     if (hasFocus) {
@@ -1910,15 +1993,31 @@ const Navigation = (function() {
     }
   }
 
+  function applyDefaultIndex(view) {
+    if (view && view.defaultIndex !== undefined && view.view) {
+      view.view.index = (typeof view.defaultIndex === 'function') ? view.defaultIndex.call(view) : view.defaultIndex;
+    }
+  }
+
   function runOp(name) {
     return () => {
+      if (modalView) {
+        if (modalView[name]) {
+          modalView[name]();
+        }
+        return;
+      }
+
       if (!State.isRunning()) {
         return;
       }
 
       if (!hasFocus) {
         focus();
-        return;
+        // Restoring focus after pointer movement must not swallow Back
+        if (name !== 'back') {
+          return;
+        }
       }
 
       const view = Stack.get();
@@ -1942,6 +2041,7 @@ const Navigation = (function() {
       if (hostname !== undefined) {
         view.hostname = hostname;
       }
+      applyDefaultIndex(view);
       viewStack.push(view);
       get().enter();
     }
@@ -1996,6 +2096,33 @@ const Navigation = (function() {
     };
   })();
 
+  function openModal(view) {
+    if (modalView) {
+      modalView.leave();
+    }
+    applyDefaultIndex(view);
+    modalView = view;
+    modalView.enter();
+  }
+
+  function closeModal() {
+    if (!modalView) {
+      return;
+    }
+    const view = modalView;
+    modalView = null;
+    view.leave();
+    // Give the screen below the dialog its focus back
+    const below = Stack.get();
+    if (State.isRunning() && hasFocus && below && below.switch) {
+      below.switch();
+    }
+  }
+
+  function hasModal(view) {
+    return view === undefined ? modalView !== null : modalView === view;
+  }
+
   return {
     up: runOp('up'),
     down: runOp('down'),
@@ -2010,5 +2137,9 @@ const Navigation = (function() {
     pop: Stack.pop,
     start: State.start,
     stop: State.stop,
+    isRunning: State.isRunning,
+    openModal,
+    closeModal,
+    hasModal,
   };
 })();

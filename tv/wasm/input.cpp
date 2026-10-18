@@ -83,6 +83,12 @@ EM_BOOL MoonlightInstance::HandleKeyDown(const EmscriptenKeyboardEvent &event) {
     return EM_FALSE;
   }
 
+  // TV remote keys (Return is 10009) are not PC keys: the app handles them, so do not
+  // forward a meaningless virtual key code to the host
+  if (event.keyCode > 0xFF) {
+    return EM_FALSE;
+  }
+
   char modifiers = GetModifierFlags(event);
   uint32_t keyCode = event.keyCode;
 
@@ -108,6 +114,12 @@ EM_BOOL MoonlightInstance::HandleKeyDown(const EmscriptenKeyboardEvent &event) {
 
 EM_BOOL MoonlightInstance::HandleKeyUp(const EmscriptenKeyboardEvent &event) {
   if (!m_MouseLocked) {
+    return EM_FALSE;
+  }
+
+  // TV remote keys (Return is 10009) are not PC keys: the app handles them, so do not
+  // forward a meaningless virtual key code to the host
+  if (event.keyCode > 0xFF) {
     return EM_FALSE;
   }
 

@@ -112,6 +112,7 @@ function attachListeners() {
   $('#mouseEmulationSwitch').on('click', saveMouseEmulation);
   $('#flipABfaceButtonsSwitch').on('click', saveFlipABfaceButtons);
   $('#flipXYfaceButtonsSwitch').on('click', saveFlipXYfaceButtons);
+  $('.streamBackMenu li').on('click', saveStreamBackMode);
   $('.audioBackendMenu li').on('click', saveAudioBackend);
   $('.audioConfigMenu li').on('click', saveAudioConfiguration);
   $('#audioSyncSwitch').on('click', saveAudioSync);
@@ -145,6 +146,7 @@ function attachListeners() {
   registerMenu('selectBitrate', Views.SelectBitrateMenu);
   registerMenu('selectLanguage', Views.SelectLanguageMenu);
   registerMenu('selectAudioBackend', Views.SelectAudioBackendMenu);
+  registerMenu('selectStreamBack', Views.SelectStreamBackMenu);
   registerMenu('selectAudio', Views.SelectAudioMenu);
   registerMenu('selectAudioJitter', Views.SelectAudioJitterMenu);
   registerMenu('selectCodec', Views.SelectCodecMenu);
@@ -163,7 +165,7 @@ function attachListeners() {
         const buttonMapping = {
           0: () => delayedNavigation(() => Navigation.accept()),
           1: () => delayedNavigation(() => Navigation.back()),
-          8: () => delayedNavigation(() => Navigation.move()),
+          8: () => delayedNavigation(() => Navigation.press()),
         };
         // Handle D-Pad mapping
         const dPadMapping = {
@@ -2330,45 +2332,179 @@ function requiredRestartAppDialog() {
   });
 }
 
-// Exit the application
+// Exit the application, stopping a running stream first
 function exitApplication() {
-  var exitApplication = tizen.application.getCurrentApplication();
-  exitApplication.exit();
+  const quit = function() {
+    try {
+      tizen.application.getCurrentApplication().exit();
+    } catch (e) {
+      console.error('%c[index.js, exitApplication]', 'color: green;', 'Error: Failed to exit through the Tizen API, closing the window instead!', e);
+      try {
+        window.close();
+      } catch (e2) {
+        console.error('%c[index.js, exitApplication]', 'color: green;', 'Error: Failed to close the window!', e2);
+      }
+    }
+  };
+  if (isInGame === true) {
+    // Tell the host the stream is over before the app goes away
+    try {
+      Module.stopStream();
+    } catch (e) {
+      console.error('%c[index.js, exitApplication]', 'color: green;', 'Error: Failed to stop the stream before exiting!', e);
+    }
+    setTimeout(quit, 500);
+  } else {
+    quit();
+  }
 }
 
-// Show the Exit Moonlight dialog
+// Show the Exit Vibe Window dialog. It opens as a modal view, so it also works on loading
+// screens where navigation is stopped. Cancel is focused, and Back cancels.
 function exitAppDialog() {
+  // Guard against a second open: Back on the open dialog already means Cancel
+  if (Navigation.hasModal(Views.ExitMoonlightDialog)) {
+    return;
+  }
+
   // Find the existing overlay and dialog elements
   var exitAppOverlay = document.querySelector('#exitAppDialogOverlay');
   var exitAppDialog = document.querySelector('#exitAppDialog');
 
-  // Show the dialog and push the view
-  exitAppOverlay.style.display = 'flex';
-  exitAppDialog.showModal();
-  isDialogOpen = true;
-  Navigation.push(Views.ExitMoonlightDialog);
+  const closeDialog = function() {
+    exitAppOverlay.style.display = 'none';
+    if (exitAppDialog.open) {
+      exitAppDialog.close();
+    }
+    isDialogOpen = false;
+    Navigation.closeModal();
+  };
 
   // Cancel the operation if the Cancel button is pressed
   $('#cancelExitApp').off('click');
   $('#cancelExitApp').on('click', function() {
     console.log('%c[index.js, exitAppDialog]', 'color: green;', 'Closing app dialog and returning');
-    exitAppOverlay.style.display = 'none';
-    exitAppDialog.close();
-    isDialogOpen = false;
-    Navigation.pop();
-    Navigation.change(Views.Hosts);
+    closeDialog();
   });
 
   // Exit the application if the Exit button is pressed
   $('#continueExitApp').off('click');
   $('#continueExitApp').on('click', function() {
     console.log('%c[index.js, exitAppDialog]', 'color: green;', 'Closing app dialog, exiting application, and returning to Smart Hub.');
-    exitAppOverlay.style.display = 'none';
-    exitAppDialog.close();
-    isDialogOpen = false;
-    Navigation.pop();
+    closeDialog();
     exitApplication();
   });
+
+  // Check if the dialog element does not support the showModal method
+  if (!exitAppDialog.showModal) {
+    dialogPolyfill.registerDialog(exitAppDialog);
+  }
+
+  // Show the dialog and route every navigation key to it
+  exitAppOverlay.style.display = 'flex';
+  exitAppDialog.showModal();
+  isDialogOpen = true;
+  Navigation.openModal(Views.ExitMoonlightDialog);
+}
+
+// Give the keyboard focus back to the stream after a dialog closed
+function refocusStream() {
+  var videoElement = document.getElementById('wasm_module');
+  if (videoElement) {
+    videoElement.focus();
+    // Simulate a mouse press to move the focus back to the streaming session
+    videoElement.dispatchEvent(new MouseEvent('mousedown', {
+      bubbles: true, cancelable: true, view: window, clientX: 0, clientY: 0
+    }));
+  }
+}
+
+// Show the dialog for Back during a stream: Cancel (focused), Stop streaming, or Exit app
+function streamBackDialog() {
+  if (Navigation.hasModal(Views.StreamBackDialog)) {
+    return;
+  }
+
+  var overlay = document.querySelector('#streamBackDialogOverlay');
+  var dialog = document.querySelector('#streamBackDialog');
+
+  const closeDialog = function() {
+    overlay.style.display = 'none';
+    if (dialog.open) {
+      dialog.close();
+    }
+    isDialogOpen = false;
+    Navigation.closeModal();
+  };
+
+  $('#cancelStreamBack').off('click').on('click', function() {
+    console.log('%c[index.js, streamBackDialog]', 'color: green;', 'Closing stream dialog and returning to the stream.');
+    closeDialog();
+    if (isInGame === true) {
+      refocusStream();
+    }
+  });
+
+  $('#stopStreamBack').off('click').on('click', function() {
+    console.log('%c[index.js, streamBackDialog]', 'color: green;', 'Stopping the stream from the stream dialog.');
+    closeDialog();
+    if (isInGame === true) {
+      Module.stopStream();
+    }
+  });
+
+  $('#exitAppStreamBack').off('click').on('click', function() {
+    console.log('%c[index.js, streamBackDialog]', 'color: green;', 'Stopping the stream and exiting from the stream dialog.');
+    closeDialog();
+    exitApplication();
+  });
+
+  if (!dialog.showModal) {
+    dialogPolyfill.registerDialog(dialog);
+  }
+
+  overlay.style.display = 'flex';
+  dialog.showModal();
+  isDialogOpen = true;
+  Navigation.openModal(Views.StreamBackDialog);
+}
+
+// Handle Return/Back on the remote (keyCode 10009). The Exit key (10182) is left to the system.
+function handleReturnKey() {
+  // An open exit or stream dialog takes Back as Cancel
+  if (Navigation.hasModal()) {
+    Navigation.back();
+    return;
+  }
+  // During a stream (including its start-up screen), follow the "Back button during stream" setting
+  if (isInGame === true) {
+    if (getStreamBackMode() === 'esc') {
+      sendEscapeKeyToHost();
+      refocusStream();
+    } else {
+      streamBackDialog();
+    }
+    return;
+  }
+  // Loading and error screens stop navigation, so Back goes straight to the exit confirmation
+  if (!Navigation.isRunning()) {
+    exitAppDialog();
+    return;
+  }
+  Navigation.back();
+}
+
+// The "Back button during stream" setting: 'ask' (default) or 'esc'
+function getStreamBackMode() {
+  var value = $('#selectStreamBack').data('value');
+  return value === 'esc' ? 'esc' : 'ask';
+}
+
+function saveStreamBackMode() {
+  var chosenStreamBackMode = $(this).data('value') === 'esc' ? 'esc' : 'ask';
+  $('#selectStreamBack').text($(this).text()).attr('data-value', chosenStreamBackMode).data('value', chosenStreamBackMode);
+  console.log('%c[index.js, saveStreamBackMode]', 'color: green;', 'Saving streamBackMode value: ' + chosenStreamBackMode);
+  storeData('streamBackMode', chosenStreamBackMode, null);
 }
 
 // Puts the CSS style for current app on the app that's currently running
@@ -3868,6 +4004,10 @@ function restoreDefaultsSettingsValues() {
   document.querySelector('#flipXYfaceButtonsBtn').MaterialSwitch.off();
   storeData('flipXYfaceButtons', defaultFlipXYfaceButtons, null);
 
+  const defaultStreamBackMode = 'ask';
+  $('#selectStreamBack').text(t('Ask')).attr('data-value', defaultStreamBackMode).data('value', defaultStreamBackMode);
+  storeData('streamBackMode', defaultStreamBackMode, null);
+
   const defaultAudioBackend = 'EMSS';
   $('#selectAudioBackend').text('EMSS').attr('data-value', defaultAudioBackend).data('value', defaultAudioBackend);
   storeData('audioBackend', defaultAudioBackend, null);
@@ -3964,26 +4104,6 @@ function initSamsungKeys() {
 
   console.log('%c[index.js, initSamsungKeys]', 'color: green;', 'Initializing TV platform...');
   platformOnLoad(handler);
-}
-
-function initSpecialKeys() {
-  console.log('%c[index.js, initSpecialKeys]', 'color: green;', 'Initializing special TV input keys...');
-
-  // Find the video element that displays the streaming session
-  var videoElement = document.getElementById('wasm_module');
-
-  // Listen for keydown events on the video element
-  videoElement.addEventListener('keydown', function(e) {
-    // Check if the 'Back' key has been pressed and the streaming is currently active
-    if (e.key === 'XF86Back' && isInGame === true) {
-      // Send the Escape key (ESC) to the host while streaming
-      sendEscapeKeyToHost();
-      // Simulate mouse to move focus back to the streaming session
-      videoElement.dispatchEvent(new MouseEvent('mousedown', {
-        bubbles: true, cancelable: true, view: window, clientX: 0, clientY: 0
-      }));
-    }
-  });
 }
 
 function loadSystemInfo() {
@@ -4156,6 +4276,17 @@ function loadUserDataCb() {
       document.querySelector('#flipXYfaceButtonsBtn').MaterialSwitch.off();
     } else {
       document.querySelector('#flipXYfaceButtonsBtn').MaterialSwitch.on();
+    }
+  });
+
+  console.log('%c[index.js, loadUserDataCb]', 'color: green;', 'Load stored streamBackMode preferences.');
+  getData('streamBackMode', function(previousValue) {
+    if (previousValue.streamBackMode != null) {
+      $('.streamBackMenu li').each(function() {
+        if ($(this).data('value') === previousValue.streamBackMode) {
+          $('#selectStreamBack').text($(this).text()).attr('data-value', previousValue.streamBackMode).data('value', previousValue.streamBackMode);
+        }
+      });
     }
   });
 
@@ -4758,7 +4889,6 @@ function onWindowLoad() {
   console.log('%c[index.js, onWindowLoad]', 'color: green;', 'Moonlight\'s main window loaded.');
 
   initSamsungKeys();
-  initSpecialKeys();
   loadUserData();
 
   probeSmartHubSupport().then(function() {
