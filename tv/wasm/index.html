@@ -143,17 +143,17 @@
             </div>
             <div class="setting-option">
               <label data-i18n="Video frame pacing">Video frame pacing</label>
-              <span class="mdl-list__item-text-body" data-i18n="- This can help reduce micro-stutter by delaying frames that arrive too early while streaming.">
-                - This can help reduce micro-stutter by delaying frames that arrive too early while streaming.
+              <span class="mdl-list__item-text-body" data-i18n="- Adaptive smooths network jitter and never holds a frame longer than one frame time. Legacy is the original pacer. Off shows every frame as soon as it arrives.">
+                - Adaptive smooths network jitter and never holds a frame longer than one frame time. Legacy is the original pacer. Off shows every frame as soon as it arrives.
               </span>
-              <div id="videoFramePacingMenu">
-                <label id="framePacingBtn" class="mdl-switch mdl-js-switch mdl-js-ripple-effect" for="framePacingSwitch">
-                  <input type="checkbox" id="framePacingSwitch" class="mdl-switch__input">
-                  <span class="mdl-switch__label" data-i18n="Allow frame pacing to balance video latency and smoothness">
-                    Allow frame pacing to balance video latency and smoothness
-                  </span>
-                </label>
+              <div id="framePacingMenu">
+                <button type="button" id="selectFramePacing" class="mdl-button mdl-js-button mdl-js-ripple-effect" data-value="adaptive" data-i18n="Adaptive">Adaptive</button>
               </div>
+              <ul class="framePacingMenu mdl-menu mdl-menu--bottom-left mdl-js-menu mdl-js-ripple-effect" for="selectFramePacing">
+                <li class="mdl-menu__item" data-value="off" data-i18n="Off">Off</li>
+                <li class="mdl-menu__item" data-value="legacy" data-i18n="Legacy">Legacy</li>
+                <li class="mdl-menu__item" data-value="adaptive" data-i18n="Adaptive">Adaptive</li>
+              </ul>
             </div>
           </div>
           <div id="interfaceSettings" class="settings-options">

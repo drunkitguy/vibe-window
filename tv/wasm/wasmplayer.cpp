@@ -53,7 +53,105 @@ static std::chrono::time_point<std::chrono::steady_clock> s_firstAppend;
 static std::chrono::time_point<std::chrono::steady_clock> s_lastTime;
 
 static bool s_hasFirstFrame = false;
-static bool s_FramePacingEnabled = false;
+
+// Frame pacing modes, as passed from the settings (index.js, getFramePacingModeNumber)
+enum FramePacingMode {
+  kFramePacingOff = 0, // submit every frame as soon as it arrives
+  kFramePacingLegacy = 1, // the upstream pacer, unchanged
+  kFramePacingAdaptive = 2, // hold early frames by the recent jitter, at most one frame (default)
+};
+static int s_FramePacingMode = kFramePacingOff;
+
+// Adaptive pacer state. The pacing clock is the host's capture time (presentationTimeMs),
+// with a synthetic clock as the fallback; the EMSS packet timestamps are not changed.
+// Arrival is the time the frame was fully received (enqueueTimeMs), so a held frame does
+// not make the next one look late. offset = arrival - capture time. Holding each frame
+// until capture time + the largest offset of the last 1 to 2 s evens out network jitter;
+// the hold is capped at one frame.
+static constexpr double kAdaptiveMarginMs = 1.0; // ignore jitter below the 1 ms timestamp resolution
+static constexpr std::chrono::milliseconds kAdaptiveWindow{1000};
+static double s_AdaptLastPtsMs = -1.0;
+static double s_AdaptLastArrivalMs = -1.0;
+static double s_AdaptCurMaxOffsetMs = 0.0;
+static double s_AdaptPrevMaxOffsetMs = 0.0;
+static bool s_AdaptHaveCur = false;
+static bool s_AdaptHavePrev = false;
+static std::chrono::time_point<std::chrono::steady_clock> s_AdaptWindowStart;
+
+static void ResetAdaptivePacerWindows() {
+  s_AdaptHaveCur = false;
+  s_AdaptHavePrev = false;
+}
+
+// Returns how long to hold this frame from now, in milliseconds (0 to submit it now)
+static double AdaptivePacerHoldMs(const PDECODE_UNIT decodeUnit, std::chrono::time_point<std::chrono::steady_clock> now) {
+  const double frameMs = std::chrono::duration<double, std::milli>(s_frameDuration).count();
+  const double arrivalMs = static_cast<double>(decodeUnit->enqueueTimeMs);
+
+  // Pacing clock: the host capture time, or the previous one plus a frame if it is missing
+  // or does not move forward
+  const double hostPtsMs = static_cast<double>(decodeUnit->presentationTimeMs);
+  double ptsMs;
+  if (decodeUnit->presentationTimeMs != 0 && (s_AdaptLastPtsMs < 0.0 || hostPtsMs > s_AdaptLastPtsMs)) {
+    ptsMs = hostPtsMs;
+  } else if (decodeUnit->presentationTimeMs != 0 && hostPtsMs + 1000.0 < s_AdaptLastPtsMs) {
+    // The host clock started over: start over too
+    ResetAdaptivePacerWindows();
+    ptsMs = hostPtsMs;
+  } else {
+    ptsMs = (s_AdaptLastPtsMs < 0.0) ? 0.0 : s_AdaptLastPtsMs + frameMs;
+  }
+  s_AdaptLastPtsMs = ptsMs;
+
+  const double offsetMs = arrivalMs - ptsMs;
+
+  // Frames that arrive less than half a frame after the previous one were queued behind a
+  // delay (a burst after a stall): submit them at once and keep them out of the jitter estimate,
+  // so the stream catches up instead of staying behind
+  const bool burst = s_AdaptLastArrivalMs >= 0.0 && arrivalMs - s_AdaptLastArrivalMs < frameMs * 0.5;
+  s_AdaptLastArrivalMs = arrivalMs;
+  if (burst) {
+    return 0.0;
+  }
+
+  // Track the largest offset in the current 1 s window and keep the previous window's
+  if (!s_AdaptHaveCur) {
+    s_AdaptCurMaxOffsetMs = offsetMs;
+    s_AdaptHaveCur = true;
+    s_AdaptWindowStart = now;
+  } else if (now - s_AdaptWindowStart >= kAdaptiveWindow) {
+    s_AdaptPrevMaxOffsetMs = s_AdaptCurMaxOffsetMs;
+    s_AdaptHavePrev = true;
+    s_AdaptCurMaxOffsetMs = offsetMs;
+    s_AdaptWindowStart = now;
+  } else if (offsetMs > s_AdaptCurMaxOffsetMs) {
+    s_AdaptCurMaxOffsetMs = offsetMs;
+  }
+
+  // Never hold an IDR frame: it usually follows a loss, and the picture should recover at once
+  if (decodeUnit->frameType == FRAME_TYPE_IDR) {
+    return 0.0;
+  }
+
+  const double maxOffsetMs = s_AdaptHavePrev ? MAX(s_AdaptCurMaxOffsetMs, s_AdaptPrevMaxOffsetMs) : s_AdaptCurMaxOffsetMs;
+  // How long after its arrival this frame should be released
+  const double holdMs = maxOffsetMs - offsetMs - kAdaptiveMarginMs;
+
+  if (holdMs > frameMs) {
+    // A hiccup bigger than a frame (for example a burst after a stall): do not add that much
+    // latency, release this frame now and measure again from here
+    s_AdaptCurMaxOffsetMs = offsetMs;
+    s_AdaptHaveCur = true;
+    s_AdaptHavePrev = false;
+    s_AdaptWindowStart = now;
+    return 0.0;
+  }
+
+  // Part of the hold may already have passed while the frame waited in the decode queue
+  const double sinceArrivalMs = static_cast<double>(static_cast<int64_t>(LiGetMillis() - decodeUnit->enqueueTimeMs));
+  const double remainingMs = holdMs - sinceArrivalMs;
+  return remainingMs > 0.0 ? remainingMs : 0.0;
+}
 
 static uint32_t total_bytes = 0;
 static int m_LastFrameNumber = 0;
@@ -332,8 +430,13 @@ int MoonlightInstance::VidDecSetup(int videoFormat, int width, int height, int r
   // Initialize the timestamp difference to zero
   s_ptsDiff = 0s;
 
-  // Set the frame pacing flag based on instance configuration
-  s_FramePacingEnabled = g_Instance->m_FramePacingEnabled;
+  // Set the frame pacing mode based on instance configuration
+  s_FramePacingMode = g_Instance->m_FramePacingMode;
+
+  // Start the adaptive pacer from scratch
+  s_AdaptLastPtsMs = -1.0;
+  s_AdaptLastArrivalMs = -1.0;
+  ResetAdaptivePacerWindows();
 
   // Preallocate space for the performance stats string
   s_StatString.resize(2048);
@@ -429,8 +532,8 @@ int MoonlightInstance::VidDecSubmitDecodeUnit(PDECODE_UNIT decodeUnit) {
   // Calculate the start of the pacing duration in milliseconds
   uint32_t pacingStart = LiGetMillis();
 
-  // Check if the frame pacing is enabled
-  if (s_FramePacingEnabled) {
+  // Legacy: the upstream pacer, kept unchanged
+  if (s_FramePacingMode == kFramePacingLegacy) {
     // Calculate the time elapsed since the first frame
     TimeStamp fromStart = now - s_firstAppend;
     // Wait until the packet timestamp is within the frame time margin
@@ -452,6 +555,19 @@ int MoonlightInstance::VidDecSubmitDecodeUnit(PDECODE_UNIT decodeUnit) {
       s_lastSec += kTimeWindow;
       // Update the time difference to synchronize with the packet presentation time
       s_ptsDiff = fromStart - s_pktPts;
+    }
+  } else if (s_FramePacingMode == kFramePacingAdaptive) {
+    const double holdMs = AdaptivePacerHoldMs(decodeUnit, now);
+    if (holdMs > 0.0) {
+      const auto releaseTime = now + std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<double, std::milli>(holdMs));
+      // Sleep through most of the hold and spin only for the final stretch, as the legacy pacer does
+      while (now < releaseTime) {
+        const auto waitTime = releaseTime - now;
+        if (waitTime > kPacingSpinTime) {
+          usleep(std::chrono::duration_cast<std::chrono::microseconds>(waitTime - kPacingSpinTime).count());
+        }
+        now = std::chrono::steady_clock::now();
+      }
     }
   }
 

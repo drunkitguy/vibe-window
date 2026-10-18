@@ -169,6 +169,14 @@
       }
     }
 
+    const selectFramePacing = document.getElementById('selectFramePacing');
+    if (selectFramePacing) {
+      const selectedItem = document.querySelector(`.framePacingMenu li[data-value="${selectFramePacing.dataset.value}"]`);
+      if (selectedItem) {
+        selectFramePacing.textContent = t(selectedItem.getAttribute('data-i18n') || selectedItem.textContent.trim());
+      }
+    }
+
     const selectStreamBack = document.getElementById('selectStreamBack');
     if (selectStreamBack) {
       const selectedItem = document.querySelector(`.streamBackMenu li[data-value="${selectStreamBack.dataset.value}"]`);

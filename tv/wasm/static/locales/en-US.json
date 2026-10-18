@@ -380,5 +380,9 @@
   "Stop streaming returns to the app list. The app keeps running on the PC.": "Stop streaming returns to the app list. The app keeps running on the PC.",
   "Stop streaming": "Stop streaming",
   "Exit app": "Exit app",
-  "Controller layout not recognized. Switch the controller or dongle to X-input mode for best results.": "Controller layout not recognized. Switch the controller or dongle to X-input mode for best results."
+  "Controller layout not recognized. Switch the controller or dongle to X-input mode for best results.": "Controller layout not recognized. Switch the controller or dongle to X-input mode for best results.",
+  "Off": "Off",
+  "Legacy": "Legacy",
+  "Adaptive": "Adaptive",
+  "- Adaptive smooths network jitter and never holds a frame longer than one frame time. Legacy is the original pacer. Off shows every frame as soon as it arrives.": "- Adaptive smooths network jitter and never holds a frame longer than one frame time. Legacy is the original pacer. Off shows every frame as soon as it arrives."
 }

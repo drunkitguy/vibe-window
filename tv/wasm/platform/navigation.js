@@ -980,7 +980,7 @@ const Views = {
       'selectResolution',
       'selectFramerate',
       'selectBitrate',
-      'framePacingBtn'
+      'selectFramePacing'
     ]),
     up: function() {
       this.view.prevOption();
@@ -1104,6 +1104,38 @@ const Views = {
       closePopupMenu('selectBitrate');
       closeActiveVisibleMenu();
       focusElement('selectBitrate');
+    },
+    press: function() {},
+    switch: function() {},
+    enter: function() {
+      mark(this.view.current());
+    },
+    leave: function() {
+      unmark(this.view.current());
+    },
+  },
+  SelectFramePacingMenu: {
+    isActive: () => isPopupMenuActive('framePacingMenu'),
+    view: new ListView(() =>
+      document.getElementById('framePacingMenu')
+      .parentNode.children[3].children[1].children),
+    up: function() {
+      this.view.prevOption();
+    },
+    down: function() {
+      this.view.nextOption();
+    },
+    left: function() {},
+    right: function() {},
+    accept: function() {
+      clickElement(this.view.current());
+      closeActiveVisibleMenu();
+      setTimeout(() => focusElement('selectFramePacing'), 250);
+    },
+    back: function() {
+      closePopupMenu('selectFramePacing');
+      closeActiveVisibleMenu();
+      focusElement('selectFramePacing');
     },
     press: function() {},
     switch: function() {},

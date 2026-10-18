@@ -102,7 +102,7 @@ function attachListeners() {
   $('.videoResolutionMenu li:not(.unsupported-resolution)').on('click', saveResolution);
   $('.videoFramerateMenu li').on('click', saveFramerate);
   $('#bitrateSlider').on('input', saveBitrate);
-  $('#framePacingSwitch').on('click', saveFramePacing);
+  $('.framePacingMenu li').on('click', saveFramePacing);
   $('#ipAddressFieldModeSwitch').on('click', saveIpAddressFieldMode);
   $('#ipAddressTextInput').on('input', updateIpAddressInputValidationState);
   $('#sortAppsListSwitch').on('click', saveSortAppsList);
@@ -147,6 +147,7 @@ function attachListeners() {
   registerMenu('selectLanguage', Views.SelectLanguageMenu);
   registerMenu('selectAudioBackend', Views.SelectAudioBackendMenu);
   registerMenu('selectStreamBack', Views.SelectStreamBackMenu);
+  registerMenu('selectFramePacing', Views.SelectFramePacingMenu);
   registerMenu('selectAudio', Views.SelectAudioMenu);
   registerMenu('selectAudioJitter', Views.SelectAudioJitterMenu);
   registerMenu('selectCodec', Views.SelectCodecMenu);
@@ -3053,7 +3054,8 @@ function startGame(host, appID) {
       var rikey = generateRemoteInputKey();
       var rikeyid = generateRemoteInputKeyId();
       var gamepadMask = getConnectedGamepadMask();
-      const framePacing = $('#framePacingSwitch').parent().hasClass('is-checked') ? 1 : 0;
+      // Frame pacing mode for the Wasm module: 0 = Off, 1 = Legacy, 2 = Adaptive
+      const framePacing = getFramePacingModeNumber();
       const optimizeGames = $('#optimizeGamesSwitch').parent().hasClass('is-checked') ? 1 : 0;
       const rumbleFeedback = $('#rumbleFeedbackSwitch').parent().hasClass('is-checked') ? 1 : 0;
       const mouseEmulation = $('#mouseEmulationSwitch').parent().hasClass('is-checked') ? 1 : 0;
@@ -3580,12 +3582,36 @@ function optimizeBitratePresets() {
   saveBitrate();
 }
 
+// Frame pacing: 'off', 'legacy' (the upstream pacer) or 'adaptive' (default)
+function getFramePacingMode() {
+  var value = $('#selectFramePacing').data('value');
+  return (value === 'off' || value === 'legacy') ? value : 'adaptive';
+}
+
+function getFramePacingModeNumber() {
+  switch (getFramePacingMode()) {
+    case 'off':
+      return 0;
+    case 'legacy':
+      return 1;
+    default:
+      return 2;
+  }
+}
+
+function setFramePacingMode(mode) {
+  var item = $('.framePacingMenu li[data-value="' + mode + '"]');
+  $('#selectFramePacing').text(item.length ? item.text() : mode).attr('data-value', mode).data('value', mode);
+}
+
 function saveFramePacing() {
-  setTimeout(() => {
-    const chosenFramePacing = $('#framePacingSwitch').parent().hasClass('is-checked');
-    console.log('%c[index.js, saveFramePacing]', 'color: green;', 'Saving frame pacing state: ' + chosenFramePacing);
-    storeData('framePacing', chosenFramePacing, null);
-  }, 100);
+  var chosenFramePacing = $(this).data('value');
+  if (chosenFramePacing !== 'off' && chosenFramePacing !== 'legacy') {
+    chosenFramePacing = 'adaptive';
+  }
+  setFramePacingMode(chosenFramePacing);
+  console.log('%c[index.js, saveFramePacing]', 'color: green;', 'Saving frame pacing mode: ' + chosenFramePacing);
+  storeData('framePacingMode', chosenFramePacing, null);
 }
 
 function saveLanguagePreference() {
@@ -3990,9 +4016,9 @@ function restoreDefaultsSettingsValues() {
   $('#bitrateSlider')[0].MaterialSlider.change(defaultBitrate);
   storeData('bitrate', defaultBitrate, null);
 
-  const defaultFramePacing = true;
-  document.querySelector('#framePacingBtn').MaterialSwitch.off();
-  storeData('framePacing', defaultFramePacing, null);
+  const defaultFramePacing = 'adaptive';
+  setFramePacingMode(defaultFramePacing);
+  storeData('framePacingMode', defaultFramePacing, null);
 
   const defaultIpAddressFieldMode = true;
   document.querySelector('#ipAddressFieldModeBtn').MaterialSwitch.off();
@@ -4208,14 +4234,22 @@ function loadUserDataCb() {
   });
 
   console.log('%c[index.js, loadUserDataCb]', 'color: green;', 'Load stored framePacing preferences.');
-  getData('framePacing', function(previousValue) {
-    if (previousValue.framePacing == null) {
-      document.querySelector('#framePacingBtn').MaterialSwitch.on(); // Set the default state
-    } else if (previousValue.framePacing == false) {
-      document.querySelector('#framePacingBtn').MaterialSwitch.off();
-    } else {
-      document.querySelector('#framePacingBtn').MaterialSwitch.on();
+  getData('framePacingMode', function(storedMode) {
+    var mode = storedMode.framePacingMode;
+    if (mode === 'off' || mode === 'legacy' || mode === 'adaptive') {
+      setFramePacingMode(mode);
+      return;
     }
+    // Older installs stored an on/off switch: on becomes Adaptive, off stays Off
+    getData('framePacing', function(previousValue) {
+      if (previousValue.framePacing == null) {
+        setFramePacingMode('adaptive'); // Set the default state
+      } else if (previousValue.framePacing == false) {
+        setFramePacingMode('off');
+      } else {
+        setFramePacingMode('adaptive');
+      }
+    });
   });
 
   console.log('%c[index.js, loadUserDataCb]', 'color: green;', 'Load stored ipAddressFieldMode preferences.');
