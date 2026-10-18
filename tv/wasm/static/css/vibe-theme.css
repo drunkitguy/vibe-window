@@ -1,0 +1,711 @@
+/* =============================================================================
+   Vibe Window theme for the TV app
+   -----------------------------------------------------------------------------
+   The look of Vibe Window for Android 1.2 (app/src/main/res/values/colors.xml and
+   dimens.xml), sized for a 10-foot UI at 1920x1080: true black background, flat
+   surfaces without shadows, rounded cards, a blue focus ring and a small focus scale.
+   Loaded after style.css and only overrides it, so it can be dropped as a whole.
+   Layout sizes that the navigation code depends on (5 host cards and 6 app cards per
+   row) are kept as they are in style.css.
+============================================================================= */
+:root {
+    /* Colors (colors.xml, vw_*) */
+    --vw-bg: #000000;
+    --vw-surface: #1C1C1E;
+    --vw-surface-high: #2C2C2E;
+    --vw-surface-low: #111113;
+    --vw-surface-raised: #3A3A3C; /* focused rows on a surface card */
+    --vw-on-surface: #FFFFFF;
+    --vw-on-surface-variant: #A1A1A6; /* secondary text, 4.5:1 or more on every surface */
+    --vw-accent: #0A84FF; /* focus ring, switches, sliders, progress */
+    --vw-accent-container: #0071E3; /* filled buttons, white text 4.8:1 */
+    --vw-accent-text: #54A8FF; /* accent text on dark surfaces */
+    --vw-accent-tonal: rgba(10, 132, 255, 0.24); /* #3D0A84FF */
+    --vw-accent-tonal-focus: rgba(10, 132, 255, 0.40);
+    --vw-success: #30D158;
+    --vw-warning: #FF9F0A;
+    --vw-separator: rgba(84, 84, 88, 0.6);
+    --vw-scrim: rgba(0, 0, 0, 0.6);
+    --vw-switch-track-off: #48484A;
+
+    /* Shapes: dimens.xml radii (12 to 20dp) at TV scale */
+    --vw-radius-xs: 9px;
+    --vw-radius-sm: 15px;
+    --vw-radius-md: 18px;
+    --vw-radius-lg: 24px;
+    --vw-radius-xl: 30px;
+
+    /* Focus: ring outside the element with a gap in the background color, plus a scale */
+    --vw-focus-width: 4px;
+    --vw-focus-gap: 4px;
+    --vw-focus-scale-card: 1.05;
+    --vw-focus-scale-control: 1.04;
+    --vw-motion: 120ms; /* integers.xml vw_motion_normal */
+
+    /* Type scale for 10-foot viewing */
+    --vw-text-display: 44px;
+    --vw-text-title: 34px;
+    --vw-text-section: 28px;
+    --vw-text-body: 24px;
+    --vw-text-secondary: 22px;
+}
+
+/* =============================
+   Base
+============================= */
+html, body, .mdl-layout, .mdl-layout__container, .mdl-layout__content {
+    background-color: var(--vw-bg);
+}
+body {
+    color: var(--vw-on-surface);
+}
+#wasmSpinnerMessage, #loadingSpinnerMessage {
+    color: var(--vw-on-surface-variant);
+    font-size: var(--vw-text-section);
+    font-weight: 400;
+    letter-spacing: 0;
+}
+#wasmSpinner > .bar1, #loadingSpinner > .bar1,
+#wasmSpinner > .bar3, #loadingSpinner > .bar3 {
+    background-color: var(--vw-accent);
+}
+#wasmSpinner > .bar2, #loadingSpinner > .bar2 {
+    background-image: none;
+    background-color: var(--vw-surface-high);
+}
+
+/* =============================
+   Header
+============================= */
+#main-header {
+    background-color: var(--vw-bg);
+    box-shadow: none;
+}
+.mdl-layout__header-row {
+    height: 112px;
+    padding: 0 72px 0 128px;
+}
+#header-logo {
+    display: none !important;
+}
+#header-title {
+    color: var(--vw-on-surface);
+    font-size: var(--vw-text-display);
+    font-weight: 500;
+    letter-spacing: 0;
+    text-transform: none;
+    text-shadow: none;
+}
+#settingsBtn, #supportBtn, #restoreDefaultsBtn, #quitRunningAppBtn, #goBackBtn {
+    color: var(--vw-on-surface);
+    background-color: var(--vw-surface);
+    width: 64px;
+    height: 64px;
+    min-width: 64px;
+    border-radius: 50%;
+    box-shadow: none;
+    transition: transform var(--vw-motion) ease-out, background-color var(--vw-motion) ease-out;
+}
+#goBackBtn {
+    left: 40px;
+}
+#settingsBtn .navigation-button-icons, #supportBtn .navigation-button-icons,
+#restoreDefaultsBtn .navigation-button-icons, #quitRunningAppBtn .navigation-button-icons,
+#goBackBtn .navigation-button-icons {
+    margin: 0;
+}
+#settingsBtn:hover, #settingsBtn:focus, #settingsBtn.hovered,
+#supportBtn:hover, #supportBtn:focus, #supportBtn.hovered,
+#restoreDefaultsBtn:hover, #restoreDefaultsBtn:focus, #restoreDefaultsBtn.hovered,
+#quitRunningAppBtn:hover, #quitRunningAppBtn:focus, #quitRunningAppBtn.hovered,
+#goBackBtn:hover, #goBackBtn:focus, #goBackBtn.hovered {
+    background-color: var(--vw-surface-high);
+    box-shadow: 0 0 0 var(--vw-focus-gap) var(--vw-bg), 0 0 0 calc(var(--vw-focus-gap) + var(--vw-focus-width)) var(--vw-accent);
+    transform: scale(1.06);
+}
+#updateAppBtn {
+    color: var(--vw-accent-text);
+    background-color: var(--vw-accent-tonal);
+    height: 64px;
+    border-radius: 32px;
+    box-shadow: none;
+}
+#updateAppBtn:hover, #updateAppBtn:focus, #updateAppBtn.hovered {
+    background-color: var(--vw-accent-tonal-focus);
+    box-shadow: 0 0 0 var(--vw-focus-gap) var(--vw-bg), 0 0 0 calc(var(--vw-focus-gap) + var(--vw-focus-width)) var(--vw-accent);
+}
+#updateAppBtnText {
+    font-size: var(--vw-text-secondary);
+    font-weight: 500;
+    text-transform: none;
+    text-shadow: none;
+}
+.mdl-badge::after {
+    color: #000000;
+    background-color: var(--vw-warning) !important;
+}
+
+/* =============================
+   Tooltips and snackbar
+============================= */
+.mdl-tooltip {
+    color: var(--vw-on-surface);
+    background-color: var(--vw-surface-high);
+    top: 104px !important;
+    max-width: 320px;
+    padding: 10px 16px;
+    border-radius: var(--vw-radius-sm);
+    font-size: var(--vw-text-secondary);
+    font-weight: 400;
+    box-shadow: none;
+}
+.mdl-snackbar {
+    background: var(--vw-surface-high);
+    border-radius: var(--vw-radius-md) var(--vw-radius-md) 0 0;
+    box-shadow: none;
+}
+.mdl-snackbar__text {
+    color: var(--vw-on-surface);
+    padding: 20px 32px;
+    font-size: var(--vw-text-body);
+    font-weight: 400;
+    letter-spacing: 0;
+}
+.hovered {
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+/* =============================
+   Host cards (computers)
+============================= */
+#host-grid .mdl-card {
+    background-color: var(--vw-surface);
+    border-radius: var(--vw-radius-lg);
+    box-shadow: none;
+    transition: transform var(--vw-motion) ease-out, box-shadow var(--vw-motion) ease-out;
+}
+#host-grid .host-cell-inactive {
+    box-shadow: none;
+}
+#host-grid .mdl-card.hovered, #host-grid .mdl-card:hover,
+#host-grid .mdl-card:focus, #host-grid .mdl-card:active,
+#host-grid .host-cell-inactive.hovered, #host-grid .host-cell-inactive:hover,
+#host-grid .host-cell-inactive:focus, #host-grid .host-cell-inactive:active {
+    border-radius: var(--vw-radius-lg);
+    outline: none;
+}
+#host-grid .mdl-card.hovered, #host-grid .mdl-card:hover,
+#host-grid .mdl-card:focus, #host-grid .mdl-card:active {
+    transform: scale(var(--vw-focus-scale-card));
+    box-shadow: 0 0 0 var(--vw-focus-gap) var(--vw-bg), 0 0 0 calc(var(--vw-focus-gap) + var(--vw-focus-width)) var(--vw-accent);
+}
+#host-grid .host-cell-inactive.hovered, #host-grid .host-cell-inactive:hover,
+#host-grid .host-cell-inactive:focus, #host-grid .host-cell-inactive:active {
+    transform: none;
+    box-shadow: none;
+}
+.host-add-container > .mdl-card__title, .host-container > .mdl-card__title {
+    background-color: var(--vw-surface);
+    background-size: 64px 64px;
+    background-position: center 38%;
+}
+#host-grid .host-title {
+    color: var(--vw-on-surface);
+    background: transparent;
+    padding: 16px 0 20px 0;
+}
+#host-grid .host-text {
+    font-size: var(--vw-text-body);
+    font-weight: 500;
+    letter-spacing: 0;
+}
+#addHostContainer .host-title {
+    color: var(--vw-accent-text);
+    text-transform: none;
+}
+/* The card's status icon: dimmed while refreshing or locked, warning color when offline */
+.host-center-icon {
+    color: var(--vw-on-surface-variant);
+    font-size: 36px;
+    text-shadow: none;
+    transform: translate(-50%, -110%);
+}
+.host-cell-inactive ~ .host-center-icon {
+    color: var(--vw-warning);
+}
+.host-menu {
+    background: url('../res/ic_menu_white_48px.svg') center / 26px 26px no-repeat var(--vw-surface-high);
+    top: 12px;
+    right: 12px;
+    width: 48px;
+    height: 48px;
+    padding: 0;
+    border-radius: 50%;
+    box-shadow: none;
+    transform: none;
+    transition: transform var(--vw-motion) ease-out, box-shadow var(--vw-motion) ease-out;
+}
+.host-menu.hovered, .host-menu:hover, .host-menu:focus, .host-menu:active {
+    background-color: var(--vw-surface-raised);
+    transform: scale(1.06);
+    box-shadow: 0 0 0 3px var(--vw-surface), 0 0 0 7px var(--vw-accent);
+}
+
+/* =============================
+   App cards
+============================= */
+#game-grid .mdl-card {
+    background-color: var(--vw-surface-low);
+    border-radius: var(--vw-radius-md);
+    box-shadow: none;
+    transition: transform var(--vw-motion) ease-out, box-shadow var(--vw-motion) ease-out;
+}
+#game-grid .mdl-card.hovered, #game-grid .mdl-card:hover,
+#game-grid .mdl-card:focus, #game-grid .mdl-card:active {
+    border-radius: var(--vw-radius-md);
+    transform: scale(var(--vw-focus-scale-card));
+    outline: none;
+    box-shadow: 0 0 0 var(--vw-focus-gap) var(--vw-bg), 0 0 0 calc(var(--vw-focus-gap) + var(--vw-focus-width)) var(--vw-accent);
+}
+/* The running app keeps a green ring; focused, the ring is green and wider */
+#game-grid .current-game-active {
+    box-shadow: 0 0 0 3px var(--vw-success);
+}
+#game-grid .current-game-active.hovered, #game-grid .current-game-active:hover,
+#game-grid .current-game-active:focus, #game-grid .current-game-active:active {
+    border-radius: var(--vw-radius-md);
+    outline: none;
+    box-shadow: 0 0 0 var(--vw-focus-gap) var(--vw-bg), 0 0 0 calc(var(--vw-focus-gap) + var(--vw-focus-width)) var(--vw-success);
+}
+#game-grid .game-title {
+    color: var(--vw-on-surface);
+    background: rgba(28, 28, 30, 0.92);
+    padding: 12px 0 14px 0;
+}
+#game-grid .game-text {
+    font-size: var(--vw-text-secondary);
+    font-weight: 500;
+    letter-spacing: 0;
+}
+
+/* =============================
+   Settings
+============================= */
+#settings-left-pane {
+    border-right: 1px solid var(--vw-separator);
+}
+.settings-category {
+    color: var(--vw-on-surface);
+    margin: 10px 8px;
+    padding: 20px 24px;
+    border-bottom: none;
+    border-radius: var(--vw-radius-md);
+    transition: transform var(--vw-motion) ease-out, background-color var(--vw-motion) ease-out;
+}
+.settings-category.hovered, .settings-category:hover, .settings-category:focus {
+    background-color: var(--vw-surface-high);
+    box-shadow: inset 0 0 0 3px var(--vw-accent);
+    transform: scale(var(--vw-focus-scale-control));
+}
+.settings-category.selected {
+    color: var(--vw-accent-text);
+    background: var(--vw-accent-tonal);
+    box-shadow: none;
+    transform: none;
+}
+.settings-category.selected.hovered, .settings-category.selected:hover, .settings-category.selected:focus {
+    background: var(--vw-accent-tonal);
+    box-shadow: inset 0 0 0 3px var(--vw-accent);
+    transform: scale(var(--vw-focus-scale-control));
+}
+.settings-category label {
+    bottom: 8px;
+    font-size: var(--vw-text-section);
+    font-weight: 500;
+    letter-spacing: 0;
+}
+.settings-category-icons {
+    margin: 0 24px 0 4px;
+    font-size: 36px !important;
+}
+/* Each setting is a flat card on the black background */
+.setting-option {
+    background-color: var(--vw-surface);
+    margin: 0 0 20px 0;
+    padding: 24px 44px;
+    border-radius: var(--vw-radius-lg);
+}
+.settings-options label {
+    color: var(--vw-on-surface);
+    font-size: var(--vw-text-section);
+    font-weight: 500;
+    letter-spacing: 0;
+}
+.settings-options .mdl-list__item-text-body {
+    color: var(--vw-on-surface-variant);
+    font-size: var(--vw-text-secondary);
+    line-height: 1.4;
+    letter-spacing: 0;
+}
+.settings-options .mdl-switch__label {
+    color: var(--vw-on-surface);
+    font-size: var(--vw-text-secondary);
+    letter-spacing: 0;
+}
+/* Setting controls: buttons, menus and switch rows */
+#selectResolution, #selectFramerate, #selectBitrate, #selectFramePacing, #selectStreamBack, #selectLanguage, #ipAddressFieldModeBtn,
+#sortAppsListBtn, #optimizeGamesBtn, #windowOnlyBtn, #removeAllHostsBtn, #rumbleFeedbackBtn, #mouseEmulationBtn,
+#flipABfaceButtonsBtn, #flipXYfaceButtonsBtn, #selectAudioBackend, #selectAudio, #audioSyncBtn,
+#selectAudioJitter, #playHostAudioBtn, #decryptHostAudioBtn,
+#selectCodec, #hdrModeBtn, #fullRangeBtn, #gameModeBtn, #unlockAllFpsBtn, #optimizeBitrateBtn,
+#disableWarningsBtn, #performanceStatsBtn, #navigationGuideBtn, #checkUpdatesBtn, #restartAppBtn, #systemInfoBtn {
+    color: var(--vw-on-surface);
+    background-color: var(--vw-surface-high);
+    height: 64px;
+    border-radius: var(--vw-radius-md);
+    box-shadow: none;
+    transition: transform var(--vw-motion) ease-out, background-color var(--vw-motion) ease-out;
+}
+#systemInfoBtn {
+    height: 100%;
+    font-size: var(--vw-text-secondary);
+}
+#selectResolution, #selectFramerate, #selectBitrate, #selectFramePacing, #selectStreamBack, #selectLanguage, #removeAllHostsBtn,
+#selectAudioBackend, #selectAudio, #selectAudioJitter, #selectCodec, #navigationGuideBtn,
+#checkUpdatesBtn, #restartAppBtn {
+    font-size: var(--vw-text-body);
+    letter-spacing: 0;
+}
+#videoResolutionMenu > #selectResolution, #videoFramerateMenu > #selectFramerate,
+#videoBitrateMenu > #selectBitrate, #languageMenu > #selectLanguage,
+#audioBackendMenu > #selectAudioBackend, #audioConfigMenu > #selectAudio,
+#audioJitterMenu > #selectAudioJitter, #videoCodecMenu > #selectCodec,
+#framePacingMenu > #selectFramePacing, #streamBackMenu > #selectStreamBack {
+    background-color: var(--vw-surface-high);
+}
+#selectResolution:hover, #selectResolution:focus, #selectFramerate:hover, #selectFramerate:focus, #selectBitrate:hover, #selectBitrate:focus,
+#selectFramePacing:hover, #selectFramePacing:focus, #selectStreamBack:hover, #selectStreamBack:focus, #selectLanguage:hover, #selectLanguage:focus,
+#ipAddressFieldModeBtn:hover, #ipAddressFieldModeBtn:focus, #sortAppsListBtn:hover, #sortAppsListBtn:focus,
+#optimizeGamesBtn:hover, #optimizeGamesBtn:focus, #windowOnlyBtn:hover, #windowOnlyBtn:focus, #removeAllHostsBtn:hover, #removeAllHostsBtn:focus,
+#rumbleFeedbackBtn:hover, #rumbleFeedbackBtn:focus, #mouseEmulationBtn:hover, #mouseEmulationBtn:focus,
+#flipABfaceButtonsBtn:hover, #flipABfaceButtonsBtn:focus, #flipXYfaceButtonsBtn:hover, #flipXYfaceButtonsBtn:focus,
+#selectAudioBackend:hover, #selectAudioBackend:focus, #selectAudio:hover, #selectAudio:focus, #audioSyncBtn:hover, #audioSyncBtn:focus,
+#selectAudioJitter:hover, #selectAudioJitter:focus, #playHostAudioBtn:hover, #playHostAudioBtn:focus,
+#decryptHostAudioBtn:hover, #decryptHostAudioBtn:focus, #selectCodec:hover, #selectCodec:focus, #hdrModeBtn:hover, #hdrModeBtn:focus,
+#fullRangeBtn:hover, #fullRangeBtn:focus, #gameModeBtn:hover, #gameModeBtn:focus, #unlockAllFpsBtn:hover, #unlockAllFpsBtn:focus,
+#optimizeBitrateBtn:hover, #optimizeBitrateBtn:focus, #disableWarningsBtn:hover, #disableWarningsBtn:focus,
+#performanceStatsBtn:hover, #performanceStatsBtn:focus, #systemInfoBtn:hover, #systemInfoBtn:focus,
+#navigationGuideBtn:hover, #navigationGuideBtn:focus, #checkUpdatesBtn:hover, #checkUpdatesBtn:focus,
+#restartAppBtn:hover, #restartAppBtn:focus,
+#settings-right-pane .mdl-switch.is-focused, #settings-right-pane .hovered.mdl-switch, #settings-right-pane .mdl-button.hovered {
+    background-color: var(--vw-surface-raised);
+    box-shadow: 0 0 0 var(--vw-focus-width) var(--vw-accent);
+    transform: scale(var(--vw-focus-scale-control));
+}
+#gameModeBtn.is-disabled.hovered, #gameModeBtn.is-disabled:hover,
+#gameModeBtn.is-disabled:focus, #gameModeBtn.is-disabled:active {
+    box-shadow: 0 0 0 var(--vw-focus-width) var(--vw-on-surface-variant) !important;
+}
+.mdl-switch.is-focused {
+    background-color: var(--vw-surface-raised);
+    box-shadow: 0 0 0 var(--vw-focus-width) var(--vw-accent);
+}
+/* Switches: accent track when on, gray when off, white thumb, no shadows */
+.mdl-switch__track {
+    background: var(--vw-switch-track-off);
+}
+.mdl-switch.is-checked .mdl-switch__track {
+    background: var(--vw-accent);
+    box-shadow: none;
+}
+.mdl-switch__thumb, .mdl-switch.is-checked .mdl-switch__thumb {
+    background: #FFFFFF;
+    box-shadow: none;
+}
+.mdl-switch.is-disabled .mdl-switch__track {
+    background: rgba(72, 72, 74, 0.5);
+}
+.mdl-switch.is-disabled .mdl-switch__thumb {
+    background: var(--vw-on-surface-variant);
+}
+/* Pop-up menus and sliders below a setting */
+.mdl-menu__outline {
+    background-color: var(--vw-surface-high);
+    box-shadow: none;
+}
+.mdl-menu__item {
+    color: var(--vw-on-surface);
+    font-size: var(--vw-text-body);
+    letter-spacing: 0;
+}
+.mdl-menu__item.hovered, .mdl-menu__item:hover, .mdl-menu__item:focus {
+    color: var(--vw-on-surface);
+    background-color: var(--vw-accent-tonal);
+    box-shadow: inset 4px 0 0 var(--vw-accent);
+}
+.videoResolutionMenu, .videoFramerateMenu, .videoBitrateMenu,
+.languageMenu, .audioBackendMenu, .audioConfigMenu, .audioJitterMenu,
+.videoCodecMenu, .framePacingMenu, .streamBackMenu, .mdl-menu__outline {
+    border-radius: 0 0 var(--vw-radius-md) var(--vw-radius-md);
+}
+.videoBitrateMenu, .audioJitterMenu {
+    background-color: var(--vw-surface-high);
+}
+#bitrateLowestValue, #bitrateHighestValue, #jitterLowestValue, #jitterHighestValue {
+    color: var(--vw-on-surface-variant);
+    font-size: var(--vw-text-secondary);
+    letter-spacing: 0;
+}
+#bitrateLowestValue.hovered, #bitrateHighestValue.hovered,
+#jitterLowestValue.hovered, #jitterHighestValue.hovered {
+    background-color: var(--vw-surface-high);
+}
+.mdl-slider__background-lower {
+    background: var(--vw-accent);
+}
+.mdl-slider__background-upper {
+    background: var(--vw-switch-track-off);
+}
+.mdl-slider.is-upgraded::-webkit-slider-thumb {
+    background: #FFFFFF;
+    box-shadow: none;
+}
+.mdl-slider.is-upgraded:focus:not(:active)::-webkit-slider-thumb {
+    box-shadow: 0 0 0 6px var(--vw-accent-tonal-focus);
+}
+.badge {
+    background-color: var(--vw-surface-high);
+    border-radius: var(--vw-radius-xs);
+    font-size: 16px;
+    letter-spacing: 0.5px;
+}
+.badge-experimental {
+    color: var(--vw-warning);
+    border-color: var(--vw-warning);
+}
+.badge-new {
+    color: var(--vw-success);
+    border-color: var(--vw-success);
+}
+.badge-preview {
+    color: var(--vw-accent-text);
+    border-color: var(--vw-accent-text);
+}
+
+/* =============================
+   Dialogs
+============================= */
+.dialog-overlay {
+    background: var(--vw-scrim);
+}
+.mdl-dialog, .large-dialog {
+    color: var(--vw-on-surface);
+    background-color: var(--vw-surface-high);
+    width: 38%;
+    padding: 32px 32px 24px 32px;
+    border-radius: var(--vw-radius-xl);
+    box-shadow: none;
+}
+.large-dialog {
+    width: 86%;
+}
+.mdl-dialog__title {
+    padding: 0 8px 16px 8px;
+    font-size: var(--vw-text-title);
+    font-weight: 500;
+    letter-spacing: 0;
+}
+.mdl-dialog__content {
+    color: var(--vw-on-surface-variant);
+    padding: 0 8px 16px 8px;
+}
+#pairingDialogText, #deleteHostDialogText, .host-details-text, #appSupportDialogText,
+#autoWolDialogText, #navGuideDialogText, #updateAppDialogText, #restoreDefaultsDialogText, #quitAppDialogText,
+#warningDialogText, #restartAppDialogText, #exitAppDialogText, #streamBackDialogText {
+    font-size: var(--vw-text-body);
+    line-height: 1.4;
+    letter-spacing: 0;
+}
+#autoWolCheckboxContainer .mdl-switch__label {
+    color: var(--vw-on-surface);
+    font-size: var(--vw-text-secondary);
+}
+/* Dialog buttons: tonal by default, filled for the action that goes ahead.
+   Cancel is the focused default in every confirmation (navigation.js, defaultIndex).
+   The id selectors match the ones in style.css, so these rules win by order. */
+.mdl-dialog .mdl-button--raised.mdl-button--colored,
+#continueAddHost, #cancelAddHost, #cancelPairing, #cancelAutoWol, #continueDeleteHost, #cancelDeleteHost,
+#closeHostMenu, #closeHostDetails, #closeAppSupport, #closeNavGuide, #closeUpdateApp,
+#continueRestoreDefaults, #cancelRestoreDefaults, #continueQuitApp, #cancelQuitApp, #continueWarning,
+#closeWarning, #continueRestartApp, #cancelRestartApp, #continueExitApp, #cancelExitApp, #cancelStreamBack,
+#stopStreamBack, #exitAppStreamBack {
+    color: var(--vw-on-surface);
+    background-color: var(--vw-accent-tonal) !important;
+    border-radius: var(--vw-radius-md);
+    font-size: var(--vw-text-body);
+    font-weight: 500;
+    letter-spacing: 0;
+    text-transform: none;
+    box-shadow: none;
+    transition: transform var(--vw-motion) ease-out, background-color var(--vw-motion) ease-out;
+}
+#continueAddHost, #continueDeleteHost, #continueRestoreDefaults, #continueQuitApp, #continueWarning,
+#continueRestartApp, #continueExitApp, #exitAppStreamBack {
+    background-color: var(--vw-accent-container) !important;
+}
+.mdl-dialog .mdl-button--raised.mdl-button--colored.hovered,
+.mdl-dialog .mdl-button--raised.mdl-button--colored:hover,
+.mdl-dialog .mdl-button--raised.mdl-button--colored:focus,
+#continueAddHost.hovered, #continueAddHost:hover, #continueAddHost:focus, #continueAddHost:active,
+#cancelAddHost.hovered, #cancelAddHost:hover, #cancelAddHost:focus, #cancelAddHost:active,
+#cancelPairing.hovered, #cancelPairing:hover, #cancelPairing:focus, #cancelPairing:active,
+#cancelAutoWol.hovered, #cancelAutoWol:hover, #cancelAutoWol:focus, #cancelAutoWol:active,
+#continueDeleteHost.hovered, #continueDeleteHost:hover, #continueDeleteHost:focus,
+#continueDeleteHost:active, #cancelDeleteHost.hovered, #cancelDeleteHost:hover, #cancelDeleteHost:focus,
+#cancelDeleteHost:active, #closeHostMenu.hovered, #closeHostMenu:hover, #closeHostMenu:focus,
+#closeHostMenu:active, #closeHostDetails.hovered, #closeHostDetails:hover, #closeHostDetails:focus,
+#closeHostDetails:active, #closeAppSupport.hovered, #closeAppSupport:hover, #closeAppSupport:focus,
+#closeAppSupport:active, #closeNavGuide.hovered, #closeNavGuide:hover, #closeNavGuide:focus,
+#closeNavGuide:active, #closeUpdateApp.hovered, #closeUpdateApp:hover, #closeUpdateApp:focus,
+#closeUpdateApp:active, #continueRestoreDefaults.hovered, #continueRestoreDefaults:hover,
+#continueRestoreDefaults:focus, #continueRestoreDefaults:active, #cancelRestoreDefaults.hovered,
+#cancelRestoreDefaults:hover, #cancelRestoreDefaults:focus, #cancelRestoreDefaults:active,
+#continueQuitApp.hovered, #continueQuitApp:hover, #continueQuitApp:focus, #continueQuitApp:active,
+#cancelQuitApp.hovered, #cancelQuitApp:hover, #cancelQuitApp:focus, #cancelQuitApp:active,
+#continueWarning.hovered, #continueWarning:hover, #continueWarning:focus, #continueWarning:active,
+#closeWarning.hovered, #closeWarning:hover, #closeWarning:focus, #closeWarning:active,
+#continueRestartApp.hovered, #continueRestartApp:hover, #continueRestartApp:focus,
+#continueRestartApp:active, #cancelRestartApp.hovered, #cancelRestartApp:hover, #cancelRestartApp:focus,
+#cancelRestartApp:active, #continueExitApp.hovered, #continueExitApp:hover, #continueExitApp:focus,
+#continueExitApp:active, #cancelExitApp.hovered, #cancelExitApp:hover, #cancelExitApp:focus,
+#cancelExitApp:active, #cancelStreamBack.hovered, #cancelStreamBack:hover, #cancelStreamBack:focus,
+#cancelStreamBack:active, #stopStreamBack.hovered, #stopStreamBack:hover, #stopStreamBack:focus,
+#stopStreamBack:active, #exitAppStreamBack.hovered, #exitAppStreamBack:hover, #exitAppStreamBack:focus,
+#exitAppStreamBack:active {
+    background-color: var(--vw-accent-tonal-focus) !important;
+    box-shadow: 0 0 0 var(--vw-focus-gap) var(--vw-surface-high), 0 0 0 calc(var(--vw-focus-gap) + var(--vw-focus-width)) var(--vw-accent);
+    transform: scale(var(--vw-focus-scale-control));
+}
+#continueAddHost.hovered, #continueAddHost:hover, #continueAddHost:focus, #continueAddHost:active,
+#continueDeleteHost.hovered, #continueDeleteHost:hover, #continueDeleteHost:focus,
+#continueDeleteHost:active, #continueRestoreDefaults.hovered, #continueRestoreDefaults:hover,
+#continueRestoreDefaults:focus, #continueRestoreDefaults:active, #continueQuitApp.hovered,
+#continueQuitApp:hover, #continueQuitApp:focus, #continueQuitApp:active, #continueWarning.hovered,
+#continueWarning:hover, #continueWarning:focus, #continueWarning:active, #continueRestartApp.hovered,
+#continueRestartApp:hover, #continueRestartApp:focus, #continueRestartApp:active, #continueExitApp.hovered,
+#continueExitApp:hover, #continueExitApp:focus, #continueExitApp:active, #exitAppStreamBack.hovered,
+#exitAppStreamBack:hover, #exitAppStreamBack:focus, #exitAppStreamBack:active {
+    background-color: var(--vw-accent-container) !important;
+}
+.mdl-dialog .mdl-button--raised.mdl-button--colored[disabled],
+#continueAddHost[disabled], #continueAddHost.mdl-button--disabled {
+    color: var(--vw-on-surface-variant) !important;
+    background-color: var(--vw-surface) !important;
+    opacity: 1 !important;
+}
+#continueAddHost[disabled].hovered, #continueAddHost[disabled]:hover,
+#continueAddHost[disabled]:focus, #continueAddHost[disabled]:active,
+#continueAddHost.mdl-button--disabled:hover, #continueAddHost.mdl-button--disabled:focus,
+#continueAddHost.mdl-button--disabled:active {
+    background-color: var(--vw-surface) !important;
+    box-shadow: 0 0 0 var(--vw-focus-gap) var(--vw-surface-high), 0 0 0 calc(var(--vw-focus-gap) + var(--vw-focus-width)) var(--vw-on-surface-variant) !important;
+}
+/* Action rows: buttons share the width, shown right to left in DOM order (Cancel on the right) */
+.mdl-dialog__actions {
+    flex-wrap: nowrap;
+    padding: 16px 0 0 0;
+}
+.mdl-dialog__actions > .mdl-button {
+    flex: 1 1 0;
+    width: auto !important;
+    height: 64px !important;
+    margin: 0 8px 8px 8px !important;
+}
+#continueWarning {
+    display: none;
+}
+/* The host menu lists its actions as full-width rows */
+.host-menu-button, #hostMenuDialog .mdl-dialog__content .mdl-button {
+    width: 100%;
+    height: 64px;
+    margin: 0 0 12px 0;
+}
+/* Text fields and numeric address fields */
+.mdl-textfield__label, .mdl-textfield--floating-label.is-invalid .mdl-textfield__label,
+.select-option-field-floating-label .mdl-textfield__label {
+    color: var(--vw-on-surface-variant);
+    font-size: var(--vw-text-secondary);
+    font-weight: 400;
+}
+.mdl-textfield__input, .ip-address-select-field {
+    height: 56px;
+    border: 1px solid var(--vw-separator);
+    border-radius: var(--vw-radius-sm);
+}
+.mdl-textfield__input.hovered, #ipAddressTextInput,
+.ip-address-select-field.hovered, #ipAddressField1, #ipAddressField2, #ipAddressField3, #ipAddressField4 {
+    color: var(--vw-on-surface);
+    background-color: var(--vw-surface);
+    font-size: var(--vw-text-body);
+}
+.mdl-textfield__input.hovered, .mdl-textfield__input:hover, .mdl-textfield__input:focus,
+.ip-address-select-field.hovered, .ip-address-select-field:hover {
+    box-shadow: 0 0 0 var(--vw-focus-width) var(--vw-accent);
+}
+#ipAddressInputField .mdl-textfield {
+    width: 100%;
+}
+#ipAddressInputField .mdl-textfield__input {
+    width: 100%;
+    box-sizing: border-box;
+}
+.mdl-textfield--floating-label.is-focused .mdl-textfield__label,
+.mdl-textfield--floating-label.is-dirty .mdl-textfield__label,
+.mdl-textfield--floating-label.has-placeholder .mdl-textfield__label {
+    color: var(--vw-on-surface-variant);
+}
+.mdl-textfield__label:after {
+    display: none;
+}
+#ipAddressTextInput::placeholder {
+    color: var(--vw-on-surface-variant);
+}
+#supportQrCode {
+    box-shadow: none;
+}
+/* Navigation guide colors: remote, keyboard, gamepad */
+.navGuideRemoteColor {
+    background-color: var(--vw-accent-text);
+}
+.navGuideKeyboardColor {
+    background-color: var(--vw-warning);
+}
+.navGuideGamepadColor {
+    background-color: var(--vw-success);
+}
+.navGuideLabel {
+    box-shadow: none;
+}
+.navGuideRemoteText {
+    color: var(--vw-accent-text);
+}
+.navGuideKeyboardText {
+    color: var(--vw-warning);
+}
+.navGuideGamepadText {
+    color: var(--vw-success);
+}
+.navGuideLabelText {
+    color: var(--vw-on-surface);
+    text-transform: none;
+}
+.navGuideDialogControls, .navGuideRemoteText, .navGuideKeyboardText, .navGuideGamepadText {
+    font-size: var(--vw-text-secondary);
+}
+
+/* =============================
+   Stream overlays
+============================= */
+#connection-warnings, #performance-stats {
+    border-radius: var(--vw-radius-sm);
+}

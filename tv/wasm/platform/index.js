@@ -232,7 +232,7 @@ function changeUiModeForWasmLoad() {
   $('#main-content').children().not('#listener, #wasmSpinner').hide();
   $('#wasmSpinner').css('display', 'inline-block');
   $('#wasmSpinnerLogo').show();
-  $('#wasmSpinnerMessage').text(t('Loading Moonlight...'));
+  $('#wasmSpinnerMessage').text(t('Loading Vibe Window...'));
 }
 
 function moduleDidLoad() {
@@ -445,7 +445,7 @@ function snackbarLogLong(...args) {
 // Handle layout elements when displaying the Hosts view
 function showHostsMode() {
   console.log('%c[index.js, showHostsMode]', 'color: green;', 'Entering "Show Hosts" mode.');
-  $('#header-title').html(t('Hosts'));
+  $('#header-title').html(t('Computers'));
   $('#header-logo').show();
   $('#main-header').show();
   $('.nav-menu-parent').show();
@@ -496,7 +496,7 @@ function showHosts() {
 
     // Show the main header after the loading screen is complete
     $('#main-header').children().show();
-    $('#main-header').css({'backgroundColor': '#333846', 'boxShadow': '0 0 4px 0 rgba(0, 0, 0, 1)'});
+    $('#main-header').css({'backgroundColor': 'var(--vw-bg)', 'boxShadow': 'none'});
 
     // Navigate to the Hosts view
     showHostsMode();
@@ -1743,7 +1743,7 @@ function showSettings() {
 
     // Show the main header after the loading screen is complete
     $('#main-header').children().show();
-    $('#main-header').css({'backgroundColor': '#333846', 'boxShadow': '0 0 4px 0 rgba(0, 0, 0, 1)'});
+    $('#main-header').css({'backgroundColor': 'var(--vw-bg)', 'boxShadow': 'none'});
 
     // Show the settings list section
     $('#settings-list').removeClass('hide-container');
@@ -2064,7 +2064,7 @@ function updateAppDialog(latestVersion, releaseNotes) {
 // Check for updates when the Check for Updates button is pressed
 function checkForAppUpdates() {
   console.log('%c[index.js, checkForAppUpdates]', 'color: green;', 'Checking for new application updates...');
-  snackbarLog('Checking for available Moonlight updates...');
+  snackbarLog('Checking for Vibe Window TV updates...');
   // Fetch the latest release data from the GitHub API
   fetchLatestRelease().then(({ latestVersion, releaseNotes }) => {
     setTimeout(() => {
@@ -2284,7 +2284,7 @@ function restartAppDialog() {
   var restartAppDialog = document.querySelector('#restartAppDialog');
 
   // Change the dialog text element to confirm whether the user wants to restart the application
-  document.getElementById('restartAppDialogText').innerHTML = t('Are you sure you want to restart Moonlight?');
+  document.getElementById('restartAppDialogText').innerHTML = t('Are you sure you want to restart Vibe Window?');
 
   // Show the dialog and push the view
   restartAppDialogOverlay.style.display = 'flex';
@@ -2590,7 +2590,7 @@ function showAppsMode() {
   $('#main-content').removeClass('fullscreen');
   $('#listener').removeClass('fullscreen');
   $('#loadingSpinner').css('display', 'none');
-  $('body').css('backgroundColor', '#282C38');
+  $('body').css('backgroundColor', 'var(--vw-bg)');
   $('#wasm_module').css('display', 'none');
 
   isInGame = false;
@@ -2639,7 +2639,7 @@ function showApps(host) {
 
         // Show the main header after the loading screen is complete
         $('#main-header').children().show();
-        $('#main-header').css({'backgroundColor': '#333846', 'boxShadow': '0 0 4px 0 rgba(0, 0, 0, 1)'});
+        $('#main-header').css({'backgroundColor': 'var(--vw-bg)', 'boxShadow': 'none'});
 
         // Show the game grid section
         $('#game-grid').show();
@@ -2868,7 +2868,7 @@ function showApps(host) {
 
         // Show the main header after the loading screen is complete
         $('#main-header').children().show();
-        $('#main-header').css({'backgroundColor': '#333846', 'boxShadow': '0 0 4px 0 rgba(0, 0, 0, 1)'});
+        $('#main-header').css({'backgroundColor': 'var(--vw-bg)', 'boxShadow': 'none'});
 
         console.error('%c[index.js, showApps]', 'color: green;', 'Error: Failed to get app list from ' + host.hostname + '. Host object: ', host, '\n' + host.toString()); // Logging both object (for console) and toString-ed object (for text logs)
         var errorAppListImg = new Image();
