@@ -5,6 +5,11 @@ on:
     branches:
       - main
       - claude/clever-clarke-k7hhhj
+    # The TV app has its own workflow (tv-release.yml).
+    paths-ignore:
+      - 'tv/**'
+      - 'docs/tizen-tv-plan.md'
+      - '.github/workflows/tv-release.yml'
 
 permissions: {}
 

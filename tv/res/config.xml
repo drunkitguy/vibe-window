@@ -1,19 +1,19 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<widget xmlns:tizen="http://tizen.org/ns/widgets" xmlns="http://www.w3.org/ns/widgets" id="http://samsung.tv/MoonlightWasm" version="1.19.0" viewmodes="fullscreen">
+<widget xmlns:tizen="http://tizen.org/ns/widgets" xmlns="http://www.w3.org/ns/widgets" id="http://vibewindow.tv/VibeWindowTV" version="1.0.0" viewmodes="fullscreen">
     <access origin="*"></access>
     <tizen:app-control>
         <tizen:src name="index.html" reload="disable"/>
         <tizen:operation name="http://samsung.com/appcontrol/operation/eden_resume"/>
     </tizen:app-control>
-    <tizen:application id="MoonLightS.MoonlightWasm" package="MoonLightS" required_version="5.5" launch_mode="caller"/>
+    <tizen:application id="VibeWinTV1.MoonlightWasm" package="VibeWinTV1" required_version="5.5" launch_mode="caller"/>
     <content src="index.html"/>
-    <description>Moonlight Game Streaming</description>
+    <description>Vibe Window TV game streaming</description>
     <feature name="http://tizen.org/feature/screen.size.all"/>
     <icon src="icon.png"/>
     <tizen:metadata key="http://samsung.com/tv/metadata/use.voiceguide" value="false"/>
     <tizen:metadata key="http://samsung.com/tv/metadata/floating.navigation" value="false"/>
     <tizen:metadata key="http://samsung.com/tv/metadata/use.preview" value="bg_service"/>
-    <name>Moonlight</name>
+    <name>Vibe Window TV</name>
     <tizen:privilege name="http://tizen.org/privilege/internet"/>
     <tizen:privilege name="http://tizen.org/privilege/network.get"/>
     <tizen:privilege name="http://tizen.org/privilege/fullscreen"/>
@@ -30,10 +30,10 @@
     <tizen:privilege name="http://tizen.org/privilege/tv.audio"/>
     <tizen:privilege name="http://tizen.org/privilege/tv.inputdevice"/>
     <tizen:profile name="tv-samsung"/>
-    <tizen:service id="MoonLightS.service" on-boot="true" auto-restart="true">
+    <tizen:service id="VibeWinTV1.service" on-boot="true" auto-restart="true">
         <tizen:content src="service/service.js"/>
-        <tizen:name>moonlight_service</tizen:name>
-        <tizen:description>Moonlight Smart Hub Preview Handler Service</tizen:description>
+        <tizen:name>vibewindow_service</tizen:name>
+        <tizen:description>Vibe Window TV Smart Hub Preview Handler Service</tizen:description>
         <tizen:category name="http://tizen.org/category/service"/>
     </tizen:service>
     <tizen:setting screen-orientation="landscape" context-menu="enable" background-support="enable" encryption="disable" install-location="auto" hwkey-event="enable" pointing-device-support="enable"/>

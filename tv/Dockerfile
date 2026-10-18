@@ -149,8 +149,11 @@ RUN echo \
 | expect
 
 # Rename the output WGT file by appending a suffix for the ForceGM variant, or leave without a suffix for the Standard variant
+# The packager names the file after the widget <name> in config.xml, so pick up whichever single .wgt it wrote
 RUN if [ "$FORCE_GAME_MODE" = "true" ]; then SUFFIX="-ForceGM"; else SUFFIX=""; fi; \
-	mv build/widget/Moonlight.wgt "Moonlight${SUFFIX}.wgt" && ls -la *.wgt
+	set -- build/widget/*.wgt; \
+	if [ "$#" -ne 1 ] || [ ! -f "$1" ]; then echo "Expected one .wgt in build/widget, found: $*" >&2; exit 1; fi; \
+	mv "$1" "Moonlight${SUFFIX}.wgt" && ls -la *.wgt
 
 # Clean up unnecessary files to reduce image size
 RUN rm -rf \
