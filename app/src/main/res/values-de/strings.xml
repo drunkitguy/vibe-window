@@ -221,7 +221,6 @@
     <string name="title_frame_pacing">Video Frame-Pacing</string>
     <string name="summary_frame_pacing">Lege fest, wie die Videolatenz und die flüssige Wiedergabe ausgeglichen werden sollen</string>
     <string name="resolution_prefix_native_fullscreen">Natives Vollbild</string>
-    <string name="pacing_latency">Bevorzuge niedrigste Latenz</string>
     <string name="pacing_balanced">Ausgeglichen</string>
     <string name="pacing_smoothness">Bevorzuge flüssige Bildwiedergabe (kann die Latenzzeit deutlich erhöhen)</string>
     <string name="perf_overlay_streamdetails">Video Stream: %1$s %2$.2f FPS</string>

@@ -244,7 +244,6 @@
     <string name="audioconf_stereo">Stereo</string>
     <string name="title_frame_pacing">Video kare ilerleme hızı</string>
     <string name="summary_frame_pacing">Video gecikmesinin ve akıcılığının nasıl dengeleneceğini belirtin</string>
-    <string name="pacing_latency">Düşük gecikmeyi tercih et</string>
     <string name="pacing_balanced">Dengeli</string>
     <string name="videoformat_av1always">AV1 tercih et (Deneysel)</string>
     <string name="videoformat_hevcalways">HEVC tercih et</string>

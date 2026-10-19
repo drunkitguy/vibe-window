@@ -181,7 +181,6 @@
     <string name="title_osc_opacity">Cambia l\'opavità dei controlli a schermo</string>
     <string name="title_unlock_fps">Sblocca tutti i frame rate possibili</string>
     <string name="pacing_balanced">Bilanciato</string>
-    <string name="pacing_latency">Preferisci ritardi minori</string>
     <string name="suffix_seekbar_bitrate_mbps">Mbps</string>
     <string name="resolution_prefix_native">Nativo</string>
     <string name="no_video_received_error">Nessun video ricevuto dal PC sorgente.</string>

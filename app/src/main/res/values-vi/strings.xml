@@ -329,7 +329,6 @@
     <string name="summary_frame_pacing">Chỉ định cách cân bằng độ trễ video và độ mượt</string>
     <string name="pacing_warp">Warp Drive (Thử nghiệm)</string>
     <string name="pacing_warp2">Warp 2 (Thử nghiệm)</string>
-    <string name="pacing_latency">Ưu tiên độ trễ thấp nhất</string>
     <string name="pacing_balanced">Cân bằng</string>
     <string name="pacing_balanced_alt">Cân bằng với giới hạn FPS</string>
     <string name="pacing_smoothness">Ưu tiên video mượt nhất (có thể tăng đáng kể độ trễ)</string>

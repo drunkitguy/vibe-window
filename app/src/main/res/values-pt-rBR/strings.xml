@@ -2,7 +2,6 @@
 <resources>
     <string name="title_frame_pacing">Ritmo de quadros</string>
     <string name="pacing_balanced">Balanceado</string>
-    <string name="pacing_latency">Preferir baixa latência</string>
     <string name="summary_enable_hdr">Transmita HDR quando o jogo e a GPU do PC suportarem. O HDR requer uma GPU da série GTX 1000 ou posterior.</string>
     <string name="summary_enable_post_stream_toast">Exibe uma mensagem com informações de latência após o término da transmissão</string>
     <string name="summary_unlock_fps">Transmitir a 90 ou 120 FPS pode reduzir a latência em dispositivos de última geração, mas pode causar atraso ou instabilidade em dispositivos que não suportam</string>

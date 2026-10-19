@@ -2,7 +2,6 @@
 <resources>
     <string name="pair_incorrect_pin">Неправилен ПИН</string>
     <string name="no_video_received_error">Няма получено видео от хоста.</string>
-    <string name="pacing_latency">Предпочитане на най-ниската латентност</string>
     <string name="pacing_balanced_alt">Балансирано с FPS лимит</string>
     <string name="pacing_smoothness">Предпочитане на най-плавно видео (може значително да увеличи латентността)</string>
     <string name="conn_metered">Предупреждение: Вашата активна мрежова връзка се измерва!</string>

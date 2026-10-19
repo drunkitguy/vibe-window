@@ -207,7 +207,6 @@
     <string name="audioconf_71surround">7.1 Surround Sound</string>
     <string name="videoformat_hevcalways">Preferowany HEVC</string>
     <string name="summary_frame_pacing">Określenie sposobu równoważenia opóźnienia i płynności wideo</string>
-    <string name="pacing_latency">Preferowane najniższe opóźnienia</string>
     <string name="perf_overlay_hostprocessinglatency">Opóźnienie przetwarzania hosta min/max/średnia: %1$.1f/%2$.1f/%3$.1f ms</string>
     <string name="perf_overlay_netlatency">Średnie opóźnienie sieci: %1$d ms (wariancja: %2$d ms)</string>
     <string name="applist_connect_msg">Podłączanie do komputera…</string>

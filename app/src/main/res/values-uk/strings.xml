@@ -219,7 +219,6 @@
     <string name="videoformat_hevcalways">Використовувати HEVC</string>
     <string name="title_frame_pacing">Швидкість кадрів відео</string>
     <string name="summary_frame_pacing">Укажіть баланс відео затримки та плавності</string>
-    <string name="pacing_latency">Перевага найменшій затримці</string>
     <string name="pacing_smoothness">Перевага плавному відео (може значно збільшити затримку)</string>
     <string name="pacing_balanced">Збалансовано</string>
     <string name="resolution_360p">360p</string>

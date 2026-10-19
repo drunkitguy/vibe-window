@@ -185,7 +185,6 @@
     <string name="audioconf_51surround">5.1 surroundljud</string>
     <string name="audioconf_71surround">7.1 surroundljud</string>
     <string name="title_frame_pacing">Videorams fart</string>
-    <string name="pacing_latency">Föredrar lägsta latenstid</string>
     <string name="pacing_balanced">Balanserad</string>
     <string name="pacing_balanced_alt">Balanserad med FPS-gräns</string>
     <string name="pacing_smoothness">Föredrar smidigast video (kan öka latensen avsevärt)</string>

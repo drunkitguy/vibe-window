@@ -323,7 +323,6 @@
     <string name="summary_frame_pacing">Spécifiez comment équilibrer latence et fluidité de la vidéo</string>
     <string name="pacing_warp">Warp Drive (expérimental)</string>
     <string name="pacing_warp2">Warp 2 (expérimental)</string>
-    <string name="pacing_latency">Préférer une latence plus faible</string>
     <string name="pacing_balanced">Équilibré</string>
     <string name="pacing_balanced_alt">Équilibré avec limite FPS</string>
     <string name="pacing_smoothness">Préférer la qualité vidéo (risque d\'augmenter la latence)</string>
