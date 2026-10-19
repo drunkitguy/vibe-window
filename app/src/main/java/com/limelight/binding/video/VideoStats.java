@@ -9,6 +9,7 @@ class VideoStats {
     int totalFrames;
     int totalFramesReceived;
     int totalFramesRendered;
+    int framesDroppedByPacing;
     int frameLossEvents;
     int framesLost;
     char minHostProcessingLatency;
@@ -23,6 +24,7 @@ class VideoStats {
         this.totalFrames += other.totalFrames;
         this.totalFramesReceived += other.totalFramesReceived;
         this.totalFramesRendered += other.totalFramesRendered;
+        this.framesDroppedByPacing += other.framesDroppedByPacing;
         this.frameLossEvents += other.frameLossEvents;
         this.framesLost += other.framesLost;
 
@@ -48,6 +50,7 @@ class VideoStats {
         this.totalFrames = other.totalFrames;
         this.totalFramesReceived = other.totalFramesReceived;
         this.totalFramesRendered = other.totalFramesRendered;
+        this.framesDroppedByPacing = other.framesDroppedByPacing;
         this.frameLossEvents = other.frameLossEvents;
         this.framesLost = other.framesLost;
         this.minHostProcessingLatency = other.minHostProcessingLatency;
@@ -63,6 +66,7 @@ class VideoStats {
         this.totalFrames = 0;
         this.totalFramesReceived = 0;
         this.totalFramesRendered = 0;
+        this.framesDroppedByPacing = 0;
         this.frameLossEvents = 0;
         this.framesLost = 0;
         this.minHostProcessingLatency = 0;

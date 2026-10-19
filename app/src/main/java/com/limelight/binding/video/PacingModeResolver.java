@@ -66,16 +66,20 @@ public final class PacingModeResolver {
     /**
      * Whether the renderer may use its "latest only" fast path, which releases the newest
      * waiting frame at once without pacing. Smoothest and Cap FPS promise never to drop
-     * frames and pace on their own, so they skip it.
+     * frames and pace on their own, so they skip it. The newest-frame mode has its own
+     * pacer and skips it too.
      */
     public static boolean usesLatestOnlyPath(int mode) {
         return mode != PreferenceConfiguration.FRAME_PACING_MAX_SMOOTHNESS &&
-                mode != PreferenceConfiguration.FRAME_PACING_CAP_FPS;
+                mode != PreferenceConfiguration.FRAME_PACING_CAP_FPS &&
+                mode != PreferenceConfiguration.FRAME_PACING_NEWEST;
     }
 
     /** The stored preference value of a mode, for logs and the overlay. */
     public static String modeName(int mode) {
         switch (mode) {
+            case PreferenceConfiguration.FRAME_PACING_NEWEST:
+                return "newest";
             case PreferenceConfiguration.FRAME_PACING_MIN_LATENCY:
                 return "latency";
             case PreferenceConfiguration.FRAME_PACING_BALANCED:

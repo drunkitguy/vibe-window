@@ -183,6 +183,13 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
 
     private long lastNetDataNum;
     private LinkedBlockingQueue<Integer> outputBufferQueue = new LinkedBlockingQueue<>();
+    // Pacer for the newest-frame mode; it stays empty in every other mode
+    private final NewestFramePacer newestPacer = new NewestFramePacer(new NewestFramePacer.Releaser() {
+        @Override
+        public void release(int index, boolean render) {
+            releaseForNewestPacer(index, render);
+        }
+    });
     private static final int OUTPUT_BUFFER_QUEUE_LIMIT = 2;
     private long lastRenderedFrameTimeNanos;
     private HandlerThread choreographerHandlerThread;
@@ -829,6 +836,7 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
                 nextInputBuffer = null;
                 nextInputBufferIndex = -1;
                 outputBufferQueue.clear();
+                newestPacer.clear();
 
                 // If we just need a flush, do so now with all threads quiesced.
                 if (codecRecoveryType.get() == CR_RECOVERY_TYPE_FLUSH) {
@@ -1065,10 +1073,44 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
         return false;
     }
 
+    // Called by newestPacer with its lock held, on the renderer or the Choreographer thread
+    private void releaseForNewestPacer(int index, boolean render) {
+        try {
+            videoDecoder.releaseOutputBuffer(index, render);
+            if (render) {
+                activeWindowVideoStats.totalFramesRendered++;
+            }
+            else {
+                activeWindowVideoStats.framesDroppedByPacing++;
+            }
+        } catch (IllegalStateException ignored) {
+            try {
+                // Try to avoid leaking the output buffer by releasing it without rendering
+                videoDecoder.releaseOutputBuffer(index, false);
+            } catch (IllegalStateException e) {
+                // This will leak the output buffer, but there's really nothing else we can do
+                e.printStackTrace();
+                handleDecoderException(e);
+            }
+        }
+    }
+
     @Override
     public void doFrame(long frameTimeNanos) {
         // Do nothing if we're stopping
         if (stopping) {
+            return;
+        }
+
+        if (prefs.framePacing == PreferenceConfiguration.FRAME_PACING_NEWEST) {
+            // Present the pending frame, or arm the immediate path for this interval
+            newestPacer.onVsync(frameTimeNanos);
+
+            // Attempt codec recovery even if we have nothing to render right now
+            doCodecRecoveryIfRequired(CR_FLAG_CHOREOGRAPHER);
+
+            // Request another callback for next frame
+            Choreographer.getInstance().postFrameCallback(this);
             return;
         }
 
@@ -1133,7 +1175,8 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
     }
 
     private void startChoreographerThread() {
-        if (prefs.framePacing != PreferenceConfiguration.FRAME_PACING_BALANCED) {
+        if (prefs.framePacing != PreferenceConfiguration.FRAME_PACING_BALANCED &&
+                prefs.framePacing != PreferenceConfiguration.FRAME_PACING_NEWEST) {
             // Not using Choreographer in this pacing mode
             return;
         }
@@ -1208,10 +1251,38 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
 
                 // Smoothest and Cap FPS never drop frames, so they skip the unpaced latest-only path
                 final boolean latestOnlyAllowed = PacingModeResolver.usesLatestOnlyPath(prefs.framePacing);
+                final boolean newestMode = prefs.framePacing == PreferenceConfiguration.FRAME_PACING_NEWEST;
 
                 BufferInfo info = new BufferInfo();
                 long lastOutputNs = System.nanoTime();
                 while (!stopping) {
+                    if (newestMode) {
+                        // Newest-frame pacing: hand every decoded frame to the pacer, which
+                        // releases it at once or at the next vsync (see NewestFramePacer)
+                        try {
+                            int outIndex = videoDecoder.dequeueOutputBuffer(info, getOutputDequeueTimeoutUs());
+                            if (outIndex >= 0) {
+                                numFramesOut++;
+
+                                // Decode time ends at dequeue, and the average is taken over all
+                                // received frames, so it is recorded for every frame here
+                                updateDecodeLatencyStats(info.presentationTimeUs);
+
+                                newestPacer.onDecodedFrame(outIndex, info.presentationTimeUs);
+                            }
+                            else if (outIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                                LimeLog.info("Output format changed");
+                                outputFormat = videoDecoder.getOutputFormat();
+                                LimeLog.info("New output format: " + outputFormat);
+                            }
+                        } catch (IllegalStateException e) {
+                            handleDecoderException(e);
+                        } finally {
+                            doCodecRecoveryIfRequired(CR_FLAG_RENDER_THREAD);
+                        }
+                        continue;
+                    }
+
                     /* LATEST_ONLY_LOW_LATENCY */
                     if (!preferLowerDelays && latestOnlyAllowed) {
                         try {
@@ -1642,10 +1713,14 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
             // status back to true.
             Thread.currentThread().interrupt();
         }
+
+        // A frame still held by the newest-frame pacer dies with the codec
+        newestPacer.clear();
     }
 
     @Override
     public void cleanup() {
+        newestPacer.clear();
         videoDecoder.release();
     }
 
@@ -1853,6 +1928,15 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
                     sb.append(context.getString(R.string.perf_overlay_decoder, decoder)).append('\n');
                     sb.append(context.getString(R.string.perf_overlay_incomingfps, fps.receivedFps)).append('\n');
                     sb.append(context.getString(R.string.perf_overlay_renderingfps, fps.renderedFps)).append('\n');
+                    if (prefs.framePacing == PreferenceConfiguration.FRAME_PACING_NEWEST) {
+                        sb.append(context.getString(R.string.perf_overlay_pacing,
+                                PacingModeResolver.modeName(prefs.framePacing),
+                                NewestFramePacer.dropPercent(lastTwo.framesDroppedByPacing, lastTwo.totalFramesReceived))).append('\n');
+                    }
+                    else {
+                        sb.append(context.getString(R.string.perf_overlay_pacing_mode,
+                                PacingModeResolver.modeName(prefs.framePacing))).append('\n');
+                    }
                     sb.append(context.getString(R.string.perf_overlay_netdrops,
                             (float)lastTwo.framesLost / lastTwo.totalFrames * 100)).append('\n');
                     if(TrafficStatsHelper.getPackageRxBytes(Process.myUid()) != TrafficStats.UNSUPPORTED){

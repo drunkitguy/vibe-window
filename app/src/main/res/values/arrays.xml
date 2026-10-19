@@ -128,6 +128,7 @@
     </string-array>
 
     <string-array name="video_frame_pacing_names">
+        <item>@string/pacing_newest</item>
         <item>@string/pacing_warp2</item>
         <item>@string/pacing_warp</item>
         <item>@string/pacing_latency</item>
@@ -136,6 +137,7 @@
         <item>@string/pacing_smoothness</item>
     </string-array>
     <string-array name="video_frame_pacing_values" translatable="false">
+        <item>newest</item>
         <item>warp2</item>
         <item>warp</item>
         <item>latency</item>

@@ -49,6 +49,8 @@ public class PreferenceConfiguration {
     static final String AUTO_RES_PREFER_EXTERNAL_PREF_STRING = "checkbox_auto_res_prefer_external";
     // One-time migration of the old defaults to auto, stored in the base preferences only
     static final String MIGRATED_AUTO_DISPLAY_PREF_STRING = "migrated_auto_display_v120";
+    // One-time move of the old pacing default to "newest", stored in the base preferences only
+    static final String MIGRATED_FRAME_PACING_NEWEST_PREF_STRING = "migrated_frame_pacing_newest_v130";
     private static final String BITRATE_PREF_OLD_STRING = "seekbar_bitrate";
     private static final String METERED_BITRATE_PREF_STRING = "seekbar_metered_bitrate_kbps";
     private static final String ENABLE_ULTRA_LOW_LATENCY_PREF_STRING = "checkbox_ultra_low_latency";
@@ -91,7 +93,7 @@ public class PreferenceConfiguration {
     private static final String FLIP_FACE_BUTTONS_PREF_STRING = "checkbox_flip_face_buttons";
 //    static final String TOUCHSCREEN_TRACKPAD_PREF_STRING = "checkbox_touchscreen_trackpad";
     private static final String LATENCY_TOAST_PREF_STRING = "checkbox_enable_post_stream_toast";
-    private static final String FRAME_PACING_PREF_STRING = "frame_pacing";
+    static final String FRAME_PACING_PREF_STRING = "frame_pacing";
     private static final String LOW_LATENCY_FRAME_BALANCE_PREF_STRING = "pref_low_latency_frame_balance";
     private static final String ABSOLUTE_MOUSE_MODE_PREF_STRING = "checkbox_absolute_mouse_mode";
     private static final String ENABLE_AUDIO_FX_PREF_STRING = "checkbox_enable_audiofx";
@@ -203,7 +205,9 @@ public class PreferenceConfiguration {
     private static final boolean DEFAULT_TOUCHSCREEN_TRACKPAD = true;
     private static final String DEFAULT_AUDIO_CONFIG = "2"; // Stereo
     private static final boolean DEFAULT_LATENCY_TOAST = false;
-    private static final String DEFAULT_FRAME_PACING = "latency";
+    static final String DEFAULT_FRAME_PACING = "newest";
+    // The default of 1.2.2 and earlier, which had no effect because every stream was forced to Balanced
+    static final String LEGACY_DEFAULT_FRAME_PACING = "latency";
     private static final boolean DEFAULT_ABSOLUTE_MOUSE_MODE = false;
     private static final boolean DEFAULT_ENABLE_AUDIO_FX = false;
     private static final boolean DEFAULT_REDUCE_REFRESH_RATE = false;
@@ -243,6 +247,7 @@ public class PreferenceConfiguration {
     public static final int FRAME_PACING_BALANCED = 1;
     public static final int FRAME_PACING_CAP_FPS = 2;
     public static final int FRAME_PACING_MAX_SMOOTHNESS = 3;
+    public static final int FRAME_PACING_NEWEST = 4;
 
     public static final String RES_360P = "640x360";
     public static final String RES_480P = "854x480";
@@ -689,7 +694,10 @@ private static int getFramePacingValue(Context context) {
         }
 
         String str = prefs.getString(FRAME_PACING_PREF_STRING, DEFAULT_FRAME_PACING);
-        if (str.equals("latency")) {
+        if (str.equals("newest")) {
+            return FRAME_PACING_NEWEST;
+        }
+        else if (str.equals("latency")) {
             return FRAME_PACING_MIN_LATENCY;
         }
         else if (str.equals("balanced")) {
@@ -788,6 +796,35 @@ private static int getFramePacingValue(Context context) {
             editor.putString(RESOLUTION_PREF_STRING, RES_AUTO)
                     .putString(FPS_PREF_STRING, FPS_AUTO)
                     .putBoolean(BITRATE_FOLLOWS_RESOLUTION_PREF_STRING, true);
+        }
+        editor.apply();
+        return migrate;
+    }
+
+    /**
+     * Moves installs that still have the old frame pacing default ("latency", or nothing
+     * stored) to "newest", once. Every install has "latency" stored, because the defaults
+     * are written on first run, and that choice had no effect before 1.3.0. Works on the
+     * base preferences only; profile overlays are never migrated. Any other stored mode is
+     * a deliberate choice and is left alone.
+     *
+     * @return true if the stored value was changed
+     */
+    public static boolean migrateFramePacingToNewest(Context context) {
+        return migrateFramePacingToNewest(PreferenceManager.getDefaultSharedPreferences(context));
+    }
+
+    static boolean migrateFramePacingToNewest(SharedPreferences prefs) {
+        if (prefs.getBoolean(MIGRATED_FRAME_PACING_NEWEST_PREF_STRING, false)) {
+            return false;
+        }
+
+        String stored = prefs.getString(FRAME_PACING_PREF_STRING, null);
+        boolean migrate = stored == null || LEGACY_DEFAULT_FRAME_PACING.equals(stored);
+
+        SharedPreferences.Editor editor = prefs.edit().putBoolean(MIGRATED_FRAME_PACING_NEWEST_PREF_STRING, true);
+        if (migrate) {
+            editor.putString(FRAME_PACING_PREF_STRING, DEFAULT_FRAME_PACING);
         }
         editor.apply();
         return migrate;

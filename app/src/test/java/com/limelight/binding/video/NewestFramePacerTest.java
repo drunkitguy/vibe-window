@@ -158,6 +158,14 @@ public class NewestFramePacerTest {
     }
 
     @Test
+    public void dropPercentIsRelativeToReceivedFrames() {
+        assertEquals(0f, NewestFramePacer.dropPercent(0, 0), 0f);
+        assertEquals(0f, NewestFramePacer.dropPercent(5, 0), 0f);
+        assertEquals(0.5f, NewestFramePacer.dropPercent(1, 200), 1e-6f);
+        assertEquals(100f, NewestFramePacer.dropPercent(240, 240), 1e-6f);
+    }
+
+    @Test
     public void everyIndexIsReleasedExactlyOnceUnderTwoThreads() throws Exception {
         final int frames = 10_000;
         final AtomicIntegerArray releases = new AtomicIntegerArray(frames);

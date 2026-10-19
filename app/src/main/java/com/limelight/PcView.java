@@ -169,6 +169,8 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
         PreferenceManager.setDefaultValues(this, R.xml.preferences, false);
         // Move installs still on the old 1080p/120 FPS defaults to Auto, once (base preferences only)
         PreferenceConfiguration.migrateToAutoDisplayDefaults(this);
+        // Move installs still on the old frame pacing default to "newest", once (base preferences only)
+        PreferenceConfiguration.migrateFramePacingToNewest(this);
 
         // Set the correct layout for the PC grid
         pcGridAdapter.updateLayoutWithPreferences(this, PreferenceConfiguration.readPreferences(this));

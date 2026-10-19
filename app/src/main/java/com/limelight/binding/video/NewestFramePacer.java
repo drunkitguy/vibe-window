@@ -105,6 +105,11 @@ public final class NewestFramePacer {
         }
     }
 
+    /** Frames dropped by pacing as a percentage of the frames received, 0 when none were. */
+    public static float dropPercent(long dropped, long received) {
+        return received > 0 ? (float) dropped / received * 100 : 0f;
+    }
+
     public boolean hasPending() {
         synchronized (lock) {
             return pendingIndex >= 0;

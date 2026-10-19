@@ -16,6 +16,7 @@ public class PacingModeResolverTest {
             PreferenceConfiguration.FRAME_PACING_BALANCED,
             PreferenceConfiguration.FRAME_PACING_CAP_FPS,
             PreferenceConfiguration.FRAME_PACING_MAX_SMOOTHNESS,
+            PreferenceConfiguration.FRAME_PACING_NEWEST,
     };
 
     /** The cap-fps block exactly as Game.java had it inline in 1.2.2, for comparison. */
@@ -103,6 +104,19 @@ public class PacingModeResolverTest {
     }
 
     @Test
+    public void newestIsNeverRewritten() {
+        for (int hz = 1; hz <= 240; hz++) {
+            for (float fps : new float[] {24, 30, 48, 60, 90, 120, 144, 240}) {
+                PacingModeResolver.Result r = PacingModeResolver.resolveForDisplay(
+                        PreferenceConfiguration.FRAME_PACING_NEWEST, fps, hz);
+                assertEquals(PreferenceConfiguration.FRAME_PACING_NEWEST, r.framePacing);
+                assertEquals(fps, r.frameRate, 0f);
+                assertNull(r.logMessage);
+            }
+        }
+    }
+
+    @Test
     public void otherModesAreNeverRewritten() {
         for (int mode : ALL_MODES) {
             if (mode == PreferenceConfiguration.FRAME_PACING_CAP_FPS) {
@@ -121,6 +135,7 @@ public class PacingModeResolverTest {
         assertTrue(PacingModeResolver.usesLatestOnlyPath(PreferenceConfiguration.FRAME_PACING_MIN_LATENCY));
         assertFalse(PacingModeResolver.usesLatestOnlyPath(PreferenceConfiguration.FRAME_PACING_MAX_SMOOTHNESS));
         assertFalse(PacingModeResolver.usesLatestOnlyPath(PreferenceConfiguration.FRAME_PACING_CAP_FPS));
+        assertFalse(PacingModeResolver.usesLatestOnlyPath(PreferenceConfiguration.FRAME_PACING_NEWEST));
     }
 
     @Test
@@ -129,5 +144,6 @@ public class PacingModeResolverTest {
         assertEquals("balanced", PacingModeResolver.modeName(PreferenceConfiguration.FRAME_PACING_BALANCED));
         assertEquals("cap-fps", PacingModeResolver.modeName(PreferenceConfiguration.FRAME_PACING_CAP_FPS));
         assertEquals("smoothness", PacingModeResolver.modeName(PreferenceConfiguration.FRAME_PACING_MAX_SMOOTHNESS));
+        assertEquals("newest", PacingModeResolver.modeName(PreferenceConfiguration.FRAME_PACING_NEWEST));
     }
 }

@@ -129,6 +129,21 @@ public class StreamSettingsUiTest {
     }
 
     @Test
+    public void newestFrameIsTheFirstAndDefaultPacingEntry() {
+        StreamSettings.SettingsFragment fragment = launch();
+        ListPreference pacing = fragment.findPreference("frame_pacing");
+        assertNotNull(pacing);
+        assertEquals("newest", pacing.getEntryValues()[0].toString());
+        assertEquals(fragment.getString(R.string.pacing_newest), pacing.getEntries()[0].toString());
+        assertEquals("newest", pacing.getValue());
+        // The legacy mode stays selectable under its new label
+        List<CharSequence> values = Arrays.asList(pacing.getEntryValues());
+        assertTrue(values.contains("latency"));
+        assertEquals(fragment.getString(R.string.pacing_latency),
+                pacing.getEntries()[values.indexOf("latency")].toString());
+    }
+
+    @Test
     public void choosingAutoMakesTheBitrateFollowTheResolution() {
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(
                 ApplicationProvider.getApplicationContext());
