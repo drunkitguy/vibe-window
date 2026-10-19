@@ -820,8 +820,26 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
         return 0;
     }
 
+    // Whether the stream is shown on the primary (built-in) display
+    private boolean isOnPrimaryDisplay() {
+        try {
+            android.view.Display display = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R ?
+                    activity.getDisplay() : activity.getWindowManager().getDefaultDisplay();
+            return display == null || display.getDisplayId() == android.view.Display.DEFAULT_DISPLAY;
+        } catch (Throwable t) {
+            return true;
+        }
+    }
+
     @Override
     public int setup(int format, int width, int height, int redrawRate) {
+        // The newest-frame pacer follows the primary display's vsync
+        int pacing = PacingModeResolver.forDisplay(prefs.framePacing, isOnPrimaryDisplay());
+        if (pacing != prefs.framePacing) {
+            LimeLog.info("Not on the primary display, frame pacing mode: " + PacingModeResolver.modeName(pacing));
+            prefs.framePacing = pacing;
+        }
+
         this.targetFps = (redrawRate > 0 ? redrawRate : 60);
         this.initialWidth = invertResolution ? height : width;
         this.initialHeight = invertResolution ? width : height;

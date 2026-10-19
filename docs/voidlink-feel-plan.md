@@ -174,6 +174,8 @@ Revision in 1.3.1 (after review): the rules above held every frame once a single
 - Android 13 and later (`Choreographer.postVsyncCallback`): each vsync passes the preferred frame timeline (deadline and expected presentation time). A frame decoded before the deadline is released at once with `releaseOutputBuffer(index, expectedPresentationTimeNs)`. A frame decoded after the deadline waits for the next vsync, and a newer frame replaces it (counted as dropped by pacing).
 - Older Android: as above, except that a release at vsync does not mark the interval as presented, and rendered frames use `releaseOutputBuffer(index, System.nanoTime())`.
 
+The pacer follows the Choreographer, which ticks with the primary display's vsync, so the newest-frame mode is only used on the primary display. On an external or virtual display the stream falls back to the legacy immediate path ("latency"), and logcat says so.
+
 With a desired presentation time on every rendered buffer, the display skips an older queued buffer when a newer one is due for the same refresh. The full overlay shows the pacer counters (released immediately, released at vsync, dropped) and the regime, and logcat prints them every 10 seconds ("Newest-frame pacer: ..."). Unit tests pin both regimes, including a clock-drift run.
 
 ### C3. Always apply the Qualcomm low-latency keys on Snapdragon

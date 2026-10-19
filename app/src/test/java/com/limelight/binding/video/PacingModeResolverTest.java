@@ -104,6 +104,20 @@ public class PacingModeResolverTest {
     }
 
     @Test
+    public void newestFallsBackToLatencyOffThePrimaryDisplay() {
+        assertEquals(PreferenceConfiguration.FRAME_PACING_NEWEST,
+                PacingModeResolver.forDisplay(PreferenceConfiguration.FRAME_PACING_NEWEST, true));
+        assertEquals(PreferenceConfiguration.FRAME_PACING_MIN_LATENCY,
+                PacingModeResolver.forDisplay(PreferenceConfiguration.FRAME_PACING_NEWEST, false));
+        for (int mode : ALL_MODES) {
+            if (mode != PreferenceConfiguration.FRAME_PACING_NEWEST) {
+                assertEquals(mode, PacingModeResolver.forDisplay(mode, false));
+                assertEquals(mode, PacingModeResolver.forDisplay(mode, true));
+            }
+        }
+    }
+
+    @Test
     public void newestIsNeverRewritten() {
         for (int hz = 1; hz <= 240; hz++) {
             for (float fps : new float[] {24, 30, 48, 60, 90, 120, 144, 240}) {

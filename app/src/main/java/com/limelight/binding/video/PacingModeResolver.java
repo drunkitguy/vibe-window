@@ -58,6 +58,17 @@ public final class PacingModeResolver {
         return new Result(userMode, fps, null);
     }
 
+    /**
+     * The newest-frame pacer follows the Choreographer, which ticks with the primary
+     * display's vsync. On any other display the legacy immediate path ("latency") is used.
+     */
+    public static int forDisplay(int mode, boolean primaryDisplay) {
+        if (mode == PreferenceConfiguration.FRAME_PACING_NEWEST && !primaryDisplay) {
+            return PreferenceConfiguration.FRAME_PACING_MIN_LATENCY;
+        }
+        return mode;
+    }
+
     /** The pacing mode only, see {@link #resolveForDisplay(int, float, int)}. */
     public static int resolve(int userMode, float fps, int displayHz) {
         return resolveForDisplay(userMode, fps, displayHz).framePacing;
