@@ -54,6 +54,7 @@ public class PreferenceConfiguration {
     private static final String BITRATE_PREF_OLD_STRING = "seekbar_bitrate";
     private static final String METERED_BITRATE_PREF_STRING = "seekbar_metered_bitrate_kbps";
     private static final String ENABLE_ULTRA_LOW_LATENCY_PREF_STRING = "checkbox_ultra_low_latency";
+    private static final String VENDOR_DECODER_KEYS_PREF_STRING = "checkbox_vendor_decoder_keys";
     private static final String ENFORCE_DISPLAY_MODE_PREF_STRING = "checkbox_enforce_display_mode";
     private static final String USE_VIRTUAL_DISPLAY_PREF_STRING = "checkbox_use_virtual_display";
     private static final String WINDOW_ONLY_PREF_STRING = "checkbox_window_only";
@@ -166,6 +167,7 @@ public class PreferenceConfiguration {
     private static final boolean DEFAULT_BITRATE_FOLLOWS_RESOLUTION = true;
     private static final boolean DEFAULT_AUTO_RES_PREFER_EXTERNAL = true;
     private static final boolean DEFAULT_ENABLE_ULTRA_LOW_LATENCY = false;
+    private static final boolean DEFAULT_VENDOR_DECODER_KEYS = true;
     private static final boolean DEFAULT_ENFORCE_DISPLAY_MODE = false;
     private static final boolean DEFAULT_USE_VIRTUAL_DISPLAY = true;
     private static final boolean DEFAULT_WINDOW_ONLY = true;
@@ -267,6 +269,7 @@ public class PreferenceConfiguration {
 //    public String customBitrate;
     public boolean forceTightThresholds = false; // default off
     public boolean enableUltraLowLatency;
+    public boolean vendorDecoderKeys;
     public String customResolution;
     public String customRefreshRate;
     public int meteredBitrate;
@@ -1034,6 +1037,7 @@ private static int getFramePacingValue(Context context) {
         config.useVirtualDisplay = prefs.getBoolean(USE_VIRTUAL_DISPLAY_PREF_STRING, DEFAULT_USE_VIRTUAL_DISPLAY);
         config.windowOnly = prefs.getBoolean(WINDOW_ONLY_PREF_STRING, DEFAULT_WINDOW_ONLY);
         config.enableUltraLowLatency = prefs.getBoolean(ENABLE_ULTRA_LOW_LATENCY_PREF_STRING, DEFAULT_ENABLE_ULTRA_LOW_LATENCY);
+        config.vendorDecoderKeys = prefs.getBoolean(VENDOR_DECODER_KEYS_PREF_STRING, DEFAULT_VENDOR_DECODER_KEYS);
         config.enableSops = prefs.getBoolean(SOPS_PREF_STRING, DEFAULT_SOPS);
         config.playHostAudio = prefs.getBoolean(HOST_AUDIO_PREF_STRING, DEFAULT_HOST_AUDIO);
         config.smallIconMode = prefs.getBoolean(SMALL_ICONS_PREF_STRING, getDefaultSmallMode(context));

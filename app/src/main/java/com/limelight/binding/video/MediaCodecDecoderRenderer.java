@@ -200,6 +200,8 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
     private int numVpsIn;
     private int numFramesIn;
     private int numFramesOut;
+    // Low latency configuration the decoder was configured with (see MediaCodecHelper.describeLowLatencyPath)
+    private String lowLatencyPath = "none";
 
     private int targetFps = 0;
 
@@ -765,7 +767,7 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
 
             MediaFormat mediaFormat = createBaseMediaFormat(mimeType);
             // This will try low latency options until we find one that works (or we give up).
-            boolean newFormat = MediaCodecHelper.setDecoderLowLatencyOptions(mediaFormat, selectedDecoderInfo, prefs.enableUltraLowLatency, tryNumber);
+            boolean newFormat = MediaCodecHelper.setDecoderLowLatencyOptions(mediaFormat, selectedDecoderInfo, prefs.enableUltraLowLatency, prefs.vendorDecoderKeys, tryNumber);
             //todo 色彩格式
 //            MediaCodecInfo.CodecCapabilities codecCapabilities = selectedDecoderInfo.getCapabilitiesForType(mimeType);
 //            int[] colorFormats=codecCapabilities.colorFormats;
@@ -775,6 +777,8 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
             // Throw the underlying codec exception on the last attempt if the caller requested it
             if (tryConfigureDecoder(selectedDecoderInfo, mediaFormat, !newFormat && throwOnCodecError)) {
                 // Success!
+                lowLatencyPath = MediaCodecHelper.describeLowLatencyPath(mediaFormat, newFormat, tryNumber);
+                LimeLog.info("Decoder low-latency path: " + lowLatencyPath + " (try " + tryNumber + ")");
                 break;
             }
 
@@ -1926,6 +1930,7 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
                     }
                     sb.append('\n');
                     sb.append(context.getString(R.string.perf_overlay_decoder, decoder)).append('\n');
+                    sb.append(context.getString(R.string.perf_overlay_decoder_path, lowLatencyPath)).append('\n');
                     sb.append(context.getString(R.string.perf_overlay_incomingfps, fps.receivedFps)).append('\n');
                     sb.append(context.getString(R.string.perf_overlay_renderingfps, fps.renderedFps)).append('\n');
                     if (prefs.framePacing == PreferenceConfiguration.FRAME_PACING_NEWEST) {

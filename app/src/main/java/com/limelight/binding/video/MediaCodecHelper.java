@@ -530,15 +530,49 @@ public class MediaCodecHelper {
                 ) && !isAdreno620;
     }
 
-    public static boolean setDecoderLowLatencyOptions(MediaFormat videoFormat, MediaCodecInfo decoderInfo, boolean ultraLowLatency, int tryNumber) {
+    // Try number of the last vendor-key try for Qualcomm decoders that support FEATURE_LowLatency:
+    // the official low-latency key alone, which is the configuration used before 1.3.0
+    static final int QUALCOMM_SAFE_TRY = 5;
+
+    public static boolean setDecoderLowLatencyOptions(MediaFormat videoFormat, MediaCodecInfo decoderInfo, boolean ultraLowLatency, boolean vendorKeysEnabled, int tryNumber) {
+        boolean featureLowLatency = decoderSupportsAndroidRLowLatency(decoderInfo, videoFormat.getString(MediaFormat.KEY_MIME));
+        return applyLowLatencyOptions(videoFormat, decoderInfo.getName(), featureLowLatency, ultraLowLatency, vendorKeysEnabled, tryNumber);
+    }
+
+    /**
+     * Whether the Qualcomm vendor keys are applied on top of FEATURE_LowLatency. Before 1.3.0
+     * such decoders only got "low-latency" unless "Ultra low latency" was on.
+     */
+    static boolean usesQualcommVendorPath(String decoderName, boolean featureLowLatency, boolean ultraLowLatency, boolean vendorKeysEnabled) {
+        return vendorKeysEnabled && !ultraLowLatency && featureLowLatency &&
+                isDecoderInList(qualcommDecoderPrefixes, decoderName);
+    }
+
+    /**
+     * Sets the low latency options for one configuration try.
+     *
+     * @return true if this try set options, false if the ladder is exhausted
+     */
+    static boolean applyLowLatencyOptions(MediaFormat videoFormat, String decoderName, boolean featureLowLatency,
+                                          boolean ultraLowLatency, boolean vendorKeysEnabled, int tryNumber) {
         // Options here should be tried in the order of most to least risky. The decoder will use
         // the first MediaFormat that doesn't fail in configure().
 
         boolean setNewOption = false;
 
+        boolean qualcommVendorPath = usesQualcommVendorPath(decoderName, featureLowLatency, ultraLowLatency, vendorKeysEnabled);
+        if (qualcommVendorPath && tryNumber >= QUALCOMM_SAFE_TRY) {
+            if (tryNumber == QUALCOMM_SAFE_TRY) {
+                // Every vendor-key try failed: fall back to exactly the pre-1.3.0 configuration
+                videoFormat.setInteger("low-latency", 1);
+                return true;
+            }
+            return false;
+        }
+
 //derflacco
         // NVIDIA Tegra extra low-latency toggles
-        if (isNvidiaDecoder(decoderInfo.getName())) {
+        if (isNvidiaDecoder(decoderName)) {
             safeSet(videoFormat, "media.low-latency.enable", 1);
             safeSet(videoFormat, "vendor.low-latency.enable", 1);
             safeSet(videoFormat, "disable-output-reorder", 1);
@@ -551,8 +585,10 @@ public class MediaCodecHelper {
             setNewOption = true;
 
             // If this decoder officially supports FEATURE_LowLatency, we will just use that alone
-            // for try 0. Otherwise, we'll include it as best effort with other options.
-            if (!ultraLowLatency && decoderSupportsAndroidRLowLatency(decoderInfo, videoFormat.getString(MediaFormat.KEY_MIME))) {
+            // for try 0. Otherwise, we'll include it as best effort with other options. Qualcomm
+            // decoders also get their vendor keys unless the user turned them off; their last
+            // try (QUALCOMM_SAFE_TRY) is "low-latency" alone again.
+            if (!ultraLowLatency && featureLowLatency && !qualcommVendorPath) {
                 return true;
             }
 
@@ -579,7 +615,7 @@ public class MediaCodecHelper {
         }
 
         if (tryNumber < 3) {
-            if (MediaCodecHelper.decoderSupportsMaxOperatingRate(decoderInfo.getName())) {
+            if (MediaCodecHelper.decoderSupportsMaxOperatingRate(decoderName)) {
                 videoFormat.setInteger(MediaFormat.KEY_OPERATING_RATE, Short.MAX_VALUE);
                 setNewOption = true;
             }
@@ -599,7 +635,7 @@ public class MediaCodecHelper {
             // Try vendor-specific low latency options
             //
             // NOTE: Update knownVendorLowLatencyOptions if you modify this code!
-            if (isDecoderInList(qualcommDecoderPrefixes, decoderInfo.getName())) {
+            if (isDecoderInList(qualcommDecoderPrefixes, decoderName)) {
                 // Examples of Qualcomm's vendor extensions for Snapdragon 845:
                 // https://cs.android.com/android/platform/superproject/+/master:hardware/qcom/sdm845/media/mm-video-v4l2/vidc/vdec/src/omx_vdec_extensions.hpp
                 // https://cs.android.com/android/_/android/platform/hardware/qcom/sm8150/media/+/0621ceb1c1b19564999db8293574a0e12952ff6c
@@ -607,8 +643,8 @@ public class MediaCodecHelper {
                 // We will first try both, then try vendor.qti-ext-dec-low-latency.enable alone if that fails
                 if (tryNumber < 4) {
                     // Adjust picture-order flag: 0 for OMX.qcom (disable reordering), 1 for C2.*
-                    boolean __isOmxQcom = decoderInfo.getName() != null &&
-                            decoderInfo.getName().toLowerCase(java.util.Locale.US).startsWith("omx.qcom");
+                    boolean __isOmxQcom = decoderName != null &&
+                            decoderName.toLowerCase(java.util.Locale.US).startsWith("omx.qcom");
                     safeSet(videoFormat, "vendor.qti-ext-dec-picture-order.enable", __isOmxQcom ? 0 : 1);
                     setNewOption = true;
                 }
@@ -633,7 +669,7 @@ public class MediaCodecHelper {
 //                    videoFormat.setInteger("vendor.mtk.ext.dolby.vision.cpu-boost", 1);
 //                    videoFormat.setInteger("vendor.mtk.vdec.bq.guard.interval.time.value", 2);
 //                    videoFormat.setInteger("vendor.mtk.vdec.buffer.fetch.timeout.ms.value", 2);
-            else if (isDecoderInList(mtkDecoderPrefixes, decoderInfo.getName())) {
+            else if (isDecoderInList(mtkDecoderPrefixes, decoderName)) {
                 if (tryNumber < 4) {
                     // --- PRESET: MTK Low-Latency (safe & balanced, no duplicates) ---
 
@@ -672,7 +708,7 @@ public class MediaCodecHelper {
                 setNewOption = true;
             }
 
-            else if (isDecoderInList(kirinDecoderPrefixes, decoderInfo.getName())) {
+            else if (isDecoderInList(kirinDecoderPrefixes, decoderName)) {
                 if (tryNumber < 4) {
                     // Kirin low latency options
                     // https://developer.huawei.com/consumer/cn/forum/topic/0202325564295980115
@@ -681,14 +717,14 @@ public class MediaCodecHelper {
                     setNewOption = true;
                 }
             }
-            else if (isDecoderInList(exynosDecoderPrefixes, decoderInfo.getName())) {
+            else if (isDecoderInList(exynosDecoderPrefixes, decoderName)) {
                 if (tryNumber < 4) {
                     // Exynos low latency option for H.264 decoder
                     videoFormat.setInteger("vendor.rtc-ext-dec-low-latency.enable", 1);
                     setNewOption = true;
                 }
             }
-            else if (isDecoderInList(amlogicDecoderPrefixes, decoderInfo.getName())) {
+            else if (isDecoderInList(amlogicDecoderPrefixes, decoderName)) {
                 if (tryNumber < 4) {
                     // Amlogic low latency vendor extension
                     // https://github.com/codewalkerster/android_vendor_amlogic_common_prebuilt_libstagefrighthw/commit/41fefc4e035c476d58491324a5fe7666bfc2989e
@@ -699,6 +735,29 @@ public class MediaCodecHelper {
         }
 
         return setNewOption;
+    }
+
+    /**
+     * A short name for the low latency configuration a successful configure() used, for the
+     * log and the performance overlay: "qti-full" (all Qualcomm keys at try 0),
+     * "qti-ladder-N" (Qualcomm keys at a later try), "android-feature-only" ("low-latency"
+     * alone), "ladder-N" (other vendor or generic options) or "none".
+     */
+    static String describeLowLatencyPath(MediaFormat format, boolean newFormat, int tryNumber) {
+        if (!newFormat) {
+            return "none";
+        }
+        if (format.containsKey("vendor.qti-ext-dec-low-latency.enable")) {
+            return tryNumber == 0 ? "qti-full" : "qti-ladder-" + tryNumber;
+        }
+        if (format.containsKey("low-latency") &&
+                !format.containsKey("vdec-lowlatency") &&
+                !format.containsKey("vendor.low-latency.enable") &&
+                !format.containsKey(MediaFormat.KEY_OPERATING_RATE) &&
+                !format.containsKey(MediaFormat.KEY_PRIORITY)) {
+            return "android-feature-only";
+        }
+        return "ladder-" + tryNumber;
     }
 
     public static boolean decoderSupportsFusedIdrFrame(MediaCodecInfo decoderInfo, String mimeType) {
