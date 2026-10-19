@@ -185,6 +185,16 @@ jobs:
             - The screen keeps the refresh rate chosen for the stream: the video decoder no longer asks for the stream's frame rate on its own, which could drop a 120 Hz screen to 60 Hz during a 60 FPS stream.
             - Performance overlay: the full overlay shows the frame pacing mode (with the share of frames dropped by pacing in the new mode) and the decoder's low-latency path; the lite overlay adds rendered over incoming frame rate ("R/I").
 
+            **Fixes in 1.3.1**
+
+            - "Lowest latency (newest frame)" no longer gets stuck holding every frame for one refresh after a single late frame (about 4 ms of added latency at 120 FPS). On Android 13 and later it uses the display's frame timeline: a frame decoded before the next presentation deadline is shown at that presentation, and only a frame that missed it waits for the next refresh. The full overlay shows how many frames went out at once, at the next refresh or were dropped, and the rendering frame rate counts the frames the display actually showed. On an external display the stream uses "Lowest latency (legacy)", because the pacer follows the built-in display.
+            - Snapdragon vendor decoder keys: the official low-latency setting stays on at every step, the output fence settings are the first to go if the decoder refuses a configuration, and the maximum decoder clock is no longer requested (less battery and heat). "Use vendor decoder low-latency keys" still switches all of it off.
+            - "Reduce refresh rate" (Settings, Advanced Settings, Show more) applies again with "Lowest latency (newest frame)" and "Lowest latency (legacy)", as it did with Balanced.
+            - The Warp Drive entries now use the "Lowest latency (legacy)" path (before 1.3.0 they ran as Balanced); the overlay and log name them, for example "latency+warp2".
+            - The 1.3 setting changes also reach installs that only start streams from home screen shortcuts.
+            - The renamed "Lowest latency (legacy)" and "Keep Wi-Fi awake while streaming" settings show in English in every language until they are translated again, instead of their old translated names.
+            - The Wi-Fi keepalive runs on its own thread instead of the main thread and stops sending if the device leaves Wi-Fi during a stream.
+
             **New in 1.2**
 
             - Auto resolution and frame rate: "Auto (match display)" is the new first entry and default of the Video resolution and Video frame rate lists. At every stream start it uses the size and refresh rate of the screen the app is on, keeps that screen's shape, and stays within common host limits (up to 4K) and what the video decoder reports. On phones, Auto uses the full panel, including cutout areas. With "Use Virtual Display" on, the host creates its virtual display at that size, so the picture fills the screen. When the built-in screen is mirrored to a larger external monitor or TV, Auto uses that display's resolution; turn off "Use the external display's resolution when mirrored" (Video Settings, Show more) to stream at the built-in screen's size. The settings rows show what Auto currently resolves to.
