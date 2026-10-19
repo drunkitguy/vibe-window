@@ -69,6 +69,16 @@ public final class PacingModeResolver {
         return mode;
     }
 
+    /**
+     * Whether "Reduce refresh rate" applies in this mode. Smoothest and Cap FPS always allow a
+     * lower refresh rate on their own; Balanced, newest and latency do when the user asks.
+     */
+    public static boolean honoursReduceRefreshRate(int mode) {
+        return mode == PreferenceConfiguration.FRAME_PACING_BALANCED ||
+                mode == PreferenceConfiguration.FRAME_PACING_NEWEST ||
+                mode == PreferenceConfiguration.FRAME_PACING_MIN_LATENCY;
+    }
+
     /** The pacing mode only, see {@link #resolveForDisplay(int, float, int)}. */
     public static int resolve(int userMode, float fps, int displayHz) {
         return resolveForDisplay(userMode, fps, displayHz).framePacing;
@@ -84,6 +94,24 @@ public final class PacingModeResolver {
         return mode != PreferenceConfiguration.FRAME_PACING_MAX_SMOOTHNESS &&
                 mode != PreferenceConfiguration.FRAME_PACING_CAP_FPS &&
                 mode != PreferenceConfiguration.FRAME_PACING_NEWEST;
+    }
+
+    /**
+     * The mode name with the warp factor, for logs and the overlay: "latency+warp" for a
+     * factor of 2 and "latency+warp2" for 4 (the warp entries use the latency path).
+     */
+    public static String modeName(int mode, int warpFactor) {
+        String name = modeName(mode);
+        if (warpFactor == 2) {
+            return name + "+warp";
+        }
+        else if (warpFactor == 4) {
+            return name + "+warp2";
+        }
+        else if (warpFactor > 0) {
+            return name + "+warp(" + warpFactor + ")";
+        }
+        return name;
     }
 
     /** The stored preference value of a mode, for logs and the overlay. */

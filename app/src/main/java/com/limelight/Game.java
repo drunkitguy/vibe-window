@@ -696,12 +696,12 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
                 // Intermediate: more responsive than Balanced but not 0 µs
                 decoderRenderer.setPreferLowerDelays(true);
                 decoderRenderer.setPreferLowerDelaysTimeoutUs(500);  // 0.5 ms
-                LimeLog.info("PreferLowerDelays: preferLowerDelays=true, timeout=500us");
+                LimeLog.info("Latency profile: preferLowerDelays=true, timeout=500us");
             } else {
                 // Balanced default
                 decoderRenderer.setPreferLowerDelays(false);
                 decoderRenderer.setPreferLowerDelaysTimeoutUs(2000); // 2 ms
-                LimeLog.info("Balanced: preferLowerDelays=false, timeout=2000us");
+                LimeLog.info("Latency profile: preferLowerDelays=false, timeout=2000us");
             }
         } catch (Throwable ignored) {}
 
@@ -760,7 +760,7 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
         }
         prefConfig.framePacing = pacing.framePacing;
         float chosenFrameRate = pacing.frameRate;
-        LimeLog.info("Frame pacing mode: " + PacingModeResolver.modeName(prefConfig.framePacing));
+        LimeLog.info("Frame pacing mode: " + PacingModeResolver.modeName(prefConfig.framePacing, prefConfig.framePacingWarpFactor));
 
         if (prefConfig.framePacingWarpFactor > 0) {
             chosenFrameRate *= prefConfig.framePacingWarpFactor;
@@ -1436,7 +1436,7 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
     private boolean mayReduceRefreshRate() {
         return prefConfig.framePacing == PreferenceConfiguration.FRAME_PACING_CAP_FPS ||
                 prefConfig.framePacing == PreferenceConfiguration.FRAME_PACING_MAX_SMOOTHNESS ||
-                (prefConfig.framePacing == PreferenceConfiguration.FRAME_PACING_BALANCED && prefConfig.reduceRefreshRate);
+                (PacingModeResolver.honoursReduceRefreshRate(prefConfig.framePacing) && prefConfig.reduceRefreshRate);
     }
 
     public boolean isOnExternalDisplay() {

@@ -2039,7 +2039,7 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
                     }
                     else {
                         sb.append(context.getString(R.string.perf_overlay_pacing_mode,
-                                PacingModeResolver.modeName(prefs.framePacing))).append('\n');
+                                PacingModeResolver.modeName(prefs.framePacing, prefs.framePacingWarpFactor))).append('\n');
                     }
                     sb.append(context.getString(R.string.perf_overlay_netdrops,
                             (float)lastTwo.framesLost / lastTwo.totalFrames * 100)).append('\n');

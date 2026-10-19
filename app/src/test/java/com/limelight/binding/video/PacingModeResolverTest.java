@@ -153,6 +153,23 @@ public class PacingModeResolverTest {
     }
 
     @Test
+    public void reduceRefreshRateAppliesToBalancedNewestAndLatency() {
+        assertTrue(PacingModeResolver.honoursReduceRefreshRate(PreferenceConfiguration.FRAME_PACING_BALANCED));
+        assertTrue(PacingModeResolver.honoursReduceRefreshRate(PreferenceConfiguration.FRAME_PACING_NEWEST));
+        assertTrue(PacingModeResolver.honoursReduceRefreshRate(PreferenceConfiguration.FRAME_PACING_MIN_LATENCY));
+        assertFalse(PacingModeResolver.honoursReduceRefreshRate(PreferenceConfiguration.FRAME_PACING_CAP_FPS));
+        assertFalse(PacingModeResolver.honoursReduceRefreshRate(PreferenceConfiguration.FRAME_PACING_MAX_SMOOTHNESS));
+    }
+
+    @Test
+    public void modeNamesShowTheWarpFactor() {
+        assertEquals("latency", PacingModeResolver.modeName(PreferenceConfiguration.FRAME_PACING_MIN_LATENCY, 0));
+        assertEquals("latency+warp", PacingModeResolver.modeName(PreferenceConfiguration.FRAME_PACING_MIN_LATENCY, 2));
+        assertEquals("latency+warp2", PacingModeResolver.modeName(PreferenceConfiguration.FRAME_PACING_MIN_LATENCY, 4));
+        assertEquals("newest", PacingModeResolver.modeName(PreferenceConfiguration.FRAME_PACING_NEWEST, 0));
+    }
+
+    @Test
     public void modeNamesMatchTheStoredValues() {
         assertEquals("latency", PacingModeResolver.modeName(PreferenceConfiguration.FRAME_PACING_MIN_LATENCY));
         assertEquals("balanced", PacingModeResolver.modeName(PreferenceConfiguration.FRAME_PACING_BALANCED));
