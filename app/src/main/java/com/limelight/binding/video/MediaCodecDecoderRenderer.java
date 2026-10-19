@@ -1896,6 +1896,8 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
                     sb.append(context.getString(R.string.perf_overlay_lite_netdrops,(float)lastTwo.framesLost / lastTwo.totalFrames * 100));
                     sb.append("\t FPS：");
                     sb.append(context.getString(R.string.perf_overlay_lite_fps, fps.totalFps));
+                    sb.append(" ");
+                    sb.append(context.getString(R.string.perf_overlay_lite_rendered_incoming, fps.renderedFps, fps.receivedFps));
                     if(Stereo3DRenderer.isActive) {
                         sb.append(" ");
                         sb.append(context.getString(R.string.perf_overlay_ai_fps));
