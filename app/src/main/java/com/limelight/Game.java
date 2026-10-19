@@ -54,6 +54,7 @@ import com.limelight.utils.ServerHelper;
 import com.limelight.utils.ShortcutHelper;
 import com.limelight.utils.SpinnerDialog;
 import com.limelight.utils.UiHelper;
+import com.limelight.utils.WifiKeepalive;
 
 import android.annotation.SuppressLint;
 import android.annotation.TargetApi;
@@ -332,12 +333,8 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
         }
     };
 
-    private final Runnable backgroundPing = () -> {
-        if (connected) {
-            timerHandler.postDelayed(Game.this.backgroundPing, NetHelper.keepalivePeriodMs(prefConfig.fps));
-            MoonBridge.sendEmptyPayload();
-        }
-    };
+    // Wi-Fi keepalive on its own thread; it ends itself once the stream is disconnected
+    private final WifiKeepalive backgroundPing = new WifiKeepalive(MoonBridge::sendEmptyPayload, () -> connected);
 
     @SuppressLint({"MissingInflatedId", "ClickableViewAccessibility"})
     @Override
@@ -3705,7 +3702,7 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
                 hideSystemUi(1000);
 
                 if (prefConfig.preventPacketLoss && NetHelper.isActiveNetworkWifi(Game.this)) {
-                    timerHandler.postDelayed(backgroundPing, 1000);
+                    backgroundPing.start(Game.this, prefConfig.fps, 1000);
                 }
             }
         });

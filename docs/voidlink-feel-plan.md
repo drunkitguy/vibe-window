@@ -259,6 +259,8 @@ Risks:
 
 Kill switch: the preference.
 
+Revision in 1.3.1 (after review): the keepalive runs on its own background thread (`utils/WifiKeepalive`) instead of the main thread's timer, re-checks once a second that the active network is still Wi-Fi (sending nothing otherwise), and ends itself when the stream disconnects. The period is unchanged.
+
 ### C5. Remove the conflicting setFrameRate call
 
 Where:
