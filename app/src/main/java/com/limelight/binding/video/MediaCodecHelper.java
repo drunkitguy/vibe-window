@@ -532,7 +532,7 @@ public class MediaCodecHelper {
 
     // Try number of the last vendor-key try for Qualcomm decoders that support FEATURE_LowLatency:
     // the official low-latency key alone, which is the configuration used before 1.3.0
-    static final int QUALCOMM_SAFE_TRY = 5;
+    static final int QUALCOMM_SAFE_TRY = 4;
 
     public static boolean setDecoderLowLatencyOptions(MediaFormat videoFormat, MediaCodecInfo decoderInfo, boolean ultraLowLatency, boolean vendorKeysEnabled, int tryNumber) {
         boolean featureLowLatency = decoderSupportsAndroidRLowLatency(decoderInfo, videoFormat.getString(MediaFormat.KEY_MIME));
@@ -560,14 +560,8 @@ public class MediaCodecHelper {
 
         boolean setNewOption = false;
 
-        boolean qualcommVendorPath = usesQualcommVendorPath(decoderName, featureLowLatency, ultraLowLatency, vendorKeysEnabled);
-        if (qualcommVendorPath && tryNumber >= QUALCOMM_SAFE_TRY) {
-            if (tryNumber == QUALCOMM_SAFE_TRY) {
-                // Every vendor-key try failed: fall back to exactly the pre-1.3.0 configuration
-                videoFormat.setInteger("low-latency", 1);
-                return true;
-            }
-            return false;
+        if (usesQualcommVendorPath(decoderName, featureLowLatency, ultraLowLatency, vendorKeysEnabled)) {
+            return applyQualcommVendorLadder(videoFormat, decoderName, tryNumber);
         }
 
 //derflacco
@@ -585,10 +579,10 @@ public class MediaCodecHelper {
             setNewOption = true;
 
             // If this decoder officially supports FEATURE_LowLatency, we will just use that alone
-            // for try 0. Otherwise, we'll include it as best effort with other options. Qualcomm
-            // decoders also get their vendor keys unless the user turned them off; their last
-            // try (QUALCOMM_SAFE_TRY) is "low-latency" alone again.
-            if (!ultraLowLatency && featureLowLatency && !qualcommVendorPath) {
+            // for try 0. Otherwise, we'll include it as best effort with other options. (Qualcomm
+            // decoders with the feature use applyQualcommVendorLadder() unless the user turned
+            // the vendor keys off.)
+            if (!ultraLowLatency && featureLowLatency) {
                 return true;
             }
 
@@ -735,6 +729,46 @@ public class MediaCodecHelper {
         }
 
         return setNewOption;
+    }
+
+    /**
+     * The low latency options for Qualcomm decoders that support FEATURE_LowLatency, with the
+     * vendor keys on. "low-latency" is set on every try. The output fence keys go first, then
+     * vdec-lowlatency and the picture order key, then the Qualcomm low latency key, ending with
+     * "low-latency" alone (the pre-1.3.0 configuration). The maximum operating rate is not
+     * used here (battery and heat); "Ultra low latency" still sets it through the general ladder.
+     *
+     * @return true if this try set options, false if the ladder is exhausted
+     */
+    static boolean applyQualcommVendorLadder(MediaFormat videoFormat, String decoderName, int tryNumber) {
+        if (tryNumber > QUALCOMM_SAFE_TRY) {
+            return false;
+        }
+
+        videoFormat.setInteger("low-latency", 1);
+        if (tryNumber == QUALCOMM_SAFE_TRY) {
+            return true;
+        }
+
+        // Try 0 to 3: the Qualcomm decoder low latency key
+        videoFormat.setInteger("vendor.qti-ext-dec-low-latency.enable", 1);
+
+        if (tryNumber <= 2) {
+            // Picture order: 0 for OMX.qcom (disable reordering), 1 for C2.*
+            boolean isOmxQcom = decoderName != null &&
+                    decoderName.toLowerCase(java.util.Locale.US).startsWith("omx.qcom");
+            safeSet(videoFormat, "vendor.qti-ext-dec-picture-order.enable", isOmxQcom ? 0 : 1);
+        }
+        if (tryNumber <= 1) {
+            videoFormat.setInteger("vdec-lowlatency", 1);
+        }
+        if (tryNumber == 0) {
+            // Software output fences, the most important flag on recent Snapdragons
+            videoFormat.setInteger("vendor.qti-ext-output-sw-fence-enable.value", 1); // Snapdragon 8 Gen 2
+            videoFormat.setInteger("vendor.qti-ext-output-fence.enable", 1); // Snapdragon 8s Gen 3 and Elite
+            videoFormat.setInteger("vendor.qti-ext-output-fence.fence_type", 1); // 1 = sw
+        }
+        return true;
     }
 
     /**

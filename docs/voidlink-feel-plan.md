@@ -218,6 +218,8 @@ Risks:
 
 Kill switch: `checkbox_vendor_decoder_keys`.
 
+Revision in 1.3.1 (after review): the Qualcomm vendor path has its own ladder, and `low-latency=1` stays on every try. Try 0: `low-latency`, `vdec-lowlatency`, picture order, `vendor.qti-ext-dec-low-latency.enable` and the three output-fence keys. Try 1 drops the fence keys, try 2 also drops `vdec-lowlatency`, try 3 keeps only `low-latency` and the Qualcomm low-latency key, and try 4 is `low-latency` alone (the pre-1.3.0 configuration). `KEY_OPERATING_RATE=Short.MAX_VALUE` is no longer set on this path (battery and heat); "Ultra low latency" still sets it through the general ladder.
+
 ### C4. Wi-Fi keepalive on by default
 
 Where:

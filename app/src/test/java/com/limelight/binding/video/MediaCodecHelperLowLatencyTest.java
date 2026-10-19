@@ -58,19 +58,62 @@ public class MediaCodecHelperLowLatencyTest {
         assertFalse(f.containsKey("vendor.qti-ext-dec-picture-order.enable"));
     }
 
+    private static final String QTI_FENCE = "vendor.qti-ext-output-fence.enable";
+    private static final String QTI_FENCE_TYPE = "vendor.qti-ext-output-fence.fence_type";
+    private static final String QTI_PICTURE_ORDER = "vendor.qti-ext-dec-picture-order.enable";
+
     @Test
     public void qualcommWithFeatureGetsVendorKeysAtTryZero() {
         boolean[] r = new boolean[1];
         MediaFormat f = apply(QTI, true, false, true, 0, r);
         assertTrue(r[0]);
         assertEquals(1, f.getInteger("low-latency"));
+        assertEquals(1, f.getInteger("vdec-lowlatency"));
         assertEquals(1, f.getInteger(QTI_LOW_LATENCY));
         assertEquals(1, f.getInteger(QTI_SW_FENCE));
-        assertEquals(1, f.getInteger("vendor.qti-ext-output-fence.enable"));
-        assertEquals(1, f.getInteger("vendor.qti-ext-output-fence.fence_type"));
-        assertEquals(1, f.getInteger("vendor.qti-ext-dec-picture-order.enable"));
-        assertEquals(Short.MAX_VALUE, f.getInteger(MediaFormat.KEY_OPERATING_RATE));
+        assertEquals(1, f.getInteger(QTI_FENCE));
+        assertEquals(1, f.getInteger(QTI_FENCE_TYPE));
+        assertEquals(1, f.getInteger(QTI_PICTURE_ORDER));
+        // No maximum operating rate without Ultra low latency (battery and heat)
+        assertFalse(f.containsKey(MediaFormat.KEY_OPERATING_RATE));
+        assertFalse(f.containsKey(MediaFormat.KEY_PRIORITY));
         assertEquals("qti-full", MediaCodecHelper.describeLowLatencyPath(f, r[0], 0));
+    }
+
+    @Test
+    public void vendorLadderKeepsLowLatencyAndDropsFencesFirst() {
+        boolean[] r = new boolean[1];
+
+        MediaFormat f = apply(QTI, true, false, true, 1, r);
+        assertTrue(r[0]);
+        assertFalse(f.containsKey(QTI_SW_FENCE));
+        assertFalse(f.containsKey(QTI_FENCE));
+        assertFalse(f.containsKey(QTI_FENCE_TYPE));
+        assertTrue(f.containsKey("vdec-lowlatency"));
+        assertTrue(f.containsKey(QTI_PICTURE_ORDER));
+        assertTrue(f.containsKey(QTI_LOW_LATENCY));
+        assertEquals("qti-ladder-1", MediaCodecHelper.describeLowLatencyPath(f, r[0], 1));
+
+        f = apply(QTI, true, false, true, 2, r);
+        assertTrue(r[0]);
+        assertFalse(f.containsKey(QTI_SW_FENCE));
+        assertFalse(f.containsKey("vdec-lowlatency"));
+        assertTrue(f.containsKey(QTI_PICTURE_ORDER));
+        assertTrue(f.containsKey(QTI_LOW_LATENCY));
+
+        f = apply(QTI, true, false, true, 3, r);
+        assertTrue(r[0]);
+        assertFalse(f.containsKey(QTI_PICTURE_ORDER));
+        assertFalse(f.containsKey("vdec-lowlatency"));
+        assertTrue(f.containsKey(QTI_LOW_LATENCY));
+        assertEquals("qti-ladder-3", MediaCodecHelper.describeLowLatencyPath(f, r[0], 3));
+
+        for (int t = 0; t <= MediaCodecHelper.QUALCOMM_SAFE_TRY; t++) {
+            f = apply(QTI, true, false, true, t, r);
+            assertTrue("try " + t, r[0]);
+            assertEquals("try " + t, 1, f.getInteger("low-latency"));
+            assertFalse("try " + t, f.containsKey(MediaFormat.KEY_OPERATING_RATE));
+        }
     }
 
     @Test
@@ -80,6 +123,27 @@ public class MediaCodecHelperLowLatencyTest {
         assertTrue(r[0]);
         assertOnlyLowLatency(f);
         assertEquals("android-feature-only", MediaCodecHelper.describeLowLatencyPath(f, r[0], 0));
+    }
+
+    @Test
+    public void vendorKeysOffKeepsTheOldLadder() {
+        boolean[] r = new boolean[1];
+        // Before 1.3.0, try 1 dropped "low-latency" and used the full Qualcomm set
+        MediaFormat f = apply(QTI, true, false, false, 1, r);
+        assertTrue(r[0]);
+        assertFalse(f.containsKey("low-latency"));
+        assertEquals(1, f.getInteger("vdec-lowlatency"));
+        assertEquals(Short.MAX_VALUE, f.getInteger(MediaFormat.KEY_OPERATING_RATE));
+        assertEquals(1, f.getInteger(QTI_LOW_LATENCY));
+        assertEquals(1, f.getInteger(QTI_SW_FENCE));
+
+        f = apply(QTI, true, false, false, 4, r);
+        assertTrue(r[0]);
+        assertTrue(f.containsKey(QTI_LOW_LATENCY));
+        assertFalse(f.containsKey(QTI_PICTURE_ORDER));
+
+        apply(QTI, true, false, false, 5, r);
+        assertFalse(r[0]);
     }
 
     @Test
@@ -96,35 +160,15 @@ public class MediaCodecHelperLowLatencyTest {
     public void safeTryIsTodaysConfigurationAndEndsTheLadder() {
         boolean[] r = new boolean[1];
         MediaFormat f = apply(QTI, true, false, true, MediaCodecHelper.QUALCOMM_SAFE_TRY, r);
-        assertEquals(5, MediaCodecHelper.QUALCOMM_SAFE_TRY);
+        assertEquals(4, MediaCodecHelper.QUALCOMM_SAFE_TRY);
         assertTrue(r[0]);
         assertOnlyLowLatency(f);
-        assertEquals("android-feature-only", MediaCodecHelper.describeLowLatencyPath(f, r[0], 5));
+        assertEquals("android-feature-only", MediaCodecHelper.describeLowLatencyPath(f, r[0], 4));
 
-        f = apply(QTI, true, false, true, 6, r);
+        f = apply(QTI, true, false, true, 5, r);
         assertFalse(r[0]);
         assertFalse(f.containsKey("low-latency"));
-        assertEquals("none", MediaCodecHelper.describeLowLatencyPath(f, r[0], 6));
-    }
-
-    @Test
-    public void vendorLadderDropsOptionsTryByTry() {
-        boolean[] r = new boolean[1];
-        for (int t = 1; t <= 4; t++) {
-            MediaFormat on = apply(QTI, true, false, true, t, r);
-            assertTrue(r[0]);
-            assertTrue(on.containsKey(QTI_LOW_LATENCY));
-            assertFalse(on.containsKey("low-latency"));
-            assertEquals("qti-ladder-" + t, MediaCodecHelper.describeLowLatencyPath(on, r[0], t));
-
-            // Tries 1 to 4 are the same as before 1.3.0
-            MediaFormat off = apply(QTI, true, false, false, t, r);
-            assertTrue(r[0]);
-            assertEquals(off.toString(), on.toString());
-        }
-        // The old ladder ended after try 4
-        apply(QTI, true, false, false, 5, r);
-        assertFalse(r[0]);
+        assertEquals("none", MediaCodecHelper.describeLowLatencyPath(f, r[0], 5));
     }
 
     @Test
