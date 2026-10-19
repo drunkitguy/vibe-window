@@ -107,7 +107,9 @@ public class PreferenceConfiguration {
     private static final String FULL_SCREEN_PREF_STRING = "checkbox_full_screen";
 
     private static final String ENABLE_RUMBLE_PREF_STRING = "checkbox_enable_rumble";
-    private static final String PREVENT_PACKET_LOSS_PREF_STRING = "checkbox_prevent_packet_loss";
+    static final String PREVENT_PACKET_LOSS_PREF_STRING = "checkbox_prevent_packet_loss";
+    // One-time switch of the Wi-Fi keepalive to on, stored in the base preferences only
+    static final String MIGRATED_PREVENT_PACKET_LOSS_PREF_STRING = "migrated_prevent_packet_loss_v130";
 
     private static final String LIST_ONSCREEN_KEYBOARD_ALIGN_MODE = "list_onscreen_keyboard_align_mode";
 
@@ -219,7 +221,7 @@ public class PreferenceConfiguration {
     private static final boolean DEFAULT_GAMEPAD_MOTION_FALLBACK = false;
     private static final boolean DEFAULT_FORCE_MOTION_SENSORS_FALLBACK = false;
     private static final boolean DEFAULT_ENABLE_RUMBLE = true;
-    private static final boolean DEFAULT_PREVENT_PACKET_LOSS = false;
+    private static final boolean DEFAULT_PREVENT_PACKET_LOSS = true;
     private static final boolean DEFAULT_GAMEPAD_ENABLE_BATTERY_REPORT = true;
     private static final boolean DEFAULT_FORCE_QWERTY = true;
     private static final boolean DEFAULT_SEND_META_ON_PHYSICAL_BACK = false;
@@ -761,6 +763,34 @@ private static int getFramePacingValue(Context context) {
         // https://www.nvidia.com/en-us/geforce/forums/notifications/comment/155192/
         return Build.MANUFACTURER.equalsIgnoreCase("NVIDIA") &&
                 Build.FINGERPRINT.contains("PPR1.180610.011/4079208_2235.1395");
+    }
+
+    /**
+     * Turns the Wi-Fi keepalive ("Keep Wi-Fi awake while streaming") on for installs that
+     * have it stored off, once. Before 1.3.0 the stored off came from the defaults written on
+     * first run, not from a choice. Works on the base preferences only; profile overlays are
+     * never migrated. Turning it off after this runs is kept.
+     *
+     * @return true if the stored value was changed
+     */
+    public static boolean migratePreventPacketLossToOn(Context context) {
+        return migratePreventPacketLossToOn(PreferenceManager.getDefaultSharedPreferences(context));
+    }
+
+    static boolean migratePreventPacketLossToOn(SharedPreferences prefs) {
+        if (prefs.getBoolean(MIGRATED_PREVENT_PACKET_LOSS_PREF_STRING, false)) {
+            return false;
+        }
+
+        boolean migrate = prefs.contains(PREVENT_PACKET_LOSS_PREF_STRING) &&
+                !prefs.getBoolean(PREVENT_PACKET_LOSS_PREF_STRING, true);
+
+        SharedPreferences.Editor editor = prefs.edit().putBoolean(MIGRATED_PREVENT_PACKET_LOSS_PREF_STRING, true);
+        if (migrate) {
+            editor.putBoolean(PREVENT_PACKET_LOSS_PREF_STRING, true);
+        }
+        editor.apply();
+        return migrate;
     }
 
     /**

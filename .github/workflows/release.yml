@@ -90,7 +90,8 @@ jobs:
             --tests 'com.limelight.ui.*' \
             --tests 'com.limelight.preferences.*' \
             --tests 'com.limelight.PcViewUiTest' \
-            --tests 'com.limelight.binding.video.*'
+            --tests 'com.limelight.binding.video.*' \
+            --tests 'com.limelight.utils.*'
 
       - name: Build release APK
         env:

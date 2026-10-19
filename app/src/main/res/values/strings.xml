@@ -331,8 +331,8 @@
     <string name="summary_enable_hdr">Stream HDR when the game and PC GPU support it. HDR requires a GPU with HEVC Main 10 encoding support.</string>
     <string name="title_full_range">Force full range video (Experimental)</string>
     <string name="summary_full_range">This will cause loss of detail in light and dark areas if your device doesn\'t properly display full range video content.</string>
-    <string name="title_prevent_packet_loss">Prevent Packet Loss</string>
-    <string name="summary_prevent_packet_loss">For devices that have packet loss for unknown reasons, you can try to enable this option.</string>
+    <string name="title_prevent_packet_loss">Keep Wi-Fi awake while streaming</string>
+    <string name="summary_prevent_packet_loss">Sends a tiny packet every frame so the Wi-Fi radio does not doze. Only used on Wi-Fi.</string>
     <string name="title_enable_perf_overlay">Show performance stats while streaming</string>
     <string name="summary_enable_perf_overlay">Display real-time stream performance information while streaming</string>
     <string name="title_enable_post_stream_toast">Show latency message after streaming</string>

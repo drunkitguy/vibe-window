@@ -47,6 +47,7 @@ import com.limelight.ui.StreamContainer;
 import com.limelight.utils.Dialog;
 import com.limelight.utils.ExternalDisplayControlActivity;
 import com.limelight.utils.MouseModeOption;
+import com.limelight.utils.NetHelper;
 import com.limelight.utils.PanZoomHandler;
 import com.limelight.utils.PerformanceDataTracker;
 import com.limelight.utils.ServerHelper;
@@ -333,7 +334,7 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
 
     private final Runnable backgroundPing = () -> {
         if (connected) {
-            timerHandler.postDelayed(Game.this.backgroundPing, 20);
+            timerHandler.postDelayed(Game.this.backgroundPing, NetHelper.keepalivePeriodMs(prefConfig.fps));
             MoonBridge.sendEmptyPayload();
         }
     };
@@ -3703,7 +3704,7 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
 
                 hideSystemUi(1000);
 
-                if (prefConfig.preventPacketLoss) {
+                if (prefConfig.preventPacketLoss && NetHelper.isActiveNetworkWifi(Game.this)) {
                     timerHandler.postDelayed(backgroundPing, 1000);
                 }
             }

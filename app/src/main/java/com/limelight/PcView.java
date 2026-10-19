@@ -167,6 +167,8 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
 
         // Set default preferences if we've never been run
         PreferenceManager.setDefaultValues(this, R.xml.preferences, false);
+        // Turn the Wi-Fi keepalive on for installs that only had the old default stored, once
+        PreferenceConfiguration.migratePreventPacketLossToOn(this);
         // Move installs still on the old 1080p/120 FPS defaults to Auto, once (base preferences only)
         PreferenceConfiguration.migrateToAutoDisplayDefaults(this);
         // Move installs still on the old frame pacing default to "newest", once (base preferences only)
