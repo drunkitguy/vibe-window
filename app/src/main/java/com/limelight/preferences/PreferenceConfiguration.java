@@ -766,6 +766,17 @@ private static int getFramePacingValue(Context context) {
     }
 
     /**
+     * Runs every one-time migration of the base preferences: the Wi-Fi keepalive, Auto
+     * resolution and the frame pacing default. Each runs at most once per install, so this is
+     * safe to call from every entry point (the PC list and shortcut launches).
+     */
+    public static void runOneTimeMigrations(Context context) {
+        migratePreventPacketLossToOn(context);
+        migrateToAutoDisplayDefaults(context);
+        migrateFramePacingToNewest(context);
+    }
+
+    /**
      * Turns the Wi-Fi keepalive ("Keep Wi-Fi awake while streaming") on for installs that
      * have it stored off, once. Before 1.3.0 the stored off came from the defaults written on
      * first run, not from a choice. Works on the base preferences only; profile overlays are

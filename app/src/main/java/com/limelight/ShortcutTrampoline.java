@@ -354,6 +354,8 @@ public class ShortcutTrampoline extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        // Shortcut launches may never open the PC list, so run the one-time migrations here too
+        PreferenceConfiguration.runOneTimeMigrations(this);
         prefConfig = PreferenceConfiguration.readPreferences(this);
 
         UiHelper.notifyNewRootView(this);

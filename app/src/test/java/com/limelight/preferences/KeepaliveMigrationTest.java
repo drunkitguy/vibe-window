@@ -106,6 +106,21 @@ public class KeepaliveMigrationTest {
     }
 
     @Test
+    public void oneTimeMigrationsRunEveryMigrationOnce() {
+        prefs.edit().putBoolean(KEY, false).putString("frame_pacing", "latency").commit();
+        PreferenceConfiguration.runOneTimeMigrations(context);
+        assertTrue(prefs.getBoolean(KEY, false));
+        assertEquals("newest", prefs.getString("frame_pacing", null));
+        assertTrue(prefs.getBoolean("migrated_auto_display_v120", false));
+
+        // A second entry point (a shortcut launch) changes nothing
+        prefs.edit().putBoolean(KEY, false).putString("frame_pacing", "latency").commit();
+        PreferenceConfiguration.runOneTimeMigrations(context);
+        assertFalse(prefs.getBoolean(KEY, true));
+        assertEquals("latency", prefs.getString("frame_pacing", null));
+    }
+
+    @Test
     public void freshInstallDefaultsToOn() {
         PreferenceManager.setDefaultValues(context, com.limelight.R.xml.preferences, true);
         assertTrue(prefs.getBoolean(KEY, false));
