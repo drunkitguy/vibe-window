@@ -192,6 +192,8 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
     });
     // Frame timeline callback for the newest-frame mode on Android 13 and later, else null
     private Object newestFrameTimelineCallback;
+    // True when rendered frames are counted from the codec's frame-rendered callback
+    private volatile boolean countPresentedFrames;
     private long lastPacerLogMs;
     private static final int OUTPUT_BUFFER_QUEUE_LIMIT = 2;
     private long lastRenderedFrameTimeNanos;
@@ -619,6 +621,18 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
         LimeLog.info("Configuring with format: "+format);
 
         videoDecoder.configure(format, renderTarget, null, 0);
+
+        // The newest-frame mode counts the frames the display actually showed (Android 6.0 and
+        // later), so a buffer the display skipped for a newer one does not count as rendered
+        if (prefs.framePacing == PreferenceConfiguration.FRAME_PACING_NEWEST && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            videoDecoder.setOnFrameRenderedListener(new MediaCodec.OnFrameRenderedListener() {
+                @Override
+                public void onFrameRendered(MediaCodec mediaCodec, long presentationTimeUs, long renderTimeNanos) {
+                    activeWindowVideoStats.totalFramesRendered++;
+                }
+            }, null);
+            countPresentedFrames = true;
+        }
 
         try {
             MediaCodecInfo __info = (android.os.Build.VERSION.SDK_INT >= 21) ? videoDecoder.getCodecInfo() : null;
@@ -1090,7 +1104,9 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
                 videoDecoder.releaseOutputBuffer(index, false);
             }
             if (render) {
-                activeWindowVideoStats.totalFramesRendered++;
+                if (!countPresentedFrames) {
+                    activeWindowVideoStats.totalFramesRendered++;
+                }
             }
             else {
                 activeWindowVideoStats.framesDroppedByPacing++;
