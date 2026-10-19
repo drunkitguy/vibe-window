@@ -174,7 +174,16 @@ jobs:
 
             Install: download the APK below, open it on the device and allow installs from your browser or file manager. Verify with the `.sha256` file if you like.
 
-            Defaults: Auto resolution and frame rate (match the display), virtual display on, "Show only the app window" on.
+            Defaults: Auto resolution and frame rate (match the display), virtual display on, "Show only the app window" on, frame pacing "Lowest latency (newest frame)", vendor decoder low-latency keys on, "Keep Wi-Fi awake while streaming" on.
+
+            **New in 1.3**
+
+            - New default frame pacing, "Lowest latency (newest frame)": at most one frame per screen refresh, always the newest one. A frame that arrives while nothing has been shown since the last refresh goes out at once; when two arrive within one refresh, the older one is dropped. Installs still on the old default switch to it once; any other choice, and every profile, is kept. To go back to the 1.2 behaviour, open Settings, Video Settings, Show more, Video frame pacing and pick Balanced.
+            - The frame pacing setting takes effect. Up to 1.2.2 every stream used Balanced, whatever was selected. Balanced is unchanged; "Prefer lowest latency" is now called "Lowest latency (legacy)"; "Prefer smoothest video" and "Balanced with FPS limit" now pace as their names say.
+            - Snapdragon decoders get Qualcomm's low-latency decoder settings, which were skipped before unless "Ultra Low Latency" was on. If a configuration is refused, the app steps down through smaller sets and ends with the 1.2 configuration. If video fails to start or shows corruption, turn off "Use vendor decoder low-latency keys" (Settings, Video Settings, Show more), which is on by default, to return to the 1.2 configuration.
+            - "Keep Wi-Fi awake while streaming" (formerly "Prevent Packet Loss") is now on by default and runs only on Wi-Fi. It sends a tiny packet about once per frame (every 8 ms at 120 FPS, 16 ms at 60 FPS) so the Wi-Fi radio does not doze. Installs that had it off switch on once. To go back, turn it off in Settings, Advanced Settings, Show more; that choice is kept.
+            - The screen keeps the refresh rate chosen for the stream: the video decoder no longer asks for the stream's frame rate on its own, which could drop a 120 Hz screen to 60 Hz during a 60 FPS stream.
+            - Performance overlay: the full overlay shows the frame pacing mode (with the share of frames dropped by pacing in the new mode) and the decoder's low-latency path; the lite overlay adds rendered over incoming frame rate ("R/I").
 
             **New in 1.2**
 
