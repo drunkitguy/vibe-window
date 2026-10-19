@@ -186,10 +186,13 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
     // Pacer for the newest-frame mode; it stays empty in every other mode
     private final NewestFramePacer newestPacer = new NewestFramePacer(new NewestFramePacer.Releaser() {
         @Override
-        public void release(int index, boolean render) {
-            releaseForNewestPacer(index, render);
+        public void release(int index, boolean render, long presentTimeNs) {
+            releaseForNewestPacer(index, render, presentTimeNs);
         }
     });
+    // Frame timeline callback for the newest-frame mode on Android 13 and later, else null
+    private Object newestFrameTimelineCallback;
+    private long lastPacerLogMs;
     private static final int OUTPUT_BUFFER_QUEUE_LIMIT = 2;
     private long lastRenderedFrameTimeNanos;
     private HandlerThread choreographerHandlerThread;
@@ -1076,9 +1079,16 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
     }
 
     // Called by newestPacer with its lock held, on the renderer or the Choreographer thread
-    private void releaseForNewestPacer(int index, boolean render) {
+    private void releaseForNewestPacer(int index, boolean render, long presentTimeNs) {
         try {
-            videoDecoder.releaseOutputBuffer(index, render);
+            if (render) {
+                // The desired presentation time lets the display skip an older buffer that is
+                // still queued when a newer one is due for the same refresh
+                videoDecoder.releaseOutputBuffer(index, presentTimeNs);
+            }
+            else {
+                videoDecoder.releaseOutputBuffer(index, false);
+            }
             if (render) {
                 activeWindowVideoStats.totalFramesRendered++;
             }
@@ -1105,8 +1115,9 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
         }
 
         if (prefs.framePacing == PreferenceConfiguration.FRAME_PACING_NEWEST) {
-            // Present the pending frame, or arm the immediate path for this interval
-            newestPacer.onVsync(frameTimeNanos);
+            // Before Android 13 (no frame timeline): present the waiting frame and arm the
+            // immediate path for this interval
+            newestPacer.onVsync(System.nanoTime());
 
             // Attempt codec recovery even if we have nothing to render right now
             doCodecRecoveryIfRequired(CR_FLAG_CHOREOGRAPHER);
@@ -1187,14 +1198,48 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
         choreographerHandlerThread = new HandlerThread("Video - Choreographer", Process.THREAD_PRIORITY_URGENT_DISPLAY);
         choreographerHandlerThread.start();
 
+        if (prefs.framePacing == PreferenceConfiguration.FRAME_PACING_NEWEST) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                newestFrameTimelineCallback = new NewestFrameTimelineCallback();
+            }
+            LimeLog.info("Newest-frame pacer: " + (newestFrameTimelineCallback != null ? "frame timeline" : "vsync only"));
+        }
+
         // Start the frame callbacks
         choreographerHandler = new Handler(choreographerHandlerThread.getLooper());
         choreographerHandler.post(new Runnable() {
             @Override
             public void run() {
-                Choreographer.getInstance().postFrameCallback(MediaCodecDecoderRenderer.this);
+                if (newestFrameTimelineCallback != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    Choreographer.getInstance().postVsyncCallback((Choreographer.VsyncCallback) newestFrameTimelineCallback);
+                }
+                else {
+                    Choreographer.getInstance().postFrameCallback(MediaCodecDecoderRenderer.this);
+                }
             }
         });
+    }
+
+    // Newest-frame mode on Android 13 and later: hands the preferred frame timeline (deadline
+    // and expected presentation time) of every vsync to the pacer
+    @androidx.annotation.RequiresApi(Build.VERSION_CODES.TIRAMISU)
+    private final class NewestFrameTimelineCallback implements Choreographer.VsyncCallback {
+        @Override
+        public void onVsync(Choreographer.FrameData data) {
+            if (stopping) {
+                return;
+            }
+
+            Choreographer.FrameTimeline timeline = data.getPreferredFrameTimeline();
+            newestPacer.onFrameTimeline(timeline.getDeadlineNanos(),
+                    timeline.getExpectedPresentationTimeNanos(), System.nanoTime());
+
+            // Attempt codec recovery even if we have nothing to render right now
+            doCodecRecoveryIfRequired(CR_FLAG_CHOREOGRAPHER);
+
+            // Request the next vsync
+            Choreographer.getInstance().postVsyncCallback(this);
+        }
     }
 
     private void startRendererThread()
@@ -1270,7 +1315,7 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
                                 // received frames, so it is recorded for every frame here
                                 updateDecodeLatencyStats(info.presentationTimeUs);
 
-                                newestPacer.onDecodedFrame(outIndex, info.presentationTimeUs);
+                                newestPacer.onDecodedFrame(outIndex, info.presentationTimeUs, System.nanoTime());
                             }
                             else if (outIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
                                 LimeLog.info("Output format changed");
@@ -1680,6 +1725,9 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
 
                     // Deregister the frame callback (if registered)
                     Choreographer.getInstance().removeFrameCallback(MediaCodecDecoderRenderer.this);
+                    if (newestFrameTimelineCallback != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        Choreographer.getInstance().removeVsyncCallback((Choreographer.VsyncCallback) newestFrameTimelineCallback);
+                    }
                 }
             });
         }
@@ -1937,6 +1985,10 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
                         sb.append(context.getString(R.string.perf_overlay_pacing,
                                 PacingModeResolver.modeName(prefs.framePacing),
                                 NewestFramePacer.dropPercent(lastTwo.framesDroppedByPacing, lastTwo.totalFramesReceived))).append('\n');
+                        sb.append(context.getString(R.string.perf_overlay_pacer_counts,
+                                newestPacer.getReleasedImmediately(), newestPacer.getReleasedAtVsync(),
+                                newestPacer.getDroppedByPacing(),
+                                newestPacer.usesFrameTimeline() ? "frame timeline" : "vsync only")).append('\n');
                     }
                     else {
                         sb.append(context.getString(R.string.perf_overlay_pacing_mode,
@@ -1977,6 +2029,14 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
                     minDecodeTime = decodeTimeMs;
                     minDecodeTimeFullLog = fullLog;
                 }
+            }
+            if (prefs.framePacing == PreferenceConfiguration.FRAME_PACING_NEWEST &&
+                    SystemClock.uptimeMillis() >= lastPacerLogMs + 10000) {
+                lastPacerLogMs = SystemClock.uptimeMillis();
+                LimeLog.info("Newest-frame pacer: immediate=" + newestPacer.getReleasedImmediately() +
+                        " atVsync=" + newestPacer.getReleasedAtVsync() +
+                        " dropped=" + newestPacer.getDroppedByPacing() +
+                        " regime=" + (newestPacer.usesFrameTimeline() ? "frame timeline" : "vsync only"));
             }
             globalVideoStats.add(activeWindowVideoStats);
             lastWindowVideoStats.copy(activeWindowVideoStats);

@@ -169,6 +169,13 @@ Risks:
 
 Kill switch: choose Balanced. The 1.3.1 fallback is to change the default back.
 
+Revision in 1.3.1 (after review): the rules above held every frame once a single frame had waited, because a release at vsync marked the new interval as presented. At 120 fps on a 120 Hz panel with a slightly drifting host clock, the stream then stayed in the hold state and gained about 4 ms on average (up to 8.3 ms) for nothing. The pacer now runs in one of two regimes:
+
+- Android 13 and later (`Choreographer.postVsyncCallback`): each vsync passes the preferred frame timeline (deadline and expected presentation time). A frame decoded before the deadline is released at once with `releaseOutputBuffer(index, expectedPresentationTimeNs)`. A frame decoded after the deadline waits for the next vsync, and a newer frame replaces it (counted as dropped by pacing).
+- Older Android: as above, except that a release at vsync does not mark the interval as presented, and rendered frames use `releaseOutputBuffer(index, System.nanoTime())`.
+
+With a desired presentation time on every rendered buffer, the display skips an older queued buffer when a newer one is due for the same refresh. The full overlay shows the pacer counters (released immediately, released at vsync, dropped) and the regime, and logcat prints them every 10 seconds ("Newest-frame pacer: ..."). Unit tests pin both regimes, including a clock-drift run.
+
 ### C3. Always apply the Qualcomm low-latency keys on Snapdragon
 
 Where:
