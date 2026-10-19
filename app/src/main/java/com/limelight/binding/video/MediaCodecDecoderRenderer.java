@@ -617,8 +617,6 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
 
         videoDecoder.configure(format, renderTarget, null, 0);
 
-        try { applySurfaceFrameRate(renderTarget, targetFps); } catch (Throwable ignored) {}
-
         try {
             MediaCodecInfo __info = (android.os.Build.VERSION.SDK_INT >= 21) ? videoDecoder.getCodecInfo() : null;
             String __name = (__info != null) ? __info.getName() : "<unknown>";
@@ -2500,20 +2498,6 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
         }
     }
 
-
-    private void applySurfaceFrameRate(android.view.Surface surface, int targetFps) {
-        if (surface == null) return;
-        try {
-            // API 30+ supports Surface.setFrameRate; for older, attempt View-based call elsewhere.
-            if (android.os.Build.VERSION.SDK_INT >= 30) {
-                surface.setFrameRate((float) targetFps,
-                        android.view.Surface.FRAME_RATE_COMPATIBILITY_DEFAULT);
-                LimeLog.info("Applied Surface frame rate: " + targetFps + " Hz");
-            }
-        } catch (Throwable t) {
-            // best-effort
-        }
-    }
 
 
 
