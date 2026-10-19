@@ -89,7 +89,8 @@ jobs:
             --tests 'com.limelight.LayoutInflationTest' \
             --tests 'com.limelight.ui.*' \
             --tests 'com.limelight.preferences.*' \
-            --tests 'com.limelight.PcViewUiTest'
+            --tests 'com.limelight.PcViewUiTest' \
+            --tests 'com.limelight.binding.video.*'
 
       - name: Build release APK
         env:

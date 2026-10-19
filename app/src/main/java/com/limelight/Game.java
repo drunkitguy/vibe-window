@@ -27,6 +27,7 @@ import com.limelight.binding.input.virtual_controller.keyboard.KeyBoardLayoutCon
 import com.limelight.binding.video.CrashListener;
 import com.limelight.binding.video.MediaCodecDecoderRenderer;
 import com.limelight.binding.video.MediaCodecHelper;
+import com.limelight.binding.video.PacingModeResolver;
 import com.limelight.binding.video.PerfOverlayListener;
 import com.limelight.nvstream.NvConnection;
 import com.limelight.nvstream.NvConnectionListener;
@@ -694,14 +695,12 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
                 // Intermediate: more responsive than Balanced but not 0 µs
                 decoderRenderer.setPreferLowerDelays(true);
                 decoderRenderer.setPreferLowerDelaysTimeoutUs(500);  // 0.5 ms
-                prefConfig.framePacing = PreferenceConfiguration.FRAME_PACING_BALANCED;
-                LimeLog.info("PreferLowerDelays: preferLowerDelays=true, timeout=500us, pacing=BALANCED");
+                LimeLog.info("PreferLowerDelays: preferLowerDelays=true, timeout=500us");
             } else {
                 // Balanced default
                 decoderRenderer.setPreferLowerDelays(false);
                 decoderRenderer.setPreferLowerDelaysTimeoutUs(2000); // 2 ms
-                prefConfig.framePacing = PreferenceConfiguration.FRAME_PACING_BALANCED;
-                LimeLog.info("Balanced: preferLowerDelays=false, timeout=2000us, pacing=BALANCED");
+                LimeLog.info("Balanced: preferLowerDelays=false, timeout=2000us");
             }
         } catch (Throwable ignored) {}
 
@@ -754,24 +753,13 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
         // If the user requested frame pacing using a capped FPS, we will need to change our
         // desired FPS setting here in accordance with the active display refresh rate.
         int roundedRefreshRate = Math.round(displayRefreshRate);
-        float chosenFrameRate = prefConfig.fps;
-        if (prefConfig.framePacing == PreferenceConfiguration.FRAME_PACING_CAP_FPS) {
-            if (prefConfig.fps >= roundedRefreshRate) {
-                if (prefConfig.fps > roundedRefreshRate + 3) {
-                    // Use frame drops when rendering above the screen frame rate
-                    prefConfig.framePacing = PreferenceConfiguration.FRAME_PACING_BALANCED;
-                    LimeLog.info("Using drop mode for FPS > Hz");
-                } else if (roundedRefreshRate <= 49) {
-                    // Let's avoid clearly bogus refresh rates and fall back to legacy rendering
-                    prefConfig.framePacing = PreferenceConfiguration.FRAME_PACING_BALANCED;
-                    LimeLog.info("Bogus refresh rate: " + roundedRefreshRate);
-                }
-                else {
-                    chosenFrameRate = roundedRefreshRate - 1;
-                    LimeLog.info("Adjusting FPS target for screen to " + chosenFrameRate);
-                }
-            }
+        PacingModeResolver.Result pacing = PacingModeResolver.resolveForDisplay(prefConfig.framePacing, prefConfig.fps, roundedRefreshRate);
+        if (pacing.logMessage != null) {
+            LimeLog.info(pacing.logMessage);
         }
+        prefConfig.framePacing = pacing.framePacing;
+        float chosenFrameRate = pacing.frameRate;
+        LimeLog.info("Frame pacing mode: " + PacingModeResolver.modeName(prefConfig.framePacing));
 
         if (prefConfig.framePacingWarpFactor > 0) {
             chosenFrameRate *= prefConfig.framePacingWarpFactor;

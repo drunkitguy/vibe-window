@@ -1206,11 +1206,14 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
                 double ewmaDecodeToPresentNs   = periodNs * 0.7;
                 double ewmaJitterNs            = periodNs * 0.1;
 
+                // Smoothest and Cap FPS never drop frames, so they skip the unpaced latest-only path
+                final boolean latestOnlyAllowed = PacingModeResolver.usesLatestOnlyPath(prefs.framePacing);
+
                 BufferInfo info = new BufferInfo();
                 long lastOutputNs = System.nanoTime();
                 while (!stopping) {
                     /* LATEST_ONLY_LOW_LATENCY */
-                    if (!preferLowerDelays) {
+                    if (!preferLowerDelays && latestOnlyAllowed) {
                         try {
                             android.media.MediaCodec.BufferInfo __tmpInfo = new android.media.MediaCodec.BufferInfo();
                             int __idx = videoDecoder.dequeueOutputBuffer(__tmpInfo, 0);
