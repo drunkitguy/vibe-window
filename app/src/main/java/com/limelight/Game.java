@@ -333,8 +333,8 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
         }
     };
 
-    // Wi-Fi keepalive on its own thread; it ends itself once the stream is disconnected
-    private final WifiKeepalive backgroundPing = new WifiKeepalive(MoonBridge::sendEmptyPayload, () -> connected);
+    // Wi-Fi keepalive on its own thread; stopped (and waited for) before the connection stops
+    private final WifiKeepalive backgroundPing = new WifiKeepalive(MoonBridge::sendEmptyPayload);
 
     @SuppressLint({"MissingInflatedId", "ClickableViewAccessibility"})
     @Override
@@ -1692,6 +1692,7 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
 
         instance = null;
         timerHandler.removeCallbacksAndMessages(null);
+        backgroundPing.stopAndWait();
 
         if (prefConfig.enableFullExDisplay) handleDisplayRemoved();
 
@@ -3448,6 +3449,9 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
 
             // Update GameManager state to indicate we're no longer in game
             UiHelper.notifyStreamEnded(this);
+
+            // No keepalive may be sent while or after the connection stops
+            backgroundPing.stopAndWait();
 
             // Stop may take a few hundred ms to do some network I/O to tell
             // the server we're going away and clean up. Let it run in a separate

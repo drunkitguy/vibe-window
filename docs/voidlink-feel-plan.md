@@ -263,6 +263,8 @@ Kill switch: the preference.
 
 Revision in 1.3.1 (after review): the keepalive runs on its own background thread (`utils/WifiKeepalive`) instead of the main thread's timer, re-checks once a second that the active network is still Wi-Fi (sending nothing otherwise), and ends itself when the stream disconnects. The period is unchanged.
 
+Revision in 1.3.2: the keepalive has its own active flag and `stopAndWait()`, which Game calls in `stopConnection()` before the connection-stop thread starts (and in `onDestroy()`). It waits for a send in progress, and nothing is sent after it returns. The thread runs at display priority.
+
 ### C5. Remove the conflicting setFrameRate call
 
 Where:

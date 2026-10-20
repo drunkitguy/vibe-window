@@ -16,7 +16,8 @@ import org.robolectric.shadows.ShadowNetworkCapabilities;
 import org.robolectric.shadows.ShadowSystemClock;
 
 import java.time.Duration;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.Assert.assertEquals;
@@ -31,14 +32,13 @@ public class WifiKeepaliveTest {
     private Context context;
     private ConnectivityManager connMgr;
     private final AtomicInteger sent = new AtomicInteger();
-    private final AtomicBoolean active = new AtomicBoolean(true);
     private WifiKeepalive keepalive;
 
     @Before
     public void setUp() {
         context = ApplicationProvider.getApplicationContext();
         connMgr = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
-        keepalive = new WifiKeepalive(sent::incrementAndGet, active::get);
+        keepalive = new WifiKeepalive(sent::incrementAndGet);
     }
 
     private void setActiveTransport(int transport) {
@@ -50,7 +50,7 @@ public class WifiKeepaliveTest {
     }
 
     @Test
-    public void sendsOnWifiAndStopsWhenTheStreamEnds() {
+    public void sendsOnWifiAndNeverAfterStop() {
         setActiveTransport(NetworkCapabilities.TRANSPORT_WIFI);
         // A long first delay keeps the background thread idle; ticks are driven directly
         keepalive.start(context, 120, 60_000);
@@ -61,10 +61,51 @@ public class WifiKeepaliveTest {
         assertTrue(keepalive.tickOnce());
         assertEquals(2, sent.get());
 
-        active.set(false);
-        assertFalse(keepalive.tickOnce());
+        keepalive.stopAndWait();
         assertFalse(keepalive.isRunning());
+        assertFalse(keepalive.tickOnce());
         assertEquals(2, sent.get());
+    }
+
+    @Test
+    public void stopWaitsForASendInProgress() throws Exception {
+        setActiveTransport(NetworkCapabilities.TRANSPORT_WIFI);
+        final CountDownLatch sending = new CountDownLatch(1);
+        final CountDownLatch release = new CountDownLatch(1);
+        final AtomicInteger blockingSends = new AtomicInteger();
+        final WifiKeepalive blocking = new WifiKeepalive(() -> {
+            blockingSends.incrementAndGet();
+            sending.countDown();
+            try {
+                release.await(10, TimeUnit.SECONDS);
+            } catch (InterruptedException ignored) {
+            }
+        });
+        blocking.start(context, 120, 60_000);
+
+        Thread ticker = new Thread(blocking::tickOnce);
+        ticker.start();
+        assertTrue(sending.await(5, TimeUnit.SECONDS));
+
+        final CountDownLatch stopped = new CountDownLatch(1);
+        Thread stopper = new Thread(() -> {
+            blocking.stopAndWait();
+            stopped.countDown();
+        });
+        stopper.start();
+
+        // The send is still in progress, so stopAndWait() must not return yet
+        assertFalse(stopped.await(300, TimeUnit.MILLISECONDS));
+
+        release.countDown();
+        assertTrue(stopped.await(5, TimeUnit.SECONDS));
+        ticker.join(5000);
+        stopper.join(5000);
+
+        // No tick sends after the stop
+        assertFalse(blocking.tickOnce());
+        assertEquals(1, blockingSends.get());
+        assertFalse(blocking.isRunning());
     }
 
     @Test
@@ -88,18 +129,21 @@ public class WifiKeepaliveTest {
         ShadowSystemClock.advanceBy(Duration.ofMillis(WifiKeepalive.WIFI_RECHECK_MS + 1));
         assertTrue(keepalive.tickOnce());
         assertEquals(2, sent.get());
-        keepalive.stop();
+        keepalive.stopAndWait();
         assertFalse(keepalive.isRunning());
     }
 
     @Test
-    public void startingTwiceKeepsOneThread() {
+    public void startingTwiceKeepsOneThreadAndStopIsRepeatable() {
         setActiveTransport(NetworkCapabilities.TRANSPORT_WIFI);
         keepalive.start(context, 120, 60_000);
         keepalive.start(context, 30, 60_000);
         assertEquals(8, keepalive.getPeriodMs());
-        keepalive.stop();
-        keepalive.stop();
+        keepalive.stopAndWait();
+        keepalive.stopAndWait();
         assertFalse(keepalive.isRunning());
+
+        // Stopping a keepalive that never started is harmless
+        new WifiKeepalive(sent::incrementAndGet).stopAndWait();
     }
 }
