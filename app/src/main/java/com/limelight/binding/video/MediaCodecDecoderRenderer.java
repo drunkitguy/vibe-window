@@ -202,6 +202,8 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
     // runs on its own thread and adds to presentedFrames; the stats thread folds that in
     private volatile boolean countPresentedFrames;
     private final AtomicInteger presentedFrames = new AtomicInteger();
+    // Share of timeline-scheduled frames shown later than requested (to tune the pacer's margin)
+    private final PresentLatenessTracker presentLateness = new PresentLatenessTracker();
     private HandlerThread frameRenderedThread;
     private Handler frameRenderedHandler;
     private long lastPacerLogMs;
@@ -647,8 +649,15 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
                 @Override
                 public void onFrameRendered(MediaCodec mediaCodec, long presentationTimeUs, long renderTimeNanos) {
                     presentedFrames.incrementAndGet();
+                    presentLateness.onRendered(presentationTimeUs, renderTimeNanos);
                 }
             }, frameRenderedHandler);
+            newestPacer.setScheduleListener(new NewestFramePacer.ScheduleListener() {
+                @Override
+                public void onScheduled(long ptsUs, long presentTimeNs) {
+                    presentLateness.onScheduled(ptsUs, presentTimeNs);
+                }
+            });
             countPresentedFrames = true;
         }
 
@@ -899,6 +908,7 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
                 nextInputBufferIndex = -1;
                 outputBufferQueue.clear();
                 newestPacer.clear();
+                presentLateness.clear();
 
                 // If we just need a flush, do so now with all threads quiesced.
                 if (codecRecoveryType.get() == CR_RECOVERY_TYPE_FLUSH) {
@@ -2084,6 +2094,10 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
                                 newestPacer.getReleasedImmediately(), newestPacer.getReleasedAtVsync(),
                                 newestPacer.getDroppedByPacing(), newestPacer.getReleasedWithoutTimeline(),
                                 newestPacer.usesFrameTimeline() ? "frame timeline" : "vsync only")).append('\n');
+                        if (presentLateness.getMeasured() > 0) {
+                            sb.append(context.getString(R.string.perf_overlay_present_late,
+                                    presentLateness.getLatePercent(), presentLateness.getMeasured())).append('\n');
+                        }
                     }
                     else {
                         sb.append(context.getString(R.string.perf_overlay_pacing_mode,
@@ -2132,6 +2146,7 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
                         " atVsync=" + newestPacer.getReleasedAtVsync() +
                         " dropped=" + newestPacer.getDroppedByPacing() +
                         " withoutTimeline=" + newestPacer.getReleasedWithoutTimeline() +
+                        " shownLate=" + presentLateness.getLate() + "/" + presentLateness.getMeasured() +
                         " regime=" + (newestPacer.usesFrameTimeline() ? "frame timeline" : "vsync only"));
             }
             globalVideoStats.add(activeWindowVideoStats);

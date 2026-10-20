@@ -27,6 +27,13 @@ public class PerfOverlayStringsTest {
     }
 
     @Test
+    public void fullModeShowsTheLateShare() {
+        Context context = ApplicationProvider.getApplicationContext();
+        assertEquals("Shown later than requested: 1.50% of 2000 frames",
+                context.getString(R.string.perf_overlay_present_late, 1.5f, 2000L));
+    }
+
+    @Test
     public void fullModeShowsThePacerCounters() {
         Context context = ApplicationProvider.getApplicationContext();
         assertEquals("Pacer since start: 1200 immediate, 34 at vsync, 5 dropped, 2 without timeline (frame timeline)",

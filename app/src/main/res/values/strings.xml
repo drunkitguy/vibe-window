@@ -132,6 +132,7 @@
     <string name="perf_overlay_renderingfps">Rendering frame rate: %1$.2f FPS</string>
     <string name="perf_overlay_pacing">Frame pacing: %1$s, dropped by pacing: %2$.2f%%</string>
     <string name="perf_overlay_pacing_mode">Frame pacing: %1$s</string>
+    <string name="perf_overlay_present_late">Shown later than requested: %1$.2f%% of %2$d frames</string>
     <string name="perf_overlay_pacer_counts">Pacer since start: %1$d immediate, %2$d at vsync, %3$d dropped, %4$d without timeline (%5$s)</string>
     <string name="perf_overlay_hostprocessinglatency">Host processing latency min/max/average: %1$.1f/%2$.1f/%3$.1f ms</string>
     <string name="perf_overlay_netdrops">Frames dropped by your network connection: %1$.2f%%</string>

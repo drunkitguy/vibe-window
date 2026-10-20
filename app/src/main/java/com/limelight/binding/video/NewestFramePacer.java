@@ -47,8 +47,14 @@ public final class NewestFramePacer {
         void release(int index, boolean render, long presentTimeNs);
     }
 
+    /** Told about every frame released for a frame timeline, before it is released. */
+    public interface ScheduleListener {
+        void onScheduled(long ptsUs, long presentTimeNs);
+    }
+
     private final Object lock = new Object();
     private final Releaser releaser;
+    private volatile ScheduleListener scheduleListener;
 
     private int pendingIndex = -1;
     private long pendingPtsUs;
@@ -74,6 +80,11 @@ public final class NewestFramePacer {
         this.releaser = releaser;
     }
 
+    /** Sets the listener for frames released for a frame timeline (null for none). */
+    public void setScheduleListener(ScheduleListener listener) {
+        this.scheduleListener = listener;
+    }
+
     /** A new decoded output buffer is ready at {@code nowNs}. */
     public void onDecodedFrame(int index, long ptsUs, long nowNs) {
         synchronized (lock) {
@@ -81,7 +92,7 @@ public final class NewestFramePacer {
             dropPendingLocked();
 
             if (timelinesKnown) {
-                releaseForTimelineLocked(index, nowNs);
+                releaseForTimelineLocked(index, ptsUs, nowNs);
                 return;
             }
 
@@ -98,7 +109,7 @@ public final class NewestFramePacer {
         }
     }
 
-    private void releaseForTimelineLocked(int index, long nowNs) {
+    private void releaseForTimelineLocked(int index, long ptsUs, long nowNs) {
         int chosen = NO_TIMELINE;
         for (int i = 0; i < deadlinesNs.length; i++) {
             if (deadlinesNs[i] - nowNs >= DEADLINE_MARGIN_NS &&
@@ -121,6 +132,10 @@ public final class NewestFramePacer {
                 presented--;
             }
             lastTimelinePresentNs = presentNs;
+            ScheduleListener listener = scheduleListener;
+            if (listener != null) {
+                listener.onScheduled(ptsUs, presentNs);
+            }
         }
 
         lastTimelineIndex = chosen;
