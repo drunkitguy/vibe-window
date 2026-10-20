@@ -185,6 +185,11 @@ jobs:
             - The screen keeps the refresh rate chosen for the stream: the video decoder no longer asks for the stream's frame rate on its own, which could drop a 120 Hz screen to 60 Hz during a 60 FPS stream.
             - Performance overlay: the full overlay shows the frame pacing mode (with the share of frames dropped by pacing in the new mode) and the decoder's low-latency path; the lite overlay adds rendered over incoming frame rate ("R/I").
 
+            **Fixes in 1.3.3**
+
+            - The Wi-Fi keepalive can no longer start again when a stream ends right after it started.
+            - The full overlay shows, in the newest-frame mode, how many frames the screen showed later than the refresh they were scheduled for ("Shown later than requested"), and logcat includes it, to help tune the pacing on each device.
+
             **Fixes in 1.3.2**
 
             - 1.3.1 had extra display latency on Android 13 and later in the default "Lowest latency (newest frame)" mode: frames were scheduled for a presentation two to four screen refreshes ahead (about 8 to 17 ms at 120 Hz). 1.3.1 is superseded; please update. Each frame is now scheduled for the earliest refresh it can still make. The overlay counts frames released without a usable display timeline, and logcat reports how far ahead frames are scheduled.
