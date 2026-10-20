@@ -198,8 +198,12 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
     });
     // Frame timeline callback for the newest-frame mode on Android 13 and later, else null
     private Object newestFrameTimelineCallback;
-    // True when rendered frames are counted from the codec's frame-rendered callback
+    // True when rendered frames are counted from the codec's frame-rendered callback, which
+    // runs on its own thread and adds to presentedFrames; the stats thread folds that in
     private volatile boolean countPresentedFrames;
+    private final AtomicInteger presentedFrames = new AtomicInteger();
+    private HandlerThread frameRenderedThread;
+    private Handler frameRenderedHandler;
     private long lastPacerLogMs;
     private long lastPacerLeadLogMs;
     private static final int OUTPUT_BUFFER_QUEUE_LIMIT = 2;
@@ -630,14 +634,21 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
         videoDecoder.configure(format, renderTarget, null, 0);
 
         // The newest-frame mode counts the frames the display actually showed (Android 6.0 and
-        // later), so a buffer the display skipped for a newer one does not count as rendered
-        if (prefs.framePacing == PreferenceConfiguration.FRAME_PACING_NEWEST && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        // later), so a buffer the display skipped for a newer one does not count as rendered.
+        // Only for the 2D SurfaceView target: the Stereo 3D renderer draws from a SurfaceTexture.
+        if (prefs.framePacing == PreferenceConfiguration.FRAME_PACING_NEWEST &&
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && isTwoDimensionalTarget()) {
+            if (frameRenderedThread == null) {
+                frameRenderedThread = new HandlerThread("Video - Frame rendered");
+                frameRenderedThread.start();
+                frameRenderedHandler = new Handler(frameRenderedThread.getLooper());
+            }
             videoDecoder.setOnFrameRenderedListener(new MediaCodec.OnFrameRenderedListener() {
                 @Override
                 public void onFrameRendered(MediaCodec mediaCodec, long presentationTimeUs, long renderTimeNanos) {
-                    activeWindowVideoStats.totalFramesRendered++;
+                    presentedFrames.incrementAndGet();
                 }
-            }, null);
+            }, frameRenderedHandler);
             countPresentedFrames = true;
         }
 
@@ -825,6 +836,13 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
         }
 
         return 0;
+    }
+
+    // Whether the decoder renders straight to the 2D SurfaceView (not to the Stereo 3D renderer)
+    private boolean isTwoDimensionalTarget() {
+        com.limelight.ui.StreamContainer.StreamMode[] modes = com.limelight.ui.StreamContainer.StreamMode.values();
+        return prefs.renderMode < 0 || prefs.renderMode >= modes.length ||
+                modes[prefs.renderMode] == com.limelight.ui.StreamContainer.StreamMode.MODE_2D;
     }
 
     // Whether the stream is shown on the primary (built-in) display
@@ -1837,6 +1855,11 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
     public void cleanup() {
         newestPacer.clear();
         videoDecoder.release();
+        if (frameRenderedThread != null) {
+            frameRenderedThread.quitSafely();
+            frameRenderedThread = null;
+            frameRenderedHandler = null;
+        }
     }
 
     @Override
@@ -1968,6 +1991,9 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
 
         // Flip stats windows roughly every second
         if (SystemClock.uptimeMillis() >= activeWindowVideoStats.measurementStartTimestamp + 1000) {
+            if (countPresentedFrames) {
+                activeWindowVideoStats.totalFramesRendered += presentedFrames.getAndSet(0);
+            }
             if (prefs.enablePerfOverlay || prefs.enablePerfLogging) {
                 VideoStats lastTwo = new VideoStats();
                 lastTwo.add(lastWindowVideoStats);
