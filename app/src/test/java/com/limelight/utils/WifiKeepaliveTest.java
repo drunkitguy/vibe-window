@@ -109,6 +109,25 @@ public class WifiKeepaliveTest {
     }
 
     @Test
+    public void startAfterStopSendsNothing() {
+        setActiveTransport(NetworkCapabilities.TRANSPORT_WIFI);
+        // The stream ends before the queued "connection started" callback runs
+        keepalive.stopAndWait();
+        keepalive.start(context, 120, 0);
+        assertFalse(keepalive.isRunning());
+        assertFalse(keepalive.tickOnce());
+
+        // Also after a normal start and stop
+        WifiKeepalive second = new WifiKeepalive(sent::incrementAndGet);
+        second.start(context, 120, 60_000);
+        second.stopAndWait();
+        second.start(context, 120, 0);
+        assertFalse(second.isRunning());
+        assertFalse(second.tickOnce());
+        assertEquals(0, sent.get());
+    }
+
+    @Test
     public void rechecksTheTransportOnceASecond() {
         setActiveTransport(NetworkCapabilities.TRANSPORT_WIFI);
         keepalive.start(context, 60, 60_000);

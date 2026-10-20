@@ -13,7 +13,9 @@ import android.os.SystemClock;
  * nothing is sent while the active network is not Wi-Fi.
  *
  * The owner must call {@link #stopAndWait()} before tearing down the connection: it returns
- * only once no packet is being sent, and no packet is sent after it returns.
+ * only once no packet is being sent, and no packet is sent after it returns. One instance
+ * serves one stream: once stopped it is closed, and a later {@link #start} (for example a
+ * queued "connection started" callback that runs after the stop) does nothing.
  */
 public final class WifiKeepalive {
     /** Sends one keepalive packet. */
@@ -29,6 +31,7 @@ public final class WifiKeepalive {
     private final Object tickLock = new Object();
 
     private volatile boolean active;
+    private boolean closed;
     private volatile Handler handler;
     private HandlerThread thread;
     private Context appContext;
@@ -78,10 +81,10 @@ public final class WifiKeepalive {
 
     /**
      * Starts sending after {@code initialDelayMs}, every {@link NetHelper#keepalivePeriodMs}
-     * for the stream frame rate. Does nothing if it is already running.
+     * for the stream frame rate. Does nothing if it is already running or was stopped.
      */
     public synchronized void start(Context context, float fps, long initialDelayMs) {
-        if (thread != null) {
+        if (thread != null || closed) {
             return;
         }
         appContext = context.getApplicationContext();
@@ -107,6 +110,7 @@ public final class WifiKeepalive {
     public void stopAndWait() {
         HandlerThread oldThread;
         synchronized (this) {
+            closed = true;
             active = false;
             Handler h = handler;
             handler = null;
