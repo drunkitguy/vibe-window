@@ -206,95 +206,149 @@ public class NewestFramePacerTest {
 
     // ---- Frame timeline regime (Android 13 and later) ----
 
-    private static final long DEADLINE_OFFSET_NS = PERIOD_NS - 2_000_000L;
-    private static final long PRESENT_OFFSET_NS = 2 * PERIOD_NS;
+    // As on a 120 Hz panel: the platform budgets an app work duration longer than one refresh,
+    // so its preferred timeline (index 1 here) has its deadline 10 ms after the vsync, while
+    // timeline 0 can still be made right after the vsync.
+    private static final long APP_DURATION_NS = 10_000_000L;
+    private static final long SF_DURATION_NS = 6_000_000L;
+    private static final int TIMELINES = 5;
+    private static final int PREFERRED = 1;
 
-    private void timeline(long vsyncNs) {
-        pacer.onFrameTimeline(vsyncNs + DEADLINE_OFFSET_NS, vsyncNs + PRESENT_OFFSET_NS, vsyncNs);
+    private static long deadline(long vsyncNs, int k) {
+        return vsyncNs + APP_DURATION_NS + (k - PREFERRED) * PERIOD_NS;
+    }
+
+    private static long present(long vsyncNs, int k) {
+        return deadline(vsyncNs, k) + SF_DURATION_NS;
+    }
+
+    private void timelines(long vsyncNs) {
+        long[] deadlines = new long[TIMELINES];
+        long[] presents = new long[TIMELINES];
+        // Reverse order: the pacer must not depend on the array order
+        for (int k = 0; k < TIMELINES; k++) {
+            deadlines[TIMELINES - 1 - k] = deadline(vsyncNs, k);
+            presents[TIMELINES - 1 - k] = present(vsyncNs, k);
+        }
+        pacer.onFrameTimelines(deadlines, presents, vsyncNs);
+    }
+
+    /** The earliest timeline k whose deadline is at least the margin after t, or -1. */
+    private static int earliestValid(long vsyncNs, long t) {
+        for (int k = 0; k < TIMELINES; k++) {
+            if (deadline(vsyncNs, k) - t >= NewestFramePacer.DEADLINE_MARGIN_NS) {
+                return k;
+            }
+        }
+        return -1;
     }
 
     @Test
-    public void timelineReleasesFramesBeforeTheDeadlineForItsPresentTime() {
-        timeline(0);
+    public void earliestUsableTimelineIsChosenNotThePreferredOne() {
+        timelines(0);
         assertTrue(pacer.usesFrameTimeline());
-        pacer.onDecodedFrame(1, 0, 1_000_000L);
-        assertEquals(calls("render 1"), releaser.calls);
-        assertEquals(PRESENT_OFFSET_NS, releaser.lastPresent());
+        assertTrue(deadline(0, PREFERRED) > PERIOD_NS);
 
-        // A second frame before the same deadline also goes out; the display keeps the newer
-        pacer.onDecodedFrame(2, 0, 2_000_000L);
+        // Timeline 0's deadline (1.67 ms after the vsync) is still 1.47 ms away
+        pacer.onDecodedFrame(1, 0, 200_000L);
+        assertEquals("render 1", releaser.last());
+        assertEquals(present(0, 0), releaser.lastPresent());
+        assertEquals(TIMELINES - 1, pacer.getLastTimelineIndex()); // array is reversed
+        assertEquals(present(0, 0) - 200_000L, pacer.getLastLeadNs());
+
+        // Less than the margin before timeline 0's deadline: the next timeline
+        pacer.onDecodedFrame(2, 0, 1_000_000L);
+        assertEquals("render 2", releaser.last());
+        assertEquals(present(0, 1), releaser.lastPresent());
+        assertFalse(pacer.hasPending());
+        assertEquals(0, pacer.getDroppedByPacing());
+    }
+
+    @Test
+    public void aNewerFrameForTheSamePresentationDropsTheOlderOne() {
+        timelines(0);
+        pacer.onDecodedFrame(1, 0, 2_000_000L);
+        pacer.onDecodedFrame(2, 0, 3_000_000L);
         assertEquals(calls("render 1", "render 2"), releaser.calls);
+        assertEquals(present(0, 1), releaser.presentTimes.get(0).longValue());
+        assertEquals(present(0, 1), releaser.lastPresent());
+        assertEquals(1, pacer.getDroppedByPacing());
+        assertEquals(1, pacer.getPresented());
         assertEquals(2, pacer.getReleasedImmediately());
+
+        // After a clear (codec flush) the same presentation is not counted again
+        pacer.clear();
+        pacer.onDecodedFrame(3, 0, 4_000_000L);
+        assertEquals(1, pacer.getDroppedByPacing());
+    }
+
+    @Test
+    public void noUsableTimelineReleasesForNow() {
+        timelines(0);
+        long late = deadline(0, TIMELINES - 1);
+        pacer.onDecodedFrame(1, 0, late);
+        assertEquals("render 1", releaser.last());
+        assertEquals(late, releaser.lastPresent());
+        assertEquals(NewestFramePacer.NO_TIMELINE, pacer.getLastTimelineIndex());
+        assertEquals(1, pacer.getReleasedWithoutTimeline());
         assertFalse(pacer.hasPending());
     }
 
     @Test
-    public void timelineHoldsFramesAfterTheDeadlineAndKeepsTheNewest() {
-        timeline(0);
-        pacer.onDecodedFrame(1, 0, DEADLINE_OFFSET_NS + 1);
-        pacer.onDecodedFrame(2, 0, DEADLINE_OFFSET_NS + 2);
-        assertEquals(calls("drop 1"), releaser.calls);
+    public void aFrameHeldBeforeTheFirstTimelinesGoesOutWithThem() {
+        vsync();
+        frame(1);
+        frame(2);
         assertTrue(pacer.hasPending());
-
-        timeline(PERIOD_NS);
-        assertEquals(calls("drop 1", "render 2"), releaser.calls);
-        assertEquals(PERIOD_NS + PRESENT_OFFSET_NS, releaser.lastPresent());
-        assertEquals(1, pacer.getReleasedAtVsync());
-        assertEquals(1, pacer.getDroppedByPacing());
-
-        // The next frame before the new deadline goes out at once
-        pacer.onDecodedFrame(3, 0, PERIOD_NS + 1_000_000L);
-        assertEquals("render 3", releaser.last());
-        assertEquals(1, pacer.getReleasedImmediately());
+        timelines(now);
+        assertEquals(calls("render 1", "render 2"), releaser.calls);
+        assertFalse(pacer.hasPending());
     }
 
     /**
      * Frames at the panel rate with clock drift sweep through every phase of the refresh
-     * interval. Each frame must go out at once when it beats the deadline, otherwise at the
-     * very next vsync, never later, and nothing is dropped at one frame per interval.
+     * interval. Every frame goes out at once for the earliest presentation it can still make,
+     * never for the preferred one, nothing waits and nothing is dropped.
      */
     @Test
-    public void timelineDriftOnlyHoldsFramesThatMissedTheDeadline() {
+    public void timelineDriftAlwaysTargetsTheEarliestPresentation() {
         final double framePeriodNs = PERIOD_NS * (1 + 200e-6); // host clock 200 ppm slow
         long vsyncAt = 0;
-        timeline(vsyncAt);
+        timelines(vsyncAt);
         double nextFrameAt = PERIOD_NS * 0.1;
         int frames = 0;
-        long expectedHeld = 0;
+        long maxLeadNs = 0;
+        int earlierThanPreferred = 0;
         while (frames < 20000) {
             if (nextFrameAt < vsyncAt + PERIOD_NS) {
                 long t = (long) nextFrameAt;
-                boolean beforeDeadline = t < vsyncAt + DEADLINE_OFFSET_NS;
-                int before = releaser.calls.size();
+                int k = earliestValid(vsyncAt, t);
                 pacer.onDecodedFrame(frames, 0, t);
-                if (beforeDeadline) {
-                    assertEquals(before + 1, releaser.calls.size());
-                    assertEquals("render " + frames, releaser.last());
-                    assertEquals(vsyncAt + PRESENT_OFFSET_NS, releaser.lastPresent());
-                }
-                else {
-                    expectedHeld++;
-                    assertTrue(pacer.hasPending());
+                assertEquals("render " + frames, releaser.last());
+                assertEquals(present(vsyncAt, k), releaser.lastPresent());
+                assertFalse(pacer.hasPending());
+                maxLeadNs = Math.max(maxLeadNs, releaser.lastPresent() - t);
+                // Never later than the platform's preferred timeline, often earlier
+                assertTrue(releaser.lastPresent() <= present(vsyncAt, PREFERRED));
+                if (releaser.lastPresent() < present(vsyncAt, PREFERRED)) {
+                    earlierThanPreferred++;
                 }
                 frames++;
                 nextFrameAt += framePeriodNs;
             }
             else {
-                boolean hadPending = pacer.hasPending();
                 vsyncAt += PERIOD_NS;
-                timeline(vsyncAt);
-                if (hadPending) {
-                    assertEquals("render " + (frames - 1), releaser.last());
-                    assertEquals(vsyncAt + PRESENT_OFFSET_NS, releaser.lastPresent());
-                }
-                assertFalse(pacer.hasPending());
+                timelines(vsyncAt);
             }
         }
         assertEquals(0, pacer.getDroppedByPacing());
-        assertEquals(expectedHeld, pacer.getReleasedAtVsync() + (pacer.hasPending() ? 1 : 0));
-        // About a quarter of the interval lies past the deadline, so about a quarter is held
-        double heldShare = (double) expectedHeld / frames;
-        assertTrue("held share " + heldShare, heldShare > 0.15 && heldShare < 0.35);
+        assertEquals(0, pacer.getReleasedAtVsync());
+        assertEquals(0, pacer.getReleasedWithoutTimeline());
+        assertEquals(frames, pacer.getReleasedImmediately());
+        // At most one refresh plus the compositor's share, far below the preferred timeline
+        assertTrue("max lead " + maxLeadNs,
+                maxLeadNs <= PERIOD_NS + SF_DURATION_NS + NewestFramePacer.DEADLINE_MARGIN_NS);
+        assertTrue("earlier " + earlierThanPreferred, earlierThanPreferred > frames / 20);
     }
 
     @Test
@@ -319,6 +373,7 @@ public class NewestFramePacerTest {
         final AtomicIntegerArray releases = new AtomicIntegerArray(frames);
         final AtomicReference<String> orderError = new AtomicReference<>();
         final int[] lastRendered = {-1};
+        final int[] renderedCount = {0};
 
         final NewestFramePacer concurrent = new NewestFramePacer((index, render, presentNs) -> {
             releases.incrementAndGet(index);
@@ -328,6 +383,7 @@ public class NewestFramePacerTest {
                     orderError.set("rendered " + index + " after " + lastRendered[0]);
                 }
                 lastRendered[0] = index;
+                renderedCount[0]++;
             }
         });
 
@@ -343,7 +399,8 @@ public class NewestFramePacerTest {
             while (!producerDone.get()) {
                 long t = System.nanoTime();
                 if (useTimeline) {
-                    concurrent.onFrameTimeline(t + 6_000_000L, t + 16_000_000L, t);
+                    concurrent.onFrameTimelines(new long[] {t + 6_000_000L, t + 14_000_000L},
+                            new long[] {t + 16_000_000L, t + 24_000_000L}, t);
                 }
                 else {
                     concurrent.onVsync(t);
@@ -379,7 +436,7 @@ public class NewestFramePacerTest {
         // One more vsync flushes the frame that may still be waiting
         long t = System.nanoTime();
         if (useTimeline) {
-            concurrent.onFrameTimeline(t, t, t);
+            concurrent.onFrameTimelines(new long[0], new long[0], t);
         }
         else {
             concurrent.onVsync(t);
@@ -392,7 +449,7 @@ public class NewestFramePacerTest {
         assertNull(orderError.get());
         assertEquals(frames - 1, lastRendered[0]);
         assertEquals(frames, concurrent.getPresented() + concurrent.getDroppedByPacing());
-        assertEquals(concurrent.getPresented(),
+        assertEquals(renderedCount[0],
                 concurrent.getReleasedImmediately() + concurrent.getReleasedAtVsync());
     }
 
@@ -489,7 +546,8 @@ public class NewestFramePacerTest {
                 synchronized (quiesce) {
                     long t = System.nanoTime();
                     if (useTimeline) {
-                        fakePacer.onFrameTimeline(t + 6_000_000L, t + 16_000_000L, t);
+                        fakePacer.onFrameTimelines(new long[] {t + 6_000_000L, t + 14_000_000L},
+                                new long[] {t + 16_000_000L, t + 24_000_000L}, t);
                     }
                     else {
                         fakePacer.onVsync(t);

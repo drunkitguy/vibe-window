@@ -7,11 +7,15 @@ package com.limelight.binding.video;
  *
  * It runs in one of two regimes:
  * <ul>
- * <li><b>Frame timeline</b> (Android 13 and later, {@link #onFrameTimeline}): each vsync
- * reports the deadline for the next presentation and its expected presentation time. A
- * frame decoded before that deadline is released at once for that presentation time. A
- * frame decoded after it can no longer make that presentation, so it waits for the next
- * vsync; a newer frame replaces it (the older one is dropped and counted).</li>
+ * <li><b>Frame timelines</b> (Android 13 and later, {@link #onFrameTimelines}): each vsync
+ * reports every upcoming presentation the app can still target, as pairs of a queueing
+ * deadline and an expected presentation time. A decoded frame is released at once for the
+ * earliest presentation whose deadline is still at least {@link #DEADLINE_MARGIN_NS} away.
+ * (The "preferred" timeline is not used: it budgets for an app that renders, so on a 120 Hz
+ * panel it lies two to four refreshes ahead, which a decoded frame does not need.) When a
+ * newer frame targets the same presentation as the previous one, the display shows only
+ * the newer one and the older one is counted as dropped by pacing. When no timeline is
+ * usable any more (the vsync callback is late), the frame is released for "now".</li>
  * <li><b>Vsync only</b> (older Android, {@link #onVsync}): the first frame decoded in a
  * refresh interval is released at once; later ones in the same interval wait in a single
  * slot (replacing older ones) and go out at the next vsync. Releasing the waiting frame
@@ -25,6 +29,12 @@ package com.limelight.binding.video;
  * released in decode order.
  */
 public final class NewestFramePacer {
+
+    /** A timeline is usable while its deadline is at least this far away. */
+    public static final long DEADLINE_MARGIN_NS = 1_000_000L;
+
+    /** Returned by {@link #getLastTimelineIndex()} for a frame released for "now". */
+    public static final int NO_TIMELINE = -1;
 
     /** Hands a decoded output buffer back to the codec. */
     public interface Releaser {
@@ -46,15 +56,19 @@ public final class NewestFramePacer {
     // Vsync-only regime
     private boolean presentedThisVsync;
 
-    // Frame timeline regime, used once the first timeline arrives
-    private boolean timelineKnown;
-    private long deadlineNs;
-    private long expectedPresentNs;
+    // Frame timeline regime, used once the first timelines arrive
+    private boolean timelinesKnown;
+    private long[] deadlinesNs = new long[0];
+    private long[] presentsNs = new long[0];
+    private long lastTimelinePresentNs = Long.MIN_VALUE;
+    private int lastTimelineIndex = NO_TIMELINE;
+    private long lastLeadNs;
 
     private long presented;
     private long droppedByPacing;
     private long releasedImmediately;
     private long releasedAtVsync;
+    private long releasedWithoutTimeline;
 
     public NewestFramePacer(Releaser releaser) {
         this.releaser = releaser;
@@ -63,31 +77,57 @@ public final class NewestFramePacer {
     /** A new decoded output buffer is ready at {@code nowNs}. */
     public void onDecodedFrame(int index, long ptsUs, long nowNs) {
         synchronized (lock) {
-            boolean immediate;
-            long presentNs;
-            if (timelineKnown) {
-                immediate = nowNs < deadlineNs;
-                presentNs = expectedPresentNs;
-            }
-            else {
-                immediate = !presentedThisVsync;
-                presentNs = nowNs;
-            }
-
             // A waiting frame is always older than this one
             dropPendingLocked();
 
-            if (immediate) {
+            if (timelinesKnown) {
+                releaseForTimelineLocked(index, nowNs);
+                return;
+            }
+
+            if (!presentedThisVsync) {
                 presentedThisVsync = true;
                 releasedImmediately++;
                 presented++;
-                releaser.release(index, true, presentNs);
+                releaser.release(index, true, nowNs);
             }
             else {
                 pendingIndex = index;
                 pendingPtsUs = ptsUs;
             }
         }
+    }
+
+    private void releaseForTimelineLocked(int index, long nowNs) {
+        int chosen = NO_TIMELINE;
+        for (int i = 0; i < deadlinesNs.length; i++) {
+            if (deadlinesNs[i] - nowNs >= DEADLINE_MARGIN_NS &&
+                    (chosen == NO_TIMELINE || deadlinesNs[i] < deadlinesNs[chosen])) {
+                chosen = i;
+            }
+        }
+
+        long presentNs;
+        if (chosen == NO_TIMELINE) {
+            presentNs = nowNs;
+            releasedWithoutTimeline++;
+        }
+        else {
+            presentNs = presentsNs[chosen];
+            if (presentNs == lastTimelinePresentNs) {
+                // The previous frame was released for the same presentation; the display keeps
+                // only the newest buffer due at that time, so the previous one is dropped
+                droppedByPacing++;
+                presented--;
+            }
+            lastTimelinePresentNs = presentNs;
+        }
+
+        lastTimelineIndex = chosen;
+        lastLeadNs = presentNs - nowNs;
+        releasedImmediately++;
+        presented++;
+        releaser.release(index, true, presentNs);
     }
 
     /**
@@ -102,16 +142,20 @@ public final class NewestFramePacer {
     }
 
     /**
-     * A vsync with the preferred frame timeline (Android 13 and later): frames decoded
-     * before {@code deadlineNs} are released for {@code expectedPresentNs}. The waiting
-     * frame, if any, is released now for that presentation.
+     * A vsync with frame timelines (Android 13 and later): the queueing deadline and expected
+     * presentation time of every presentation the app can target, in any order. The arrays
+     * are copied.
      */
-    public void onFrameTimeline(long deadlineNs, long expectedPresentNs, long nowNs) {
+    public void onFrameTimelines(long[] deadlinesNs, long[] expectedPresentsNs, long nowNs) {
+        if (deadlinesNs.length != expectedPresentsNs.length) {
+            throw new IllegalArgumentException("Timeline arrays differ in length");
+        }
         synchronized (lock) {
-            timelineKnown = true;
-            this.deadlineNs = deadlineNs;
-            this.expectedPresentNs = expectedPresentNs;
-            releasePendingAtVsyncLocked(expectedPresentNs);
+            timelinesKnown = true;
+            this.deadlinesNs = deadlinesNs.clone();
+            this.presentsNs = expectedPresentsNs.clone();
+            // Only a frame held before the first timelines arrived can be waiting here
+            releasePendingAtVsyncLocked(nowNs);
         }
     }
 
@@ -124,6 +168,7 @@ public final class NewestFramePacer {
             pendingIndex = -1;
             pendingPtsUs = 0;
             presentedThisVsync = false;
+            lastTimelinePresentNs = Long.MIN_VALUE;
         }
     }
 
@@ -167,10 +212,25 @@ public final class NewestFramePacer {
     /** Whether the frame timeline regime is in use. */
     public boolean usesFrameTimeline() {
         synchronized (lock) {
-            return timelineKnown;
+            return timelinesKnown;
         }
     }
 
+    /** The timeline index chosen for the last frame, or {@link #NO_TIMELINE}. */
+    public int getLastTimelineIndex() {
+        synchronized (lock) {
+            return lastTimelineIndex;
+        }
+    }
+
+    /** Requested presentation time minus release time of the last timeline-regime frame. */
+    public long getLastLeadNs() {
+        synchronized (lock) {
+            return lastLeadNs;
+        }
+    }
+
+    /** Frames rendered, minus those the display drops for a newer one at the same time. */
     public long getPresented() {
         synchronized (lock) {
             return presented;
@@ -192,6 +252,13 @@ public final class NewestFramePacer {
     public long getReleasedAtVsync() {
         synchronized (lock) {
             return releasedAtVsync;
+        }
+    }
+
+    /** Timeline-regime frames released for "now" because no timeline was usable. */
+    public long getReleasedWithoutTimeline() {
+        synchronized (lock) {
+            return releasedWithoutTimeline;
         }
     }
 }

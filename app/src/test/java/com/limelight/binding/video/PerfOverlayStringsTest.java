@@ -29,7 +29,7 @@ public class PerfOverlayStringsTest {
     @Test
     public void fullModeShowsThePacerCounters() {
         Context context = ApplicationProvider.getApplicationContext();
-        assertEquals("Pacer since start: 1200 immediate, 34 at vsync, 5 dropped (frame timeline)",
-                context.getString(R.string.perf_overlay_pacer_counts, 1200L, 34L, 5L, "frame timeline"));
+        assertEquals("Pacer since start: 1200 immediate, 34 at vsync, 5 dropped, 2 without timeline (frame timeline)",
+                context.getString(R.string.perf_overlay_pacer_counts, 1200L, 34L, 5L, 2L, "frame timeline"));
     }
 }

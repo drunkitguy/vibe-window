@@ -201,6 +201,7 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
     // True when rendered frames are counted from the codec's frame-rendered callback
     private volatile boolean countPresentedFrames;
     private long lastPacerLogMs;
+    private long lastPacerLeadLogMs;
     private static final int OUTPUT_BUFFER_QUEUE_LIMIT = 2;
     private long lastRenderedFrameTimeNanos;
     private HandlerThread choreographerHandlerThread;
@@ -1260,19 +1261,31 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
         });
     }
 
-    // Newest-frame mode on Android 13 and later: hands the preferred frame timeline (deadline
-    // and expected presentation time) of every vsync to the pacer
+    // Newest-frame mode on Android 13 and later: hands every frame timeline (deadline and
+    // expected presentation time) of each vsync to the pacer, which picks the earliest one a
+    // decoded frame can still make. The preferred timeline budgets for app rendering and lies
+    // several refreshes ahead, so it is not used.
     @androidx.annotation.RequiresApi(Build.VERSION_CODES.TIRAMISU)
     private final class NewestFrameTimelineCallback implements Choreographer.VsyncCallback {
+        private long[] deadlines = new long[0];
+        private long[] presents = new long[0];
+
         @Override
         public void onVsync(Choreographer.FrameData data) {
             if (stopping) {
                 return;
             }
 
-            Choreographer.FrameTimeline timeline = data.getPreferredFrameTimeline();
-            newestPacer.onFrameTimeline(timeline.getDeadlineNanos(),
-                    timeline.getExpectedPresentationTimeNanos(), System.nanoTime());
+            Choreographer.FrameTimeline[] timelines = data.getFrameTimelines();
+            if (deadlines.length != timelines.length) {
+                deadlines = new long[timelines.length];
+                presents = new long[timelines.length];
+            }
+            for (int i = 0; i < timelines.length; i++) {
+                deadlines[i] = timelines[i].getDeadlineNanos();
+                presents[i] = timelines[i].getExpectedPresentationTimeNanos();
+            }
+            newestPacer.onFrameTimelines(deadlines, presents, System.nanoTime());
 
             // Attempt codec recovery even if we have nothing to render right now
             doCodecRecoveryIfRequired(CR_FLAG_CHOREOGRAPHER);
@@ -1356,6 +1369,15 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
                                 updateDecodeLatencyStats(info.presentationTimeUs);
 
                                 newestPacer.onDecodedFrame(outIndex, info.presentationTimeUs, System.nanoTime());
+
+                                // Rate-limited diagnostics: how far ahead frames are scheduled
+                                long logNowMs = SystemClock.uptimeMillis();
+                                if (newestPacer.usesFrameTimeline() && logNowMs >= lastPacerLeadLogMs + 5000) {
+                                    lastPacerLeadLogMs = logNowMs;
+                                    LimeLog.info("Newest-frame pacer: expected present - now = " +
+                                            (newestPacer.getLastLeadNs() / 1000) + " us, timeline " +
+                                            newestPacer.getLastTimelineIndex());
+                                }
                             }
                             else if (outIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
                                 LimeLog.info("Output format changed");
@@ -2034,7 +2056,7 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
                                 NewestFramePacer.dropPercent(lastTwo.framesDroppedByPacing, lastTwo.totalFramesReceived))).append('\n');
                         sb.append(context.getString(R.string.perf_overlay_pacer_counts,
                                 newestPacer.getReleasedImmediately(), newestPacer.getReleasedAtVsync(),
-                                newestPacer.getDroppedByPacing(),
+                                newestPacer.getDroppedByPacing(), newestPacer.getReleasedWithoutTimeline(),
                                 newestPacer.usesFrameTimeline() ? "frame timeline" : "vsync only")).append('\n');
                     }
                     else {
@@ -2083,6 +2105,7 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
                 LimeLog.info("Newest-frame pacer: immediate=" + newestPacer.getReleasedImmediately() +
                         " atVsync=" + newestPacer.getReleasedAtVsync() +
                         " dropped=" + newestPacer.getDroppedByPacing() +
+                        " withoutTimeline=" + newestPacer.getReleasedWithoutTimeline() +
                         " regime=" + (newestPacer.usesFrameTimeline() ? "frame timeline" : "vsync only"));
             }
             globalVideoStats.add(activeWindowVideoStats);
