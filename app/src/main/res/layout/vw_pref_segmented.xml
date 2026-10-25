@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Segmented settings row: title, value and info button on the first line, the choices
+     below. When the choices do not fit, the row shows a chevron and opens the list. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/vw_pref_row_background"
+    android:minHeight="56dp"
+    android:orientation="vertical"
+    android:paddingStart="@dimen/vw_space_4"
+    android:paddingLeft="@dimen/vw_space_4"
+    android:paddingTop="@dimen/vw_space_3"
+    android:paddingEnd="@dimen/vw_space_3"
+    android:paddingRight="@dimen/vw_space_3"
+    android:paddingBottom="@dimen/vw_space_3">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:baselineAligned="false"
+        android:gravity="center_vertical"
+        android:minHeight="40dp"
+        android:orientation="horizontal">
+
+        <FrameLayout
+            android:id="@android:id/icon_frame"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="@dimen/vw_space_4"
+            android:layout_marginRight="@dimen/vw_space_4"
+            android:visibility="gone">
+
+            <ImageView
+                android:id="@android:id/icon"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:importantForAccessibility="no"
+                android:scaleType="fitCenter" />
+        </FrameLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <include layout="@layout/vw_pref_title_line" />
+
+            <TextView
+                android:id="@android:id/summary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:textAppearance="@style/TextAppearance.Vibe.Secondary" />
+        </LinearLayout>
+
+        <include layout="@layout/vw_pref_chevron" />
+
+        <include layout="@layout/vw_pref_info_button" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/vw_pref_segments"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/vw_space_2"
+        android:layout_marginEnd="@dimen/vw_space_1"
+        android:layout_marginRight="@dimen/vw_space_1"
+        android:background="@drawable/vw_segment_track"
+        android:orientation="horizontal"
+        android:padding="3dp" />
+</LinearLayout>

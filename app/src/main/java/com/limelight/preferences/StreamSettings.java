@@ -444,10 +444,15 @@ public class StreamSettings extends AppCompatActivity {
             boolean autoFps = PreferenceConfiguration.FPS_AUTO.equals(fps);
 
             String hint = null;
+            String resolutionValue = null;
+            String fpsValue = null;
             if (autoResolution || autoFps) {
                 AutoResolution.Result resolved = previewAuto(res, fps);
                 if (resolved != null) {
                     hint = formatAutoHint(prefs, resolved);
+                    // Short form for the title line of the segmented rows
+                    resolutionValue = resolved.width + "x" + resolved.height;
+                    fpsValue = AutoResolution.formatFps(resolved.fps) + " " + getString(R.string.fps_suffix_fps);
 
                     // Keep the stored bitrate (and the slider) at the value the stream will use.
                     // Only for the base settings: profiles are never changed behind the user's back.
@@ -470,10 +475,16 @@ public class StreamSettings extends AppCompatActivity {
             Preference resolutionPref = findPreference(PreferenceConfiguration.RESOLUTION_PREF_STRING);
             if (resolutionPref != null) {
                 resolutionPref.setSummary(withHint(autoResolution ? hint : null, R.string.summary_resolution_list));
+                if (resolutionPref instanceof SegmentedListPreference) {
+                    ((SegmentedListPreference) resolutionPref).setAutoValueText(autoResolution ? resolutionValue : null);
+                }
             }
             Preference fpsPref = findPreference(PreferenceConfiguration.FPS_PREF_STRING);
             if (fpsPref != null) {
                 fpsPref.setSummary(withHint(autoFps ? hint : null, R.string.summary_fps_list));
+                if (fpsPref instanceof SegmentedListPreference) {
+                    ((SegmentedListPreference) fpsPref).setAutoValueText(autoFps ? fpsValue : null);
+                }
             }
 
             // The inline bitrate slider shows the stored value, which the listeners may have reset

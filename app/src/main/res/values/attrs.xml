@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Segmented settings rows (com.limelight.preferences.SegmentedListPreference) -->
+    <declare-styleable name="SegmentedListPreference">
+        <!-- Entry values shown as segments, in order. Values missing from the entries are skipped. -->
+        <attr name="vwSegmentValues" format="reference" />
+        <!-- Short labels, one per segment value -->
+        <attr name="vwSegmentLabels" format="reference" />
+        <!-- Adds a "More" segment that opens the full list when other entries exist -->
+        <attr name="vwShowMoreSegment" format="boolean" />
+        <!-- Always shows the full entry name on the title line -->
+        <attr name="vwAlwaysShowValue" format="boolean" />
+    </declare-styleable>
+</resources>

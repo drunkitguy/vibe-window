@@ -50,6 +50,14 @@ final class PrefRowBinder {
         return isValueRow(preference) && !TextUtils.isEmpty(preference.getSummary());
     }
 
+    /** List rows that open the full list on A or a tap and show no segments. */
+    static boolean isDropdown(Preference preference) {
+        if (preference instanceof SegmentedListPreference) {
+            return ((SegmentedListPreference) preference).isDropdownMode();
+        }
+        return preference instanceof ListPreference;
+    }
+
     /** The value shown on the title line and in the info dialog, or null. */
     @Nullable
     static CharSequence valueText(Preference preference) {
@@ -90,6 +98,11 @@ final class PrefRowBinder {
         } : null);
         info.setClickable(showInfo);
         info.setFocusable(false);
+
+        View chevron = holder.itemView.findViewById(R.id.vw_pref_chevron);
+        if (chevron != null) {
+            chevron.setVisibility(isDropdown(preference) ? View.VISIBLE : View.GONE);
+        }
 
         TextView value = holder.itemView.findViewById(R.id.vw_pref_value);
         if (value != null) {
