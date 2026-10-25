@@ -824,7 +824,7 @@
     </plurals>
     <!-- One row for the two statistics overlay switches -->
     <string name="title_quick_stats_overlay">Statistics overlay</string>
-    <string name="summary_quick_stats_overlay">Shows stream statistics on top of the picture. Lite is one compact line, Full lists every counter. Position, the lite details window and logging are under All settings, Performance overlay.</string>
+    <string name="summary_quick_stats_overlay">Shows stream statistics on top of the picture. Lite is one compact line, Full lists every counter. Position, the lite details window and logging are under All settings, Performance Monitor.</string>
     <string name="stats_overlay_off">Off</string>
     <string name="stats_overlay_lite">Lite (one compact line)</string>
     <string name="stats_overlay_full">Full (every counter)</string>
