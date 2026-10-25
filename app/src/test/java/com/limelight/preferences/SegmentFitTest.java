@@ -27,8 +27,8 @@ public class SegmentFitTest {
 
     @Test
     public void largeTextInANarrowPanelFallsBackToADropdown() {
-        // 340dp panel minus row padding leaves about 300dp of track
-        float available = 300 * 2.625f;
+        // A narrow panel leaves about 360dp of track
+        float available = 360 * 2.625f;
         assertTrue(SegmentFit.fits(RESOLUTION_1_0, available, PADDING));
         assertFalse(SegmentFit.fits(scaled(RESOLUTION_1_0, 1.3f), available, PADDING));
     }
