@@ -202,6 +202,14 @@ public class SegmentedListPreference extends ListPreference
     /** The one commit path, the same as picking the value in the list dialog. */
     void commit(String value) {
         pendingIndex = -1;
+        if (shouldPersist()) {
+            // The stored value may have changed behind this row (a stream writes the
+            // touchscreen mode, for example): compare with the store, not the cached value
+            String stored = getPersistedString(null);
+            if (stored != null && !stored.equals(super.getValue())) {
+                super.setValue(stored);
+            }
+        }
         if (value.equals(getValue())) {
             // Choosing the current value again changes nothing (no bitrate reset)
             notifyChanged();
@@ -377,9 +385,16 @@ public class SegmentedListPreference extends ListPreference
 
     @Override
     public void onRowFocusLost() {
-        if (pendingIndex >= 0) {
-            pendingIndex = -1;
-            notifyChanged();
+        dropPending();
+    }
+
+    /** Drops a highlight that was not committed; returns whether there was one. */
+    public boolean dropPending() {
+        if (pendingIndex < 0) {
+            return false;
         }
+        pendingIndex = -1;
+        notifyChanged();
+        return true;
     }
 }

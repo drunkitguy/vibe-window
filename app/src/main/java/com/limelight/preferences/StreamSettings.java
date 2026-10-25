@@ -822,6 +822,8 @@ public class StreamSettings extends AppCompatActivity implements SettingsHost {
                 return false;
             }
             final int headerPosition = adapterPositionOf(targets.get(index).getKey());
+            // Commit a pending slider and drop a segment highlight before the rows are recycled
+            settlePendingRows(getPreferenceScreen());
             ((LinearLayoutManager) list.getLayoutManager()).scrollToPositionWithOffset(headerPosition, 0);
             list.post(new Runnable() {
                 @Override
@@ -830,6 +832,43 @@ public class StreamSettings extends AppCompatActivity implements SettingsHost {
                 }
             });
             return true;
+        }
+
+        private static void settlePendingRows(PreferenceGroup group) {
+            if (group == null) {
+                return;
+            }
+            for (int i = 0; i < group.getPreferenceCount(); i++) {
+                Preference preference = group.getPreference(i);
+                if (preference instanceof PrefRowBinder.RowKeyHandler) {
+                    ((PrefRowBinder.RowKeyHandler) preference).onRowFocusLost();
+                }
+                if (preference instanceof PreferenceGroup) {
+                    settlePendingRows((PreferenceGroup) preference);
+                }
+            }
+        }
+
+        /** Drops a segment highlight that was not committed; returns whether there was one. */
+        public boolean dropPendingChoice() {
+            return dropPendingChoice(getPreferenceScreen());
+        }
+
+        private static boolean dropPendingChoice(PreferenceGroup group) {
+            if (group == null) {
+                return false;
+            }
+            boolean dropped = false;
+            for (int i = 0; i < group.getPreferenceCount(); i++) {
+                Preference preference = group.getPreference(i);
+                if (preference instanceof SegmentedListPreference) {
+                    dropped |= ((SegmentedListPreference) preference).dropPending();
+                }
+                if (preference instanceof PreferenceGroup) {
+                    dropped |= dropPendingChoice((PreferenceGroup) preference);
+                }
+            }
+            return dropped;
         }
 
         static final int MENU_JUMP = 1;

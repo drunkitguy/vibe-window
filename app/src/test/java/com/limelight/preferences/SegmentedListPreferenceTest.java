@@ -270,4 +270,33 @@ public class SegmentedListPreferenceTest {
         assertEquals("1920x1080", editor.getInMemoryPrefs().getString("list_resolution", null));
         assertEquals("1280x720", prefs.getString("list_resolution", null));
     }
+
+    @Test
+    public void aTapCommitsAgainstTheStoredValueNotTheCachedOne() {
+        StreamSettings.SettingsFragment fragment = launch();
+        SegmentedListPreference resolution = fragment.findPreference("list_resolution");
+        assertEquals("1280x720", resolution.getValue());
+        // Another screen changes the stored value behind the row
+        prefs.edit().putString("list_resolution", "2560x1440").commit();
+        View row = SettingsTestUtil.bindRow(fragment, "list_resolution").itemView;
+        segment(row, indexOf(resolution, "1280x720")).performClick();
+        SettingsTestUtil.idle();
+        assertEquals("1280x720", prefs.getString("list_resolution", null));
+        assertEquals("1280x720", resolution.getValue());
+    }
+
+    @Test
+    public void r1WithAHighlightDropsItWithoutACrash() {
+        StreamSettings.SettingsFragment fragment = launch();
+        SettingsTestUtil.focusRow(fragment, "list_resolution");
+        SegmentedListPreference resolution = fragment.findPreference("list_resolution");
+        assertTrue(SettingsTestUtil.press(activity, KeyEvent.KEYCODE_DPAD_RIGHT));
+        assertTrue(resolution.getPendingIndex() >= 0);
+        for (int i = 0; i < 6; i++) {
+            SettingsTestUtil.press(activity, KeyEvent.KEYCODE_BUTTON_R1);
+            SettingsTestUtil.idle();
+        }
+        assertEquals(-1, resolution.getPendingIndex());
+        assertEquals("1280x720", prefs.getString("list_resolution", null));
+    }
 }

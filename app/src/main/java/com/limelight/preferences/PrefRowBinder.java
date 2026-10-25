@@ -1,6 +1,8 @@
 package com.limelight.preferences;
 
 import android.content.Context;
+import android.os.Handler;
+import android.os.Looper;
 import android.text.TextUtils;
 import android.view.KeyEvent;
 import android.view.View;
@@ -21,6 +23,8 @@ import com.limelight.R;
  * place of the summary (unless descriptions are shown), and the row key handling.
  */
 final class PrefRowBinder {
+    private static final Handler MAIN = new Handler(Looper.getMainLooper());
+
     private PrefRowBinder() {}
 
     /** A row that shows its own value text on the title line. */
@@ -121,7 +125,14 @@ final class PrefRowBinder {
             @Override
             public void onFocusChange(View v, boolean hasFocus) {
                 if (!hasFocus && preference instanceof RowKeyHandler) {
-                    ((RowKeyHandler) preference).onRowFocusLost();
+                    // The focus also leaves a row when the list recycles it during a layout or
+                    // a scroll, where notifyChanged() must not run: settle the row right after
+                    MAIN.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            ((RowKeyHandler) preference).onRowFocusLost();
+                        }
+                    });
                 }
             }
         });
