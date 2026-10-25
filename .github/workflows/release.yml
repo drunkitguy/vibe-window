@@ -176,10 +176,18 @@ jobs:
 
             Defaults: Auto resolution and frame rate (match the display), virtual display on, "Show only the app window" on, frame pacing Balanced.
 
+            **New in 1.4.0**
+
+            - Simpler settings: the settings you change most are at the top of Settings with their controls in place. Tap a choice, or press Left and Right and then A; drag a slider, or press Left and Right; flip a switch. The "i" button (or Y on a controller) explains a setting; turn on "Show descriptions" in the "..." menu (Select on a controller) to see the explanations in the list again. Every other setting is under "All settings", grouped as before; each section opens with its "Show N settings" row. All your settings and profiles are kept as they were.
+            - Statistics overlay: one row with Off, Lite and Full replaces the two overlay switches. Off remembers whether you used Lite or Full.
+            - On landscape screens at least 720dp wide, Settings opens beside the PC list. Start moves between the two, B goes back to the PC list, and the panel button in the Settings header hides the panel (the Settings button shows it again). Narrower screens and portrait open Settings full screen as before.
+            - PC cards: a larger icon and the action as a full-width button. Offline PCs with Wake-on-LAN now wake with A or a tap; X or a long press still opens the menu.
+            - Streaming is unchanged from 1.3.5. The opt-in options moved with the new layout: frame pacing and the vendor decoder keys are in Settings, All settings, Video Settings; both Wi-Fi keepalive options and "Allow refresh rate reduction" are in Settings, All settings, Advanced Settings.
+
             **Fixes in 1.3.5**
 
             - Saved profiles are restored to the 1.2.2 streaming settings too, once: a profile keeps its own copy of every setting, so profiles made with 1.3.0 to 1.3.3 still used the newest-frame pacing, the vendor decoder keys and the Wi-Fi keepalive. Their frame pacing becomes Balanced (Warp Drive entries are kept), the vendor decoder keys follow the main setting (off unless you turned it on), and the keepalive is off. Changes you make to a profile afterwards stay.
-            - With "Keep Wi-Fi awake while streaming" on, the packet goes out every 20 ms again, as in 1.2.2. Sending once per frame is a separate opt-in: Settings, Advanced Settings, Show more, "Keep Wi-Fi awake every frame (experimental)".
+            - With "Keep Wi-Fi awake while streaming" on, the packet goes out every 20 ms again, as in 1.2.2. Sending once per frame is a separate opt-in: Settings, All settings, Advanced Settings, "Keep Wi-Fi awake every frame (experimental)".
 
             **1.3.4: Restores 1.2.2 streaming behaviour by default after stutter reports; new options are opt-in**
 
@@ -189,24 +197,24 @@ jobs:
 
             **Opt-in options (all off by default)**
 
-            - Newest-frame pacing: Settings, Video Settings, Show more, Video frame pacing, "Lowest latency (newest frame, experimental)". At most one frame per screen refresh, always the newest; on Android 13 and later each frame is scheduled for the earliest refresh it can still make. Only on the built-in display. The full overlay shows its counters.
+            - Newest-frame pacing: Settings, All settings, Video Settings, Video frame pacing, "Lowest latency (newest frame, experimental)". At most one frame per screen refresh, always the newest; on Android 13 and later each frame is scheduled for the earliest refresh it can still make. Only on the built-in display. The full overlay shows its counters.
             - Other pacing modes: "Lowest latency (legacy)", "Prefer smoothest video" and "Balanced with FPS limit" in the same list now pace as their names say (up to 1.2.2 every stream used Balanced).
-            - Snapdragon vendor decoder keys: Settings, Video Settings, Show more, "Use vendor decoder low-latency keys". Applies Qualcomm's low-latency decoder settings and steps down to the 1.2 configuration if the decoder refuses them.
-            - Wi-Fi keepalive: Settings, Advanced Settings, Show more, "Keep Wi-Fi awake while streaming". Sends a tiny packet every 20 ms on Wi-Fi only, from its own thread; "Keep Wi-Fi awake every frame (experimental)" sends it once per frame instead.
+            - Snapdragon vendor decoder keys: Settings, All settings, Video Settings, "Use vendor decoder low-latency keys". Applies Qualcomm's low-latency decoder settings and steps down to the 1.2 configuration if the decoder refuses them.
+            - Wi-Fi keepalive: Settings, All settings, Advanced Settings, "Keep Wi-Fi awake while streaming". Sends a tiny packet every 20 ms on Wi-Fi only, from its own thread; "Keep Wi-Fi awake every frame (experimental)" sends it once per frame instead.
 
             **Other changes in 1.3**
 
             - Performance overlay: the full overlay shows the frame pacing mode and the decoder's low-latency path; the lite overlay adds rendered over incoming frame rate ("R/I").
-            - "Reduce refresh rate" (Settings, Advanced Settings, Show more) applies with Balanced, "Lowest latency (newest frame)" and "Lowest latency (legacy)".
+            - "Allow refresh rate reduction" (Settings, All settings, Advanced Settings) applies with Balanced, "Lowest latency (newest frame)" and "Lowest latency (legacy)".
             - One-time setting changes also reach installs that only start streams from home screen shortcuts.
             - "Lowest latency (legacy)" and "Keep Wi-Fi awake while streaming" show in English in every language until they are translated again.
 
             **New in 1.2**
 
-            - Auto resolution and frame rate: "Auto (match display)" is the new first entry and default of the Video resolution and Video frame rate lists. At every stream start it uses the size and refresh rate of the screen the app is on, keeps that screen's shape, and stays within common host limits (up to 4K) and what the video decoder reports. On phones, Auto uses the full panel, including cutout areas. With "Use Virtual Display" on, the host creates its virtual display at that size, so the picture fills the screen. When the built-in screen is mirrored to a larger external monitor or TV, Auto uses that display's resolution; turn off "Use the external display's resolution when mirrored" (Video Settings, Show more) to stream at the built-in screen's size. The settings rows show what Auto currently resolves to.
+            - Auto resolution and frame rate: "Auto (match display)" is the new first entry and default of the Video resolution and Video frame rate lists. At every stream start it uses the size and refresh rate of the screen the app is on, keeps that screen's shape, and stays within common host limits (up to 4K) and what the video decoder reports. On phones, Auto uses the full panel, including cutout areas. With "Use Virtual Display" on, the host creates its virtual display at that size, so the picture fills the screen. When the built-in screen is mirrored to a larger external monitor or TV, Auto uses that display's resolution; turn off "Use the external display's resolution when mirrored" (All settings, Video Settings) to stream at the built-in screen's size. The settings rows show what Auto currently resolves to.
             - One-time migration: installs that were still on the old defaults (1920x1080, 120 FPS and the default bitrate for them) switch to Auto once. Any other resolution, frame rate or bitrate you picked, and every profile, is kept as it was.
-            - Fixed resolution: to stream at a fixed size again, open Settings, Video Settings, Video resolution (and Video frame rate) and pick an entry such as 1920x1080 or 120 FPS. Fixed, native and custom entries behave exactly as in 1.1.3.
-            - Checking monitor behaviour: Settings, Debug Info now has a Displays section that lists every display (state, flags, current and supported modes, HDR types) and what Auto would choose and why. Open it with and without an external monitor connected to see whether your device mirrors or extends the screen.
+            - Fixed resolution: to stream at a fixed size again, open Settings and pick a size such as 1080p for Video resolution (and a rate such as 120 for Video frame rate) at the top; More lists every entry. Fixed, native and custom entries behave exactly as in 1.1.3.
+            - Checking monitor behaviour: Settings, All settings, MISC, Debug Info now has a Displays section that lists every display (state, flags, current and supported modes, HDR types) and what Auto would choose and why. Open it with and without an external monitor connected to see whether your device mirrors or extends the screen.
             - Refreshed look for the PC list, settings and app library: host cards that show each PC's status and what A or a tap does, grouped settings with switches, and controller shortcuts (Start opens Settings, Y opens Profiles, X opens a PC's menu, L1/R1 jump between settings sections).
 
             **Fixes in 1.2.2**
