@@ -105,6 +105,11 @@ public class GroupedCardDecoration extends RecyclerView.ItemDecoration {
         return position > lastFlatPosition && !isHeader;
     }
 
+    /** Card fill; the default is the surface color on the black settings screen. */
+    public void setCardColor(int color) {
+        cardPaint.setColor(color);
+    }
+
     public void setFlatRegion(FlatRegion flatRegion) {
         this.flatRegion = flatRegion;
     }

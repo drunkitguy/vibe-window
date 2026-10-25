@@ -20,18 +20,24 @@ import com.limelight.nvstream.wol.WakeOnLanSender;
 import com.limelight.preferences.AddComputerManually;
 import com.limelight.preferences.GlPreferences;
 import com.limelight.preferences.PreferenceConfiguration;
+import com.limelight.preferences.SettingsHost;
 import com.limelight.preferences.StreamSettings;
+import com.limelight.preferences.UiState;
 import com.limelight.profiles.ProfilesManager;
 import com.limelight.ui.AdapterFragment;
 import com.limelight.ui.AdapterFragmentCallbacks;
 import com.limelight.ui.HostCardState;
 import com.limelight.ui.HostGridLayout;
+import com.limelight.ui.SplitLayout;
 import com.limelight.utils.Dialog;
 import com.limelight.utils.HelpLauncher;
 import com.limelight.utils.ServerHelper;
 import com.limelight.utils.ShortcutHelper;
 import com.limelight.utils.UiHelper;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
+import android.animation.ValueAnimator;
 import android.app.ActivityManager;
 import android.app.AlertDialog;
 import android.app.Service;
@@ -56,6 +62,7 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.ContextMenu.ContextMenuInfo;
 import android.view.View.OnClickListener;
 import android.widget.AbsListView;
@@ -69,6 +76,7 @@ import android.widget.Toast;
 import android.widget.AdapterView.AdapterContextMenuInfo;
 
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.fragment.app.Fragment;
 import androidx.preference.PreferenceManager;
 
 import org.xmlpull.v1.XmlPullParserException;
@@ -76,7 +84,7 @@ import org.xmlpull.v1.XmlPullParserException;
 import javax.microedition.khronos.egl.EGLConfig;
 import javax.microedition.khronos.opengles.GL10;
 
-public class PcView extends AppCompatActivity implements AdapterFragmentCallbacks {
+public class PcView extends AppCompatActivity implements AdapterFragmentCallbacks, SettingsHost {
     private View noPcFoundLayout;
     private AbsListView pcListView;
     // Host selection to restore after returning to this screen, and whether the
@@ -89,6 +97,13 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
     // Controller shortcut whose key down we consumed, so its key up is consumed too
     private int consumedShortcutKey = KeyEvent.KEYCODE_UNKNOWN;
     private boolean centeringObserverRegistered;
+    // Wide landscape: Settings beside the PC list
+    private static final String SETTINGS_PANEL_TAG = "vw_settings_panel";
+    private static final long SETTINGS_PANEL_ANIMATION_MS = 180;
+    private boolean splitMode;
+    private ValueAnimator settingsPanelAnimator;
+    private int settingsPanelReturnPosition = -1;
+    private String settingsPanelLanguage;
     private PcGridAdapter pcGridAdapter;
     private ShortcutHelper shortcutHelper;
     private ComputerManagerService.ComputerManagerBinder managerBinder;
@@ -155,7 +170,9 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
     private final static int PAIR_ID_OTP = 21;
 
     private void initializeViews() {
-        setContentView(R.layout.activity_pc_view);
+        Configuration config = getResources().getConfiguration();
+        splitMode = SplitLayout.useSplit(config.orientation, config.screenWidthDp);
+        setContentView(splitMode ? R.layout.activity_pc_view_split : R.layout.activity_pc_view);
         // The grid is attached again by AdapterFragment
         pcListView = null;
 
@@ -184,7 +201,13 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
         settingsButton.setOnClickListener(new OnClickListener() {
             @Override
             public void onClick(View v) {
-                startActivity(new Intent(PcView.this, StreamSettings.class));
+                if (splitMode) {
+                    // Beside the PC list the button shows or hides the settings panel
+                    setSettingsPanelOpen(!UiState.settingsPanelOpen(PcView.this), true);
+                }
+                else {
+                    startActivity(new Intent(PcView.this, StreamSettings.class));
+                }
             }
         });
         OnClickListener addComputerListener = new OnClickListener() {
@@ -221,6 +244,8 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
         getFragmentManager().beginTransaction()
             .replace(R.id.pcFragmentContainer, new AdapterFragment())
             .commitAllowingStateLoss();
+
+        setupSettingsPanel();
 
         noPcFoundLayout = findViewById(R.id.no_pc_found_layout);
         if (pcGridAdapter.getCount() == 0) {
@@ -375,6 +400,13 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
             userNavigated = true;
         }
 
+        if (splitMode && completeOnCreateCalled) {
+            Boolean handled = dispatchSplitKeyEvent(event);
+            if (handled != null) {
+                return handled;
+            }
+        }
+
         if (keyCode == KeyEvent.KEYCODE_BUTTON_X || keyCode == KeyEvent.KEYCODE_BUTTON_Y ||
                 keyCode == KeyEvent.KEYCODE_BUTTON_START) {
             if (event.getAction() == KeyEvent.ACTION_DOWN) {
@@ -418,6 +450,19 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
                 return true;
 
             case KeyEvent.KEYCODE_BUTTON_START:
+                if (splitMode) {
+                    // Start moves between the PC list and the settings panel
+                    if (settingsPanelHasFocus()) {
+                        focusHosts();
+                    }
+                    else {
+                        if (!UiState.settingsPanelOpen(this)) {
+                            setSettingsPanelOpen(true, true);
+                        }
+                        focusSettingsPanel();
+                    }
+                    return true;
+                }
                 startActivity(new Intent(PcView.this, StreamSettings.class));
                 return true;
 
@@ -426,9 +471,291 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
         }
     }
 
+    private StreamSettings.SettingsFragment settingsPanelFragment() {
+        Fragment fragment = getSupportFragmentManager().findFragmentByTag(SETTINGS_PANEL_TAG);
+        return fragment instanceof StreamSettings.SettingsFragment ? (StreamSettings.SettingsFragment) fragment : null;
+    }
+
+    /** Adds the settings panel in split mode (fresh after every layout change), removes it otherwise. */
+    private void setupSettingsPanel() {
+        Fragment existing = getSupportFragmentManager().findFragmentByTag(SETTINGS_PANEL_TAG);
+        View panel = findViewById(R.id.settings_panel);
+        if (!splitMode || panel == null) {
+            if (existing != null) {
+                getSupportFragmentManager().beginTransaction().remove(existing).commitAllowingStateLoss();
+            }
+            return;
+        }
+
+        Configuration config = getResources().getConfiguration();
+        ViewGroup.LayoutParams params = panel.getLayoutParams();
+        params.width = Math.round(SplitLayout.panelWidthDp(config.screenWidthDp) *
+                getResources().getDisplayMetrics().density);
+        panel.setLayoutParams(params);
+        panel.setVisibility(UiState.settingsPanelOpen(this) ? View.VISIBLE : View.GONE);
+
+        com.google.android.material.button.MaterialButton collapse = findViewById(R.id.settingsBackButton);
+        if (collapse != null) {
+            collapse.setIconResource(R.drawable.ic_side_panel);
+            collapse.setContentDescription(getString(R.string.settings_collapse));
+            collapse.setOnClickListener(new OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    setSettingsPanelOpen(false, true);
+                }
+            });
+        }
+        View more = findViewById(R.id.settingsMoreButton);
+        if (more != null) {
+            more.setOnClickListener(new OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    StreamSettings.SettingsFragment fragment = settingsPanelFragment();
+                    if (fragment != null && fragment.getView() != null) {
+                        fragment.showMoreMenu(v);
+                    }
+                }
+            });
+        }
+
+        attachSettingsPanelFragment();
+    }
+
+    private void attachSettingsPanelFragment() {
+        PreferenceConfiguration prefs = PreferenceConfiguration.readPreferences(this);
+        settingsPanelLanguage = prefs.language;
+        StreamSettings.SettingsFragment fragment = new StreamSettings.SettingsFragment(prefs);
+        Bundle args = new Bundle();
+        args.putBoolean(StreamSettings.SettingsFragment.ARG_EMBEDDED, true);
+        fragment.setArguments(args);
+        getSupportFragmentManager().beginTransaction()
+                .replace(R.id.settings_panel_list, fragment, SETTINGS_PANEL_TAG)
+                .commitAllowingStateLoss();
+    }
+
+    /** Opens or collapses the settings panel; the choice is kept for the next visit. */
+    void setSettingsPanelOpen(final boolean open, boolean animate) {
+        UiState.setSettingsPanelOpen(this, open);
+        final View panel = findViewById(R.id.settings_panel);
+        if (!splitMode || panel == null) {
+            return;
+        }
+        if (!open && settingsPanelHasFocus()) {
+            focusHosts();
+        }
+        if (settingsPanelAnimator != null) {
+            settingsPanelAnimator.cancel();
+            settingsPanelAnimator = null;
+        }
+        final int fullWidth = Math.round(SplitLayout.panelWidthDp(getResources().getConfiguration().screenWidthDp) *
+                getResources().getDisplayMetrics().density);
+        if (!animate) {
+            panel.getLayoutParams().width = fullWidth;
+            panel.setVisibility(open ? View.VISIBLE : View.GONE);
+            panel.requestLayout();
+            return;
+        }
+        int from = panel.getVisibility() == View.VISIBLE ? Math.max(0, panel.getWidth()) : 0;
+        panel.setVisibility(View.VISIBLE);
+        ValueAnimator animator = ValueAnimator.ofInt(from, open ? fullWidth : 0);
+        animator.setDuration(SETTINGS_PANEL_ANIMATION_MS);
+        animator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+            @Override
+            public void onAnimationUpdate(ValueAnimator animation) {
+                panel.getLayoutParams().width = (Integer) animation.getAnimatedValue();
+                panel.requestLayout();
+            }
+        });
+        animator.addListener(new AnimatorListenerAdapter() {
+            private boolean cancelled;
+
+            @Override
+            public void onAnimationCancel(Animator animation) {
+                cancelled = true;
+            }
+
+            @Override
+            public void onAnimationEnd(Animator animation) {
+                if (cancelled) {
+                    return;
+                }
+                panel.getLayoutParams().width = fullWidth;
+                panel.setVisibility(open ? View.VISIBLE : View.GONE);
+                panel.requestLayout();
+                updateGridCentering();
+            }
+        });
+        settingsPanelAnimator = animator;
+        animator.start();
+    }
+
+    boolean settingsPanelHasFocus() {
+        View panel = findViewById(R.id.settings_panel);
+        View focus = getCurrentFocus();
+        while (panel != null && focus != null) {
+            if (focus == panel) {
+                return true;
+            }
+            focus = focus.getParent() instanceof View ? (View) focus.getParent() : null;
+        }
+        return false;
+    }
+
+    private boolean settingsListHasFocus() {
+        View list = findViewById(R.id.settings_panel_list);
+        View focus = getCurrentFocus();
+        while (list != null && focus != null) {
+            if (focus == list) {
+                return true;
+            }
+            focus = focus.getParent() instanceof View ? (View) focus.getParent() : null;
+        }
+        return false;
+    }
+
+    private void focusSettingsPanel() {
+        StreamSettings.SettingsFragment fragment = settingsPanelFragment();
+        if (fragment != null && fragment.getView() != null) {
+            fragment.focusRow(settingsPanelReturnPosition >= 0 ? settingsPanelReturnPosition : 0);
+        }
+    }
+
+    private void focusHosts() {
+        StreamSettings.SettingsFragment fragment = settingsPanelFragment();
+        if (fragment != null && settingsPanelHasFocus()) {
+            settingsPanelReturnPosition = fragment.focusedRowPosition();
+        }
+        if (pcListView != null && pcListView.getVisibility() == View.VISIBLE && pcGridAdapter != null &&
+                pcGridAdapter.getCount() > 0) {
+            pcListView.requestFocus();
+        }
+        else {
+            View add = findViewById(R.id.noPcAddButton);
+            if (add != null && add.isShown()) {
+                add.requestFocus();
+            }
+            else {
+                View settings = findViewById(R.id.settingsButton);
+                if (settings != null) {
+                    settings.requestFocus();
+                }
+            }
+        }
+    }
+
+    /**
+     * Key rules while Settings sits beside the PC list. Returns null to fall through to the
+     * normal handling, else whether the key was consumed.
+     */
+    private Boolean dispatchSplitKeyEvent(KeyEvent event) {
+        int keyCode = event.getKeyCode();
+        boolean down = event.getAction() == KeyEvent.ACTION_DOWN;
+        if (settingsPanelHasFocus()) {
+            StreamSettings.SettingsFragment fragment = settingsPanelFragment();
+            switch (keyCode) {
+                case KeyEvent.KEYCODE_BUTTON_L1:
+                case KeyEvent.KEYCODE_BUTTON_R1:
+                    if (down && fragment != null) {
+                        fragment.jumpToCategory(keyCode == KeyEvent.KEYCODE_BUTTON_R1 ? 1 : -1);
+                    }
+                    return true;
+                case KeyEvent.KEYCODE_BUTTON_SELECT:
+                    View more = findViewById(R.id.settingsMoreButton);
+                    if (!down && fragment != null && more != null) {
+                        fragment.showMoreMenu(more);
+                    }
+                    return true;
+                case KeyEvent.KEYCODE_BUTTON_X:
+                case KeyEvent.KEYCODE_BUTTON_Y:
+                    // No host shortcut in the panel: Y opens the focused row's info (the row
+                    // handles it), never Profiles, and X does nothing
+                    getWindow().superDispatchKeyEvent(event);
+                    return true;
+                case KeyEvent.KEYCODE_DPAD_RIGHT:
+                    if (!settingsListHasFocus()) {
+                        // Header buttons move as usual
+                        return null;
+                    }
+                    // Segments and sliders take Right; other rows go back to the PC list
+                    if (getWindow().superDispatchKeyEvent(event)) {
+                        return true;
+                    }
+                    if (down) {
+                        focusHosts();
+                    }
+                    return true;
+                case KeyEvent.KEYCODE_BUTTON_B:
+                case KeyEvent.KEYCODE_BACK:
+                    // A segment highlight takes B first; otherwise B goes back to the PC list
+                    if (getWindow().superDispatchKeyEvent(event)) {
+                        return true;
+                    }
+                    if (!down) {
+                        focusHosts();
+                    }
+                    return true;
+                default:
+                    return null;
+            }
+        }
+        // Left from the first column of the PC list enters the open panel
+        if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT && UiState.settingsPanelOpen(this) &&
+                pcListView instanceof GridView && pcListView.hasFocus()) {
+            GridView grid = (GridView) pcListView;
+            int selected = grid.getSelectedItemPosition();
+            int columns = Math.max(1, grid.getNumColumns());
+            if (selected == AdapterView.INVALID_POSITION || selected % columns == 0) {
+                if (down) {
+                    focusSettingsPanel();
+                }
+                return true;
+            }
+        }
+        return null;
+    }
+
+    @Override
+    public void reloadSettings() {
+        if (splitMode && findViewById(R.id.settings_panel_list) != null) {
+            attachSettingsPanelFragment();
+        }
+    }
+
+    @Override
+    public void onSettingsLanguageChanged() {
+        PreferenceConfiguration newPrefs = PreferenceConfiguration.readPreferences(this);
+        if (settingsPanelLanguage == null || newPrefs.language.equals(settingsPanelLanguage)) {
+            return;
+        }
+        // Same handling as closing the settings screen after a language change
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            Intent intent = new Intent(this, PcView.class);
+            intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK | Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(intent, null);
+        }
+        else if (newPrefs.language == PreferenceConfiguration.DEFAULT_LANGUAGE) {
+            Toast.makeText(this, "Language has been reset to default, please restart the app!", Toast.LENGTH_LONG).show();
+            System.exit(0);
+        }
+        settingsPanelLanguage = newPrefs.language;
+    }
+
+    @Override
+    public void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        StreamSettings.rememberDisplayCutout(this);
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        // A settings panel restored after process death has no container until the views
+        // exist; drop it, setupSettingsPanel() adds a fresh one
+        Fragment restoredPanel = getSupportFragmentManager().findFragmentByTag(SETTINGS_PANEL_TAG);
+        if (restoredPanel != null) {
+            getSupportFragmentManager().beginTransaction().remove(restoredPanel).commitNow();
+        }
 
         // Assume we're in the foreground when created to avoid a race
         // between binding to CMS and onResume()

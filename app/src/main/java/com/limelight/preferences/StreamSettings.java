@@ -80,7 +80,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-public class StreamSettings extends AppCompatActivity {
+public class StreamSettings extends AppCompatActivity implements SettingsHost {
     private PreferenceConfiguration previousPrefs;
     private int previousDisplayPixelCount;
     private int previousDisplayId = Display.INVALID_DISPLAY;
@@ -90,7 +90,8 @@ public class StreamSettings extends AppCompatActivity {
     // HACK for Android 9
     static DisplayCutout displayCutoutP;
 
-    void reloadSettings() {
+    @Override
+    public void reloadSettings() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             Display.Mode mode = getActiveDisplay(StreamSettings.this, previousPrefs).getMode();
             previousDisplayPixelCount = mode.getPhysicalWidth() * mode.getPhysicalHeight();
@@ -166,18 +167,29 @@ public class StreamSettings extends AppCompatActivity {
     public void onAttachedToWindow() {
         super.onAttachedToWindow();
 
-        // We have to use this hack on Android 9 because we don't have Display.getCutout()
-        // which was added in Android 10.
+        rememberDisplayCutout(this);
+
+        reloadSettings();
+    }
+
+    /**
+     * We have to use this hack on Android 9 because we don't have Display.getCutout()
+     * which was added in Android 10. Called by every activity that shows the settings.
+     */
+    public static void rememberDisplayCutout(Activity activity) {
         if (Build.VERSION.SDK_INT == Build.VERSION_CODES.P) {
             // Insets can be null when the activity is recreated on screen rotation
             // https://stackoverflow.com/questions/61241255/windowinsets-getdisplaycutout-is-null-everywhere-except-within-onattachedtowindo
-            WindowInsets insets = getWindow().getDecorView().getRootWindowInsets();
+            WindowInsets insets = activity.getWindow().getDecorView().getRootWindowInsets();
             if (insets != null) {
                 displayCutoutP = insets.getDisplayCutout();
             }
         }
+    }
 
-        reloadSettings();
+    @Override
+    public void onSettingsLanguageChanged() {
+        // Handled when the screen closes (onBackPressed), as before
     }
 
     @Override
@@ -232,6 +244,14 @@ public class StreamSettings extends AppCompatActivity {
         private boolean nativeFramerateShown = false;
 
         private PreferenceConfiguration prevPrefConfig;
+
+        /** Set for the settings panel beside the PC list: no initial focus, raised cards. */
+        public static final String ARG_EMBEDDED = "vw_embedded";
+
+        boolean isEmbedded() {
+            Bundle args = getArguments();
+            return args != null && args.getBoolean(ARG_EMBEDDED, false);
+        }
 
         /** Caption between the quick settings and the grouped sections. */
         static final String ALL_SETTINGS_KEY = "category_all_settings";
@@ -621,6 +641,10 @@ public class StreamSettings extends AppCompatActivity {
                     return adapterPositionOf(ALL_SETTINGS_KEY);
                 }
             });
+            if (isEmbedded()) {
+                // The panel itself is the surface color: raise the cards above it
+                decoration.setCardColor(androidx.core.content.ContextCompat.getColor(requireContext(), R.color.vw_surface_high));
+            }
             list.addItemDecoration(decoration);
 
             // Center the content and never let it grow wider than the max width
@@ -643,15 +667,44 @@ public class StreamSettings extends AppCompatActivity {
                 }
             });
 
-            // Controller users start on the first row of the first category (resolution)
-            list.post(new Runnable() {
-                @Override
-                public void run() {
-                    if (!list.isInTouchMode() && list.getFocusedChild() == null) {
-                        focusFirstRowAfter(list, 0, 2);
+            // Controller users start on the first row of the first category (resolution).
+            // Beside the PC list the focus starts on the hosts instead.
+            if (!isEmbedded()) {
+                list.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (!list.isInTouchMode() && list.getFocusedChild() == null) {
+                            focusFirstRowAfter(list, 0, 2);
+                        }
                     }
-                }
-            });
+                });
+            }
+        }
+
+        /** Adapter position of the focused row, or -1. */
+        public int focusedRowPosition() {
+            RecyclerView list = getListView();
+            if (list == null || list.getFocusedChild() == null) {
+                return RecyclerView.NO_POSITION;
+            }
+            return list.getChildAdapterPosition(list.getFocusedChild());
+        }
+
+        /** Focuses the row at (or the first focusable row after) an adapter position. */
+        public void focusRow(int position) {
+            final RecyclerView list = getListView();
+            if (list == null) {
+                return;
+            }
+            final int target = Math.max(0, position);
+            RecyclerView.ViewHolder holder = list.findViewHolderForAdapterPosition(target);
+            if (holder != null && holder.itemView.isFocusable() && holder.itemView.requestFocus()) {
+                return;
+            }
+            if (list.getLayoutManager() != null && holder == null) {
+                list.getLayoutManager().scrollToPosition(target);
+            }
+            focusFirstRowAfter(list, target, 2);
         }
 
         /** Adapter position of a preference in the list, or -1 (RecyclerView.NO_POSITION). */
@@ -1270,6 +1323,26 @@ public class StreamSettings extends AppCompatActivity {
             }
             updateAutoHints();
 
+            // The host activity applies a new language (the PC list restarts itself)
+            Preference languagePref = findPreference("list_languages");
+            if (languagePref != null) {
+                languagePref.setOnPreferenceChangeListener(new Preference.OnPreferenceChangeListener() {
+                    @Override
+                    public boolean onPreferenceChange(Preference preference, Object newValue) {
+                        new Handler(Looper.getMainLooper()).post(new Runnable() {
+                            @Override
+                            public void run() {
+                                Activity host = getActivity();
+                                if (host instanceof SettingsHost) {
+                                    ((SettingsHost) host).onSettingsLanguageChanged();
+                                }
+                            }
+                        });
+                        return true;
+                    }
+                });
+            }
+
             findPreference("checkbox_enable_perf_logging").setOnPreferenceChangeListener(new Preference.OnPreferenceChangeListener() {
                 @Override
                 public boolean onPreferenceChange(Preference preference, Object newValue) {
@@ -1534,9 +1607,9 @@ public class StreamSettings extends AppCompatActivity {
                 @Override
                 public void run() {
                     // Ensure the activity is still open when this timeout expires
-                    StreamSettings settingsActivity = (StreamSettings) SettingsFragment.this.getActivity();
-                    if (settingsActivity != null) {
-                        settingsActivity.reloadSettings();
+                    Activity host = SettingsFragment.this.getActivity();
+                    if (host instanceof SettingsHost && !host.isFinishing()) {
+                        ((SettingsHost) host).reloadSettings();
                     }
                 }
             }, 500);

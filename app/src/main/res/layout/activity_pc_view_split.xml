@@ -1,0 +1,185 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wide landscape screens: Settings on the left, the PC list on the right. The PC list
+     keeps every id of activity_pc_view; its rail becomes a header row. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/pc_split_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/vw_bg"
+    android:baselineAligned="false"
+    android:orientation="horizontal"
+    tools:context=".PcView">
+
+    <LinearLayout
+        android:id="@+id/settings_panel"
+        android:layout_width="360dp"
+        android:layout_height="match_parent"
+        android:background="@color/vw_surface"
+        android:orientation="vertical">
+
+        <include layout="@layout/vw_settings_header" />
+
+        <FrameLayout
+            android:id="@+id/settings_panel_list"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+    </LinearLayout>
+
+    <RelativeLayout
+        android:id="@+id/pc_hosts_panel"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1">
+
+        <!-- Header row: title, then Add PC, Help and the Settings panel button -->
+        <LinearLayout
+            android:id="@+id/pcRail"
+            android:layout_width="match_parent"
+            android:layout_height="72dp"
+            android:layout_alignParentTop="true"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="@dimen/vw_gutter"
+            android:paddingLeft="@dimen/vw_gutter"
+            android:paddingEnd="@dimen/vw_space_3"
+            android:paddingRight="@dimen/vw_space_3">
+
+            <TextView
+                android:id="@+id/pcHeaderTitle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:text="@string/pcview_header_title"
+                android:textAppearance="@style/TextAppearance.Vibe.Title" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/manuallyAddPc"
+                style="@style/Widget.Vibe.RoundIconButton"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:contentDescription="@string/title_add_pc"
+                android:tooltipText="@string/title_add_pc"
+                android:nextFocusRight="@+id/helpButton"
+                app:icon="@drawable/ic_add" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/helpButton"
+                style="@style/Widget.Vibe.RoundIconButton"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginStart="@dimen/vw_space_3"
+                android:layout_marginLeft="@dimen/vw_space_3"
+                android:contentDescription="@string/help"
+                android:tooltipText="@string/help"
+                android:nextFocusLeft="@id/manuallyAddPc"
+                android:nextFocusRight="@+id/settingsButton"
+                app:icon="@drawable/ic_help" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/settingsButton"
+                style="@style/Widget.Vibe.RoundIconButton"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginStart="@dimen/vw_space_3"
+                android:layout_marginLeft="@dimen/vw_space_3"
+                android:contentDescription="@string/pcview_settings"
+                android:tooltipText="@string/pcview_settings"
+                android:nextFocusLeft="@id/helpButton"
+                app:icon="@drawable/ic_settings_rounded" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/pcContent"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_below="@id/pcRail"
+            android:orientation="vertical"
+            android:paddingStart="@dimen/vw_space_4"
+            android:paddingLeft="@dimen/vw_space_4"
+            android:paddingEnd="@dimen/vw_space_4"
+            android:paddingRight="@dimen/vw_space_4">
+
+            <TextView
+                android:id="@+id/pcHeaderSubtitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/vw_space_2"
+                android:layout_marginLeft="@dimen/vw_space_2"
+                android:textAppearance="@style/TextAppearance.Vibe.Secondary" />
+
+            <RelativeLayout
+                android:id="@+id/pcFragmentContainer"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:layout_marginTop="@dimen/vw_space_3">
+
+                <LinearLayout
+                    android:id="@+id/no_pc_found_layout"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_centerInParent="true"
+                    android:gravity="center_horizontal"
+                    android:orientation="vertical"
+                    android:paddingLeft="@dimen/vw_space_4"
+                    android:paddingRight="@dimen/vw_space_4">
+
+                    <com.google.android.material.progressindicator.CircularProgressIndicator
+                        android:id="@+id/pcs_loading"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:indeterminate="true"
+                        app:indicatorColor="@color/vw_accent"
+                        app:indicatorSize="48dp"
+                        app:trackThickness="4dp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/vw_space_4"
+                        android:gravity="center"
+                        android:maxWidth="480dp"
+                        android:text="@string/pcview_searching_title"
+                        android:textAppearance="@style/TextAppearance.Vibe.Section" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/vw_space_2"
+                        android:gravity="center"
+                        android:maxWidth="480dp"
+                        android:text="@string/pcview_searching_hint"
+                        android:textAppearance="@style/TextAppearance.Vibe.Secondary" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/noPcAddButton"
+                        style="@style/Widget.Vibe.TonalButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/vw_space_5"
+                        android:text="@string/pcview_add_pc_manually"
+                        app:icon="@drawable/ic_add" />
+                </LinearLayout>
+            </RelativeLayout>
+        </LinearLayout>
+
+        <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
+            android:id="@+id/profilesButton"
+            style="@style/Widget.Vibe.Fab"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentBottom="true"
+            android:layout_alignParentEnd="true"
+            android:layout_alignParentRight="true"
+            android:layout_marginBottom="@dimen/vw_space_5"
+            android:layout_marginEnd="@dimen/vw_space_5"
+            android:layout_marginRight="@dimen/vw_space_5"
+            android:contentDescription="@string/profile_manager_choose_profile"
+            app:icon="@drawable/ic_profiles" />
+    </RelativeLayout>
+</LinearLayout>

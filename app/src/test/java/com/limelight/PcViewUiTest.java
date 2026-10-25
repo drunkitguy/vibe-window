@@ -230,7 +230,22 @@ public class PcViewUiTest {
     @Test
     @Config(qualifiers = "w731dp-h411dp-land")
     public void handheldLandscapeShowsTwoHostsSideBySide() throws Exception {
+        // 731dp shows Settings beside the PC list; with the panel hidden the PC list has the
+        // full width, as in 1.3
+        com.limelight.preferences.UiState.setSettingsPanelOpen(ApplicationProvider.getApplicationContext(), false);
         assertTwoColumnsWithoutClipping();
+    }
+
+    @Test
+    @Config(qualifiers = "w731dp-h411dp-land")
+    public void handheldLandscapeWithTheSettingsPanelFitsOneCard() throws Exception {
+        PcView activity = Robolectric.buildActivity(PcView.class).setup().get();
+        idle();
+        addHosts(activity, 2);
+        GridView grid = grid(activity);
+        assertEquals(1, grid.getNumColumns());
+        assertTrue("The card column must not be clipped",
+                grid.getColumnWidth() + grid.getPaddingLeft() + grid.getPaddingRight() <= grid.getWidth());
     }
 
     @Test
