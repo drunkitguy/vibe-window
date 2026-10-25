@@ -68,11 +68,11 @@ public class InfoButtonTest {
     }
 
     @Test
-    public void yOnTheRowOpensTheSummaryInADialog() {
-        StreamSettings.SettingsFragment fragment = launch();
-        View row = bindRow(fragment, "checkbox_enable_audiofx").itemView;
-        assertTrue(row.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_BUTTON_Y)));
-        assertTrue(row.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_BUTTON_Y)));
+    public void yOnTheFocusedRowOpensTheSummaryInADialog() {
+        StreamSettings activity = SettingsTestUtil.launchActivity();
+        StreamSettings.SettingsFragment fragment = SettingsTestUtil.fragmentOf(activity);
+        SettingsTestUtil.focusRow(fragment, "checkbox_enable_audiofx");
+        assertTrue(SettingsTestUtil.press(activity, KeyEvent.KEYCODE_BUTTON_Y));
         idle();
         Dialog dialog = ShadowDialog.getLatestDialog();
         assertNotNull("Y should open the info dialog", dialog);

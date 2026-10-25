@@ -5,11 +5,16 @@ import android.content.Context;
 import android.os.Build;
 import android.os.Looper;
 
+import android.app.Activity;
+import android.view.KeyEvent;
+import android.view.View;
+
 import androidx.fragment.app.Fragment;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceGroup;
 import androidx.preference.PreferenceGroupAdapter;
 import androidx.preference.PreferenceManager;
+import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.test.core.app.ApplicationProvider;
 
@@ -99,5 +104,32 @@ final class SettingsTestUtil {
         RecyclerView.ViewHolder holder = adapter.createViewHolder(list, adapter.getItemViewType(position));
         adapter.bindViewHolder(holder, position);
         return holder;
+    }
+
+    /** Scrolls a row into the real list, leaves touch mode and focuses it, as a controller would. */
+    static View focusRow(StreamSettings.SettingsFragment fragment, String key) {
+        RecyclerView list = fragment.getListView();
+        int position = position(fragment, key);
+        assertTrue(key + " should be in the list", position >= 0);
+        ((LinearLayoutManager) list.getLayoutManager()).scrollToPositionWithOffset(position, 0);
+        idle();
+        RecyclerView.ViewHolder holder = list.findViewHolderForAdapterPosition(position);
+        assertNotNull(key + " should be laid out", holder);
+        com.limelight.PcViewUiTest.exitTouchMode(list);
+        assertTrue(key + " should take the focus", holder.itemView.requestFocus());
+        return holder.itemView;
+    }
+
+    /** The row of a key that the real list currently shows, or null. */
+    static View shownRow(StreamSettings.SettingsFragment fragment, String key) {
+        RecyclerView.ViewHolder holder = fragment.getListView().findViewHolderForAdapterPosition(position(fragment, key));
+        return holder == null ? null : holder.itemView;
+    }
+
+    /** Presses and releases a key through the activity, so it reaches the focused row. */
+    static boolean press(Activity activity, int keyCode) {
+        boolean down = activity.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, keyCode));
+        activity.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_UP, keyCode));
+        return down;
     }
 }
