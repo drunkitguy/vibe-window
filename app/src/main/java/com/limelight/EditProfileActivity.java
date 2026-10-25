@@ -350,7 +350,11 @@ public class EditProfileActivity extends AppCompatActivity {
                 }
             } else {
                 String key = pref.getKey();
-                if (key != null && changedKeys.contains(key)) {
+                // The statistics overlay row stands for its two switches
+                boolean compositeChanged = com.limelight.preferences.StatsOverlayPreference.KEY.equals(key) &&
+                        (changedKeys.contains("checkbox_enable_perf_overlay") ||
+                                changedKeys.contains("checkbox_enable_perf_overlay_lite"));
+                if (key != null && (changedKeys.contains(key) || compositeChanged)) {
                     pref.setTitle("*" + pref.getTitle());
                 }
             }

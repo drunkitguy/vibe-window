@@ -71,14 +71,14 @@ public class InfoButtonTest {
     public void yOnTheFocusedRowOpensTheSummaryInADialog() {
         StreamSettings activity = SettingsTestUtil.launchActivity();
         StreamSettings.SettingsFragment fragment = SettingsTestUtil.fragmentOf(activity);
-        SettingsTestUtil.focusRow(fragment, "checkbox_enable_audiofx");
+        SettingsTestUtil.focusRow(fragment, "checkbox_host_audio");
         assertTrue(SettingsTestUtil.press(activity, KeyEvent.KEYCODE_BUTTON_Y));
         idle();
         Dialog dialog = ShadowDialog.getLatestDialog();
         assertNotNull("Y should open the info dialog", dialog);
         assertTrue(dialog.isShowing());
         TextView message = dialog.findViewById(android.R.id.message);
-        assertEquals(fragment.getString(R.string.summary_checkbox_enable_audiofx), message.getText().toString());
+        assertEquals(fragment.getString(R.string.summary_checkbox_host_audio), message.getText().toString());
     }
 
     @Test

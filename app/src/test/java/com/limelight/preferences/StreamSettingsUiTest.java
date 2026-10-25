@@ -180,10 +180,10 @@ public class StreamSettingsUiTest {
     public void checkboxRowsShowASwitchBoundToTheStoredValue() {
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(
                 ApplicationProvider.getApplicationContext());
-        prefs.edit().putBoolean("checkbox_enable_audiofx", true).commit();
+        prefs.edit().putBoolean("checkbox_host_audio", true).commit();
 
         StreamSettings.SettingsFragment fragment = launch();
-        CheckBoxPreference checkbox = fragment.findPreference("checkbox_enable_audiofx");
+        CheckBoxPreference checkbox = fragment.findPreference("checkbox_host_audio");
         assertNotNull(checkbox);
         RecyclerView list = fragment.getListView();
         int position = adapterPosition(list, checkbox);
@@ -212,41 +212,49 @@ public class StreamSettingsUiTest {
     public void collapsedGroupsShowAShowMoreRow() {
         StreamSettings.SettingsFragment fragment = launch();
         RecyclerView list = fragment.getListView();
-        Preference video = fragment.findPreference("category_video_settings");
+        PreferenceGroup video = fragment.findPreference("category_video_settings");
         Preference audio = fragment.findPreference("category_audio_settings");
         int videoPosition = adapterPosition(list, video);
         int audioPosition = adapterPosition(list, audio);
-        // The row right above the audio header is the video category's expander
+        // Every section under All settings starts collapsed: header, then its expander
+        assertEquals(videoPosition + 2, audioPosition);
         RecyclerView.ViewHolder holder = bindRow(list, audioPosition - 1);
-        assertTrue(audioPosition - 1 > videoPosition);
         TextView title = holder.itemView.findViewById(android.R.id.title);
         assertNotNull(title);
-        assertEquals(fragment.getString(R.string.expand_button_title), title.getText().toString());
+        int hidden = VwPreferenceAdapter.hiddenCount(video);
+        assertTrue(hidden > 10);
+        assertEquals(fragment.getResources().getQuantityString(R.plurals.expand_settings_count, hidden, hidden),
+                title.getText().toString());
         float density = fragment.getResources().getDisplayMetrics().density;
         assertEquals(Math.round(56 * density), holder.itemView.getMinimumHeight());
     }
 
     @Test
-    public void shoulderButtonsMoveFocusToTheFirstRowOfTheCategory() {
+    public void quickSettingsComeFirstInTheirOrder() {
         StreamSettings.SettingsFragment fragment = launch();
         RecyclerView list = fragment.getListView();
-        com.limelight.PcViewUiTest.exitTouchMode(list);
-        int audioPosition = adapterPosition(list, fragment.findPreference("category_audio_settings"));
-        int gamepadPosition = adapterPosition(list, fragment.findPreference("category_gamepad_settings"));
-
-        activity.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_BUTTON_R1));
-        idle();
-        View focused = list.getFocusedChild();
-        assertNotNull("R1 should focus a row", focused);
-        assertEquals(audioPosition + 1, list.getChildAdapterPosition(focused));
-
-        activity.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_BUTTON_R1));
-        idle();
-        assertEquals(gamepadPosition + 1, list.getChildAdapterPosition(list.getFocusedChild()));
-
-        activity.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_BUTTON_L1));
-        idle();
-        assertEquals(audioPosition + 1, list.getChildAdapterPosition(list.getFocusedChild()));
+        String[] keys = {"category_quick_stream", "list_resolution", "list_fps", "seekbar_bitrate_kbps",
+                "video_format", "list_video_scale_mode", "checkbox_window_only",
+                "checkbox_use_virtual_display", "quick_stats_overlay",
+                "category_quick_controls", "mouse_mode_list", "checkbox_multi_touch_gestures",
+                "checkbox_enable_rumble", "checkbox_flip_face_buttons", "checkbox_mouse_emulation",
+                "category_quick_audio", "list_audio_config", "checkbox_host_audio",
+                "category_quick_app", "checkbox_resume_without_confirm", "checkbox_enable_quit_dialog",
+                "category_all_settings", "category_video_settings"};
+        int last = -1;
+        for (String key : keys) {
+            int position = adapterPosition(list, fragment.findPreference(key));
+            assertTrue(key + " should be shown after the previous row", position > last);
+            last = position;
+        }
+        // The overlay switches are driven by the statistics overlay row and are not shown twice
+        assertTrue(!fragment.findPreference("checkbox_enable_perf_overlay").isVisible());
+        assertTrue(!fragment.findPreference("checkbox_enable_perf_overlay_lite").isVisible());
+        // Frame pacing stays in All settings, Video, as its first row
+        assertEquals(fragment.findPreference("category_video_settings"),
+                fragment.findPreference("frame_pacing").getParent());
+        assertEquals(fragment.findPreference("frame_pacing"),
+                ((PreferenceGroup) fragment.findPreference("category_video_settings")).getPreference(0));
     }
 
     @Test
@@ -254,11 +262,11 @@ public class StreamSettingsUiTest {
     public void checkboxRowsUseTheMaterialComponentsSwitchBeforeAndroid10() {
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(
                 ApplicationProvider.getApplicationContext());
-        prefs.edit().putBoolean("checkbox_enable_audiofx", true).commit();
+        prefs.edit().putBoolean("checkbox_host_audio", true).commit();
 
         StreamSettings.SettingsFragment fragment = launch();
         RecyclerView list = fragment.getListView();
-        int position = adapterPosition(list, fragment.findPreference("checkbox_enable_audiofx"));
+        int position = adapterPosition(list, fragment.findPreference("checkbox_host_audio"));
         View widget = bindRow(list, position).itemView.findViewById(android.R.id.checkbox);
         assertEquals("com.google.android.material.switchmaterial.SwitchMaterial", widget.getClass().getName());
         assertTrue(((CompoundButton) widget).isChecked());
@@ -349,8 +357,8 @@ public class StreamSettingsUiTest {
         StreamSettings.SettingsFragment fragment = launch();
         RecyclerView list = fragment.getListView();
         LinearLayoutManager layoutManager = (LinearLayoutManager) list.getLayoutManager();
-        int audioPosition = adapterPosition(list, fragment.findPreference("category_audio_settings"));
-        int gamepadPosition = adapterPosition(list, fragment.findPreference("category_gamepad_settings"));
+        int audioPosition = adapterPosition(list, fragment.findPreference("category_quick_controls"));
+        int gamepadPosition = adapterPosition(list, fragment.findPreference("category_quick_audio"));
 
         assertTrue(activity.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_BUTTON_R1)));
         assertTrue(activity.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_BUTTON_R1)));

@@ -146,4 +146,20 @@
         <item>@string/seg_3d</item>
         <item>@string/seg_3d_film</item>
     </string-array>
+
+    <string-array name="stats_overlay_values" translatable="false">
+        <item>off</item>
+        <item>lite</item>
+        <item>full</item>
+    </string-array>
+    <string-array name="stats_overlay_labels">
+        <item>@string/seg_off</item>
+        <item>@string/seg_lite</item>
+        <item>@string/seg_full</item>
+    </string-array>
+    <string-array name="stats_overlay_names">
+        <item>@string/stats_overlay_off</item>
+        <item>@string/stats_overlay_lite</item>
+        <item>@string/stats_overlay_full</item>
+    </string-array>
 </resources>

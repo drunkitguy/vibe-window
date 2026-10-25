@@ -75,7 +75,7 @@ public class EditProfileActivityUiTest {
         assertNotNull(list);
 
         // Checkbox rows use the switch widget here too
-        int position = adapterPosition(list, prefs.findPreference("checkbox_enable_audiofx"));
+        int position = adapterPosition(list, prefs.findPreference("checkbox_host_audio"));
         @SuppressWarnings("unchecked")
         RecyclerView.Adapter<RecyclerView.ViewHolder> adapter =
                 (RecyclerView.Adapter<RecyclerView.ViewHolder>) list.getAdapter();
@@ -86,8 +86,8 @@ public class EditProfileActivityUiTest {
 
         // R1 and L1 jump between categories as in the settings screen
         LinearLayoutManager layoutManager = (LinearLayoutManager) list.getLayoutManager();
-        int audioPosition = adapterPosition(list, prefs.findPreference("category_audio_settings"));
-        int gamepadPosition = adapterPosition(list, prefs.findPreference("category_gamepad_settings"));
+        int audioPosition = adapterPosition(list, prefs.findPreference("category_quick_controls"));
+        int gamepadPosition = adapterPosition(list, prefs.findPreference("category_quick_audio"));
 
         assertTrue(activity.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_BUTTON_R1)));
         activity.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_BUTTON_R1));

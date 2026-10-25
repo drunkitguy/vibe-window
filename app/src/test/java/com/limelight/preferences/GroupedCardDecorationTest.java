@@ -62,4 +62,36 @@ public class GroupedCardDecorationTest {
         assertFalse(GroupedCardDecoration.hasDividerBelow(POSITION_SINGLE));
         assertFalse(GroupedCardDecoration.hasDividerBelow(POSITION_NONE));
     }
+
+    // Quick settings: caption, row, row, caption, row, All settings caption, then a carded section
+    private static final boolean[] HEADERS = {true, false, false, true, false, true, true, false, false};
+    private static final int ALL_SETTINGS = 5;
+
+    private static boolean cardRow(int index) {
+        return index >= 0 && index < HEADERS.length &&
+                GroupedCardDecoration.isCardRow(index, ALL_SETTINGS, HEADERS[index]);
+    }
+
+    @Test
+    public void quickSettingsAboveAllSettingsAreNeverCarded() {
+        for (int i = 0; i <= ALL_SETTINGS; i++) {
+            assertFalse("Position " + i + " is flat", cardRow(i));
+        }
+    }
+
+    @Test
+    public void sectionsAfterAllSettingsAreCardedAsBefore() {
+        // Header of the first section, then its rows
+        assertFalse(cardRow(6));
+        assertTrue(cardRow(7));
+        assertTrue(cardRow(8));
+        assertEquals(POSITION_FIRST, GroupedCardDecoration.positionOf(cardRow(6), cardRow(7), cardRow(8)));
+        assertEquals(POSITION_LAST, GroupedCardDecoration.positionOf(cardRow(7), cardRow(8), cardRow(9)));
+    }
+
+    @Test
+    public void withoutAFlatRegionEveryRowIsCarded() {
+        assertTrue(GroupedCardDecoration.isCardRow(0, -1, false));
+        assertFalse(GroupedCardDecoration.isCardRow(0, -1, true));
+    }
 }

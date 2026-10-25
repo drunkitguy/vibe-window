@@ -19,9 +19,15 @@ import java.util.Set;
 /**
  * Draws the settings rows of each category as one rounded card, with hairlines
  * between rows. Category headers stay outside the cards. The expand ("Show more")
- * row belongs to the card of its category.
+ * row belongs to the card of its category. Rows up to the "All settings" caption
+ * (the quick settings) stay flat, without a card.
  */
 public class GroupedCardDecoration extends RecyclerView.ItemDecoration {
+
+    /** Adapter position of the last row that is never carded, or -1. */
+    public interface FlatRegion {
+        int lastFlatPosition();
+    }
 
     // Position of a row inside its card
     public static final int POSITION_NONE = 0;
@@ -40,6 +46,9 @@ public class GroupedCardDecoration extends RecyclerView.ItemDecoration {
     private final float[][] radii = new float[4][];
     // View types of category headers, learned from the header views (vw_pref_category)
     private final Set<Integer> headerViewTypes = new HashSet<>();
+    private FlatRegion flatRegion;
+    // Read once per draw: the flat region's end does not change while drawing
+    private int lastFlatPosition = -1;
 
     public GroupedCardDecoration(Context context) {
         cardPaint.setColor(ContextCompat.getColor(context, R.color.vw_surface));
@@ -88,6 +97,18 @@ public class GroupedCardDecoration extends RecyclerView.ItemDecoration {
         return position == POSITION_FIRST || position == POSITION_MIDDLE;
     }
 
+    /**
+     * Whether an adapter position is drawn inside a card: only rows (not headers) after
+     * the flat quick settings region.
+     */
+    public static boolean isCardRow(int position, int lastFlatPosition, boolean isHeader) {
+        return position > lastFlatPosition && !isHeader;
+    }
+
+    public void setFlatRegion(FlatRegion flatRegion) {
+        this.flatRegion = flatRegion;
+    }
+
     /** Marks a view type as a category header, e.g. seeded from the adapter before the first draw. */
     public void addHeaderViewType(int viewType) {
         if (viewType != RecyclerView.INVALID_TYPE) {
@@ -103,13 +124,14 @@ public class GroupedCardDecoration extends RecyclerView.ItemDecoration {
         if (adapter == null || position < 0 || position >= adapter.getItemCount()) {
             return false;
         }
-        return !headerViewTypes.contains(adapter.getItemViewType(position));
+        return isCardRow(position, lastFlatPosition, headerViewTypes.contains(adapter.getItemViewType(position)));
     }
 
     @Override
     public void onDraw(@NonNull Canvas c, @NonNull RecyclerView parent, @NonNull RecyclerView.State state) {
         RecyclerView.Adapter<?> adapter = parent.getAdapter();
         int childCount = parent.getChildCount();
+        lastFlatPosition = flatRegion != null ? flatRegion.lastFlatPosition() : -1;
 
         // Category headers inflate vw_pref_category; remember their view type so headers
         // outside the visible area are recognized too

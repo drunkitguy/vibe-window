@@ -808,6 +808,22 @@
     <string name="pref_info_button">About this setting</string>
     <string name="pref_info_current">Current: %1$s</string>
     <string name="pref_show_descriptions">Show descriptions</string>
+    <!-- Quick settings at the top of Settings, and the caption above every other section -->
+    <string name="category_quick_stream">Stream</string>
+    <string name="category_quick_controls">Touch and controls</string>
+    <string name="category_quick_audio">Audio</string>
+    <string name="category_quick_app">App</string>
+    <string name="category_all_settings">All settings</string>
+    <plurals name="expand_settings_count">
+        <item quantity="one">Show %d setting</item>
+        <item quantity="other">Show %d settings</item>
+    </plurals>
+    <!-- One row for the two statistics overlay switches -->
+    <string name="title_quick_stats_overlay">Statistics overlay</string>
+    <string name="summary_quick_stats_overlay">Shows stream statistics on top of the picture. Lite is one compact line, Full lists every counter. Position, the lite details window and logging are under All settings, Performance overlay.</string>
+    <string name="stats_overlay_off">Off</string>
+    <string name="stats_overlay_lite">Lite (one compact line)</string>
+    <string name="stats_overlay_full">Full (every counter)</string>
     <!-- After the bitrate value while it follows the resolution -->
     <string name="pref_value_auto">Auto</string>
 

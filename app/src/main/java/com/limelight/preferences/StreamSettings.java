@@ -208,6 +208,13 @@ public class StreamSettings extends AppCompatActivity {
 
         private PreferenceConfiguration prevPrefConfig;
 
+        /** Caption between the quick settings and the grouped sections. */
+        static final String ALL_SETTINGS_KEY = "category_all_settings";
+        /** Captions of the quick settings at the top. */
+        static final String[] QUICK_CATEGORY_KEYS = {
+                "category_quick_stream", "category_quick_controls", "category_quick_audio", "category_quick_app"
+        };
+
         public SettingsFragment(PreferenceConfiguration prefCfg) {
             prevPrefConfig = prefCfg;
         }
@@ -564,8 +571,9 @@ public class StreamSettings extends AppCompatActivity {
                 return;
             }
 
-            // Rows of each category are drawn as one rounded card. Seed the header view type
-            // from the adapter so even a list restored mid-category draws correct corners.
+            // Rows of each category are drawn as one rounded card. Seed the header view types
+            // (section headers and the quick settings captions) from the adapter so even a list
+            // restored mid-category draws correct corners.
             GroupedCardDecoration decoration = new GroupedCardDecoration(requireContext());
             RecyclerView.Adapter<?> adapter = list.getAdapter();
             PreferenceScreen screen = getPreferenceScreen();
@@ -577,11 +585,17 @@ public class StreamSettings extends AppCompatActivity {
                                 .getPreferenceAdapterPosition(preference);
                         if (position != RecyclerView.NO_POSITION) {
                             decoration.addHeaderViewType(adapter.getItemViewType(position));
-                            break;
                         }
                     }
                 }
             }
+            // The quick settings above "All settings" sit flat on the screen
+            decoration.setFlatRegion(new GroupedCardDecoration.FlatRegion() {
+                @Override
+                public int lastFlatPosition() {
+                    return adapterPositionOf(ALL_SETTINGS_KEY);
+                }
+            });
             list.addItemDecoration(decoration);
 
             // Center the content and never let it grow wider than the max width
@@ -613,6 +627,18 @@ public class StreamSettings extends AppCompatActivity {
                     }
                 }
             });
+        }
+
+        /** Adapter position of a preference in the list, or -1 (RecyclerView.NO_POSITION). */
+        int adapterPositionOf(String key) {
+            RecyclerView list = getListView();
+            Preference preference = findPreference(key);
+            if (list == null || preference == null ||
+                    !(list.getAdapter() instanceof PreferenceGroup.PreferencePositionCallback)) {
+                return RecyclerView.NO_POSITION;
+            }
+            return ((PreferenceGroup.PreferencePositionCallback) list.getAdapter())
+                    .getPreferenceAdapterPosition(preference);
         }
 
         private static void focusFirstRowAfter(final RecyclerView list, final int adapterPosition, final int retries) {
@@ -657,7 +683,9 @@ public class StreamSettings extends AppCompatActivity {
             List<Integer> categoryPositions = new ArrayList<>();
             for (int i = 0; i < screen.getPreferenceCount(); i++) {
                 Preference preference = screen.getPreference(i);
-                if (preference instanceof PreferenceCategory && preference.isVisible()) {
+                // The "All settings" caption has no rows of its own
+                if (preference instanceof PreferenceCategory && preference.isVisible() &&
+                        !ALL_SETTINGS_KEY.equals(preference.getKey())) {
                     int position = positions.getPreferenceAdapterPosition(preference);
                     if (position != RecyclerView.NO_POSITION) {
                         categoryPositions.add(position);
@@ -1030,6 +1058,21 @@ public class StreamSettings extends AppCompatActivity {
                         hdrPref.setChecked(false);
                         hdrPref.setSummary("Update the firmware on your NVIDIA SHIELD Android TV to enable HDR");
                     }
+                }
+            }
+
+            // A quick settings caption whose rows were all removed for this device goes too
+            for (String key : QUICK_CATEGORY_KEYS) {
+                PreferenceCategory quick = findPreference(key);
+                if (quick != null) {
+                    boolean anyVisible = false;
+                    for (int i = 0; i < quick.getPreferenceCount(); i++) {
+                        if (quick.getPreference(i).isVisible()) {
+                            anyVisible = true;
+                            break;
+                        }
+                    }
+                    quick.setVisible(anyVisible);
                 }
             }
 
