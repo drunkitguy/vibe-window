@@ -176,10 +176,15 @@ jobs:
 
             Defaults: Auto resolution and frame rate (match the display), virtual display on, "Show only the app window" on, frame pacing Balanced.
 
+            **Fixes in 1.4.2**
+
+            - The settings beside the PC list are rebuilt on your return only when a setting changed while you were away, so sections you opened and the scroll position stay as they were after a plain Home and back.
+            - A list you left open in the settings panel (for example Video resolution, More) is no longer cut off from the panel when you come back to the app: your choice is saved, and the panel updates once the list closes. 1.4.1 could crash here when a native entry was picked.
+
             **Fixes in 1.4.1**
 
             - Sliders show and step from their real default again when you never changed them (for example on-screen controls opacity reads 90%, not 0%).
-            - The settings beside the PC list show values changed while you were away (a stream saves the touchscreen mode, for example), and a tap on the current choice is always saved.
+            - The settings beside the PC list show values changed while you were away (a stream saves the touchscreen mode, for example), and a tap on the shown choice is always saved.
             - Leaving a row with a pending choice, or jumping sections with L1 and R1 while a choice is highlighted, no longer risks a crash.
             - Rotating or resizing keeps the settings panel as it was, with the focus on the same row; it is rebuilt only for another display.
             - A list that was open in the settings panel when Android closed the app no longer stays behind on its own.
