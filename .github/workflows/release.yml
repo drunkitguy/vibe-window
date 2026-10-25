@@ -174,7 +174,14 @@ jobs:
 
             Install: download the APK below, open it on the device and allow installs from your browser or file manager. Verify with the `.sha256` file if you like.
 
-            Defaults: Auto resolution and frame rate (match the display), virtual display on, "Show only the app window" on, frame pacing Balanced.
+            Defaults: Auto resolution and frame rate (match the display), virtual display on, "Show only the app window" on, frame pacing Balanced, Motion on.
+
+            **New in 1.4.3**
+
+            - Motion: a new Off/On row in Settings, Touch and controls, Motion. On sends this device's gyroscope and accelerometer to the PC when your controller has no motion sensors of its own, and lets a controller with its own sensors use them. It is now on by default, also for existing installs and saved profiles (once; if you turn it off afterwards, it stays off).
+            - Tradeoff: while Motion is on, the PC sees a controller without its own sensors as a PlayStation controller, so button prompts in games may change to PlayStation symbols. Pick Off if you prefer the old prompts; a controller's own sensors keep working.
+            - To use this device's sensors even with a controller that has its own, turn on "Always use device's motion sensors" in Settings, All settings, Gamepad Settings.
+            - Streaming is unchanged: the device sensors only run while the PC asks for motion, at the rate it asks for.
 
             **Fixes in 1.4.2**
 
