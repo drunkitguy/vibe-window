@@ -37,6 +37,7 @@ import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
@@ -129,18 +130,23 @@ public class StreamSettingsUiTest {
     }
 
     @Test
-    public void newestFrameIsTheFirstAndDefaultPacingEntry() {
+    public void balancedIsTheDefaultPacingAndNewestIsOptIn() {
         StreamSettings.SettingsFragment fragment = launch();
         ListPreference pacing = fragment.findPreference("frame_pacing");
         assertNotNull(pacing);
-        assertEquals("newest", pacing.getEntryValues()[0].toString());
-        assertEquals(fragment.getString(R.string.pacing_newest), pacing.getEntries()[0].toString());
-        assertEquals("newest", pacing.getValue());
-        // The legacy mode stays selectable under its new label
+        assertEquals("balanced", pacing.getValue());
         List<CharSequence> values = Arrays.asList(pacing.getEntryValues());
+        assertTrue(values.contains("newest"));
+        assertEquals(fragment.getString(R.string.pacing_newest),
+                pacing.getEntries()[values.indexOf("newest")].toString());
         assertTrue(values.contains("latency"));
-        assertEquals(fragment.getString(R.string.pacing_latency),
-                pacing.getEntries()[values.indexOf("latency")].toString());
+
+        CheckBoxPreference vendorKeys = fragment.findPreference("checkbox_vendor_decoder_keys");
+        assertNotNull(vendorKeys);
+        assertFalse(vendorKeys.isChecked());
+        CheckBoxPreference keepalive = fragment.findPreference("checkbox_prevent_packet_loss");
+        assertNotNull(keepalive);
+        assertFalse(keepalive.isChecked());
     }
 
     @Test

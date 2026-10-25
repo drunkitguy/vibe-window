@@ -58,7 +58,7 @@
             app:iconSpaceReserved="false" />
 
         <ListPreference
-            android:defaultValue="newest"
+            android:defaultValue="balanced"
             android:entries="@array/video_frame_pacing_names"
             android:entryValues="@array/video_frame_pacing_values"
             android:key="frame_pacing"
@@ -79,7 +79,7 @@
             android:title="@string/title_checkbox_ultra_low_latency"
             app:iconSpaceReserved="false" />
         <CheckBoxPreference
-            android:defaultValue="true"
+            android:defaultValue="false"
             android:key="checkbox_vendor_decoder_keys"
             android:summary="@string/summary_checkbox_vendor_decoder_keys"
             android:title="@string/title_checkbox_vendor_decoder_keys"
@@ -1007,7 +1007,7 @@
             android:title="@string/title_full_range"
             app:iconSpaceReserved="false" />
         <CheckBoxPreference
-            android:defaultValue="true"
+            android:defaultValue="false"
             android:key="checkbox_prevent_packet_loss"
             android:summary="@string/summary_prevent_packet_loss"
             android:title="@string/title_prevent_packet_loss"

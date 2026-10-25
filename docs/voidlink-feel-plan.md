@@ -35,6 +35,17 @@ Scope decisions, stated up front:
   - the surface `setFrameRate` code (3833 to 3845), which already covers API 30 and 31+.
 - New logic goes into new small classes that do not depend on Android where possible, so that it can be tested on the JVM.
 
+### 1.3.4: 1.2.2 behaviour is the default again
+
+A real test of client 1.3.3 with host 1.3.1 stuttered badly (HEVC and AV1, docked 4K60 on an external display and undocked 1080p120), while 1.2.2 with host 1.2.2 was fine. 1.3.4 makes the 1.2.2 streaming behaviour the default again and keeps the new parts opt-in:
+
+- Frame pacing defaults to Balanced (what 1.2.2 used for every stream). "Lowest latency (newest frame, experimental)" stays selectable. The warp entries run as Balanced with their frame rate factor, as in 1.2.2.
+- "Use vendor decoder low-latency keys" and "Keep Wi-Fi awake while streaming" default to off.
+- The 1.3.0 migrations no longer run. A one-time migration (`restored_122_defaults_v134`, base preferences only) moves values that came from the 1.3.x defaults back: see `PreferenceConfiguration.restoreStreamingDefaultsOf122`.
+- On the default path the renderer again calls `Surface.setFrameRate` after configure, as in 1.2.2 (C5 is reverted), and the stats changes that touched the render thread are reverted or made lock-free.
+
+The sections below describe the 1.3.0 to 1.3.3 work, which is now opt-in.
+
 ### C1. Honour the user's frame pacing choice
 
 Where:

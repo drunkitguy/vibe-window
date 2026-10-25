@@ -49,12 +49,14 @@ public class PreferenceConfiguration {
     static final String AUTO_RES_PREFER_EXTERNAL_PREF_STRING = "checkbox_auto_res_prefer_external";
     // One-time migration of the old defaults to auto, stored in the base preferences only
     static final String MIGRATED_AUTO_DISPLAY_PREF_STRING = "migrated_auto_display_v120";
-    // One-time move of the old pacing default to "newest", stored in the base preferences only
+    // Set by the 1.3.0 to 1.3.3 pacing migration (to "newest"); read to tell 1.3.x installs apart
     static final String MIGRATED_FRAME_PACING_NEWEST_PREF_STRING = "migrated_frame_pacing_newest_v130";
+    // One-time return to the 1.2.2 streaming defaults, stored in the base preferences only
+    static final String RESTORED_122_DEFAULTS_PREF_STRING = "restored_122_defaults_v134";
     private static final String BITRATE_PREF_OLD_STRING = "seekbar_bitrate";
     private static final String METERED_BITRATE_PREF_STRING = "seekbar_metered_bitrate_kbps";
     private static final String ENABLE_ULTRA_LOW_LATENCY_PREF_STRING = "checkbox_ultra_low_latency";
-    private static final String VENDOR_DECODER_KEYS_PREF_STRING = "checkbox_vendor_decoder_keys";
+    static final String VENDOR_DECODER_KEYS_PREF_STRING = "checkbox_vendor_decoder_keys";
     private static final String ENFORCE_DISPLAY_MODE_PREF_STRING = "checkbox_enforce_display_mode";
     private static final String USE_VIRTUAL_DISPLAY_PREF_STRING = "checkbox_use_virtual_display";
     private static final String WINDOW_ONLY_PREF_STRING = "checkbox_window_only";
@@ -108,7 +110,7 @@ public class PreferenceConfiguration {
 
     private static final String ENABLE_RUMBLE_PREF_STRING = "checkbox_enable_rumble";
     static final String PREVENT_PACKET_LOSS_PREF_STRING = "checkbox_prevent_packet_loss";
-    // One-time switch of the Wi-Fi keepalive to on, stored in the base preferences only
+    // Set by the 1.3.0 to 1.3.3 keepalive migration (to on); read to tell 1.3.x installs apart
     static final String MIGRATED_PREVENT_PACKET_LOSS_PREF_STRING = "migrated_prevent_packet_loss_v130";
 
     private static final String LIST_ONSCREEN_KEYBOARD_ALIGN_MODE = "list_onscreen_keyboard_align_mode";
@@ -169,7 +171,8 @@ public class PreferenceConfiguration {
     private static final boolean DEFAULT_BITRATE_FOLLOWS_RESOLUTION = true;
     private static final boolean DEFAULT_AUTO_RES_PREFER_EXTERNAL = true;
     private static final boolean DEFAULT_ENABLE_ULTRA_LOW_LATENCY = false;
-    private static final boolean DEFAULT_VENDOR_DECODER_KEYS = true;
+    // Off by default since 1.3.4 (the 1.2.2 decoder configuration); opt-in
+    private static final boolean DEFAULT_VENDOR_DECODER_KEYS = false;
     private static final boolean DEFAULT_ENFORCE_DISPLAY_MODE = false;
     private static final boolean DEFAULT_USE_VIRTUAL_DISPLAY = true;
     private static final boolean DEFAULT_WINDOW_ONLY = true;
@@ -209,9 +212,8 @@ public class PreferenceConfiguration {
     private static final boolean DEFAULT_TOUCHSCREEN_TRACKPAD = true;
     private static final String DEFAULT_AUDIO_CONFIG = "2"; // Stereo
     private static final boolean DEFAULT_LATENCY_TOAST = false;
-    static final String DEFAULT_FRAME_PACING = "newest";
-    // The default of 1.2.2 and earlier, which had no effect because every stream was forced to Balanced
-    static final String LEGACY_DEFAULT_FRAME_PACING = "latency";
+    // Balanced again since 1.3.4: what 1.2.2 used for every stream. "newest" is opt-in.
+    static final String DEFAULT_FRAME_PACING = "balanced";
     private static final boolean DEFAULT_ABSOLUTE_MOUSE_MODE = false;
     private static final boolean DEFAULT_ENABLE_AUDIO_FX = false;
     private static final boolean DEFAULT_REDUCE_REFRESH_RATE = false;
@@ -221,7 +223,8 @@ public class PreferenceConfiguration {
     private static final boolean DEFAULT_GAMEPAD_MOTION_FALLBACK = false;
     private static final boolean DEFAULT_FORCE_MOTION_SENSORS_FALLBACK = false;
     private static final boolean DEFAULT_ENABLE_RUMBLE = true;
-    private static final boolean DEFAULT_PREVENT_PACKET_LOSS = true;
+    // Off by default again since 1.3.4, as in 1.2.2; opt-in
+    private static final boolean DEFAULT_PREVENT_PACKET_LOSS = false;
     private static final boolean DEFAULT_GAMEPAD_ENABLE_BATTERY_REPORT = true;
     private static final boolean DEFAULT_FORCE_QWERTY = true;
     private static final boolean DEFAULT_SEND_META_ON_PHYSICAL_BACK = false;
@@ -714,6 +717,10 @@ private static int getFramePacingValue(Context context) {
         else if (str.equals("smoothness")) {
             return FRAME_PACING_MAX_SMOOTHNESS;
         }
+        else if (str.equals("warp") || str.equals("warp2")) {
+            // As in 1.2.2: Balanced pacing with a raised frame rate request (the warp factor)
+            return FRAME_PACING_BALANCED;
+        }
         else {
             // Should never get here
             return FRAME_PACING_MIN_LATENCY;
@@ -766,42 +773,14 @@ private static int getFramePacingValue(Context context) {
     }
 
     /**
-     * Runs every one-time migration of the base preferences: the Wi-Fi keepalive, Auto
-     * resolution and the frame pacing default. Each runs at most once per install, so this is
-     * safe to call from every entry point (the PC list and shortcut launches).
+     * Runs every one-time migration of the base preferences: Auto resolution, then the return
+     * to the 1.2.2 streaming defaults. Each runs at most once per install, so this is safe to
+     * call from every entry point (the PC list and shortcut launches). The 1.3.0 migrations
+     * (to "newest" pacing and keepalive on) no longer run.
      */
     public static void runOneTimeMigrations(Context context) {
-        migratePreventPacketLossToOn(context);
         migrateToAutoDisplayDefaults(context);
-        migrateFramePacingToNewest(context);
-    }
-
-    /**
-     * Turns the Wi-Fi keepalive ("Keep Wi-Fi awake while streaming") on for installs that
-     * have it stored off, once. Before 1.3.0 the stored off came from the defaults written on
-     * first run, not from a choice. Works on the base preferences only; profile overlays are
-     * never migrated. Turning it off after this runs is kept.
-     *
-     * @return true if the stored value was changed
-     */
-    public static boolean migratePreventPacketLossToOn(Context context) {
-        return migratePreventPacketLossToOn(PreferenceManager.getDefaultSharedPreferences(context));
-    }
-
-    static boolean migratePreventPacketLossToOn(SharedPreferences prefs) {
-        if (prefs.getBoolean(MIGRATED_PREVENT_PACKET_LOSS_PREF_STRING, false)) {
-            return false;
-        }
-
-        boolean migrate = prefs.contains(PREVENT_PACKET_LOSS_PREF_STRING) &&
-                !prefs.getBoolean(PREVENT_PACKET_LOSS_PREF_STRING, true);
-
-        SharedPreferences.Editor editor = prefs.edit().putBoolean(MIGRATED_PREVENT_PACKET_LOSS_PREF_STRING, true);
-        if (migrate) {
-            editor.putBoolean(PREVENT_PACKET_LOSS_PREF_STRING, true);
-        }
-        editor.apply();
-        return migrate;
+        restoreStreamingDefaultsOf122(context);
     }
 
     /**
@@ -846,32 +825,74 @@ private static int getFramePacingValue(Context context) {
     }
 
     /**
-     * Moves installs that still have the old frame pacing default ("latency", or nothing
-     * stored) to "newest", once. Every install has "latency" stored, because the defaults
-     * are written on first run, and that choice had no effect before 1.3.0. Works on the
-     * base preferences only; profile overlays are never migrated. Any other stored mode is
-     * a deliberate choice and is left alone.
+     * Returns installs to the 1.2.2 streaming behaviour, once, after stutter reports with the
+     * 1.3.0 to 1.3.3 defaults. Works on the base preferences only; profile overlays are never
+     * changed.
+     * <ul>
+     * <li>Frame pacing: up to 1.2.2 every stream used Balanced whatever was stored, so an
+     * install that never ran 1.3.x gets "balanced" for "latency", "smoothness" and "cap-fps".
+     * On a 1.3.x install, "newest" (the 1.3.0 migration or default), "smoothness" and
+     * "cap-fps" go back to "balanced" too: they cannot be told apart from values stored before
+     * 1.3.0. "latency" on a 1.3.x install was picked by hand after 1.3.0 (the 1.3.0 migration
+     * had moved it to "newest") and is kept. "balanced", "warp" and "warp2" are kept (warp
+     * runs as Balanced with its frame rate factor, as in 1.2.2).</li>
+     * <li>Vendor decoder keys: a stored "on" came from the 1.3.x default and cannot be told
+     * apart from a hand choice, so it is turned off.</li>
+     * <li>Wi-Fi keepalive: on a 1.3.x install, "on" came from the 1.3.0 migration or default
+     * and cannot be told apart from a hand choice, so it is turned off. An install that never
+     * ran 1.3.x keeps its 1.2.2 value.</li>
+     * </ul>
      *
-     * @return true if the stored value was changed
+     * @return true if any stored value was changed
      */
-    public static boolean migrateFramePacingToNewest(Context context) {
-        return migrateFramePacingToNewest(PreferenceManager.getDefaultSharedPreferences(context));
+    public static boolean restoreStreamingDefaultsOf122(Context context) {
+        return restoreStreamingDefaultsOf122(PreferenceManager.getDefaultSharedPreferences(context));
     }
 
-    static boolean migrateFramePacingToNewest(SharedPreferences prefs) {
-        if (prefs.getBoolean(MIGRATED_FRAME_PACING_NEWEST_PREF_STRING, false)) {
+    static boolean restoreStreamingDefaultsOf122(SharedPreferences prefs) {
+        if (prefs.getBoolean(RESTORED_122_DEFAULTS_PREF_STRING, false)) {
             return false;
         }
 
-        String stored = prefs.getString(FRAME_PACING_PREF_STRING, null);
-        boolean migrate = stored == null || LEGACY_DEFAULT_FRAME_PACING.equals(stored);
+        boolean ran13Pacing = prefs.getBoolean(MIGRATED_FRAME_PACING_NEWEST_PREF_STRING, false);
+        boolean ran13Keepalive = prefs.getBoolean(MIGRATED_PREVENT_PACKET_LOSS_PREF_STRING, false);
+        SharedPreferences.Editor editor = prefs.edit().putBoolean(RESTORED_122_DEFAULTS_PREF_STRING, true);
+        boolean changed = false;
 
-        SharedPreferences.Editor editor = prefs.edit().putBoolean(MIGRATED_FRAME_PACING_NEWEST_PREF_STRING, true);
-        if (migrate) {
-            editor.putString(FRAME_PACING_PREF_STRING, DEFAULT_FRAME_PACING);
+        String pacing = prefs.getString(FRAME_PACING_PREF_STRING, null);
+        if (pacing != null) {
+            boolean toBalanced;
+            switch (pacing) {
+                case "newest":
+                case "smoothness":
+                case "cap-fps":
+                    toBalanced = true;
+                    break;
+                case "latency":
+                    toBalanced = !ran13Pacing;
+                    break;
+                default:
+                    toBalanced = false;
+                    break;
+            }
+            if (toBalanced) {
+                editor.putString(FRAME_PACING_PREF_STRING, "balanced");
+                changed = true;
+            }
         }
+
+        if (prefs.getBoolean(VENDOR_DECODER_KEYS_PREF_STRING, false)) {
+            editor.putBoolean(VENDOR_DECODER_KEYS_PREF_STRING, false);
+            changed = true;
+        }
+
+        if (ran13Keepalive && prefs.getBoolean(PREVENT_PACKET_LOSS_PREF_STRING, false)) {
+            editor.putBoolean(PREVENT_PACKET_LOSS_PREF_STRING, false);
+            changed = true;
+        }
+
         editor.apply();
-        return migrate;
+        return changed;
     }
 
     /**
