@@ -37,14 +37,14 @@
 
                 <FrameLayout
                     android:id="@+id/host_icon_tile"
-                    android:layout_width="64dp"
-                    android:layout_height="64dp"
+                    android:layout_width="@dimen/vw_host_tile_size"
+                    android:layout_height="@dimen/vw_host_tile_size"
                     android:background="@drawable/host_icon_tile">
 
                     <ImageView
                         android:id="@+id/grid_image"
-                        android:layout_width="40dp"
-                        android:layout_height="40dp"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
                         android:layout_gravity="center"
                         android:importantForAccessibility="no" />
 
@@ -108,6 +108,17 @@
                             android:maxLines="1"
                             android:textAppearance="@style/TextAppearance.Vibe.Secondary.Medium" />
                     </LinearLayout>
+
+                    <!-- Shown only when it adds something: wake available, refreshing -->
+                    <TextView
+                        android:id="@+id/host_secondary_label"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:ellipsize="end"
+                        android:maxLines="1"
+                        android:textAppearance="@style/TextAppearance.Vibe.Secondary"
+                        android:visibility="gone" />
                 </LinearLayout>
             </LinearLayout>
 
@@ -121,52 +132,36 @@
                 android:layout_height="1px"
                 android:background="@color/vw_separator" />
 
+            <!-- The card's action as a full-width button. It is a label for what A or a
+                 tap on the card does; the card stays the only focus target. -->
             <LinearLayout
+                android:id="@+id/host_action_pill"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
+                android:layout_height="44dp"
                 android:layout_marginTop="@dimen/vw_space_3"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
+                android:background="@drawable/host_action_pill"
+                android:gravity="center"
+                android:importantForAccessibility="no"
+                android:orientation="horizontal"
+                android:paddingStart="@dimen/vw_space_4"
+                android:paddingLeft="@dimen/vw_space_4"
+                android:paddingEnd="@dimen/vw_space_4"
+                android:paddingRight="@dimen/vw_space_4">
+
+                <ImageView
+                    android:id="@+id/host_action_icon"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:importantForAccessibility="no" />
 
                 <TextView
-                    android:id="@+id/host_secondary_label"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:ellipsize="end"
-                    android:maxLines="1"
-                    android:textAppearance="@style/TextAppearance.Vibe.Secondary" />
-
-                <LinearLayout
-                    android:id="@+id/host_action_pill"
+                    android:id="@+id/host_action_text"
                     android:layout_width="wrap_content"
-                    android:layout_height="40dp"
+                    android:layout_height="wrap_content"
                     android:layout_marginStart="@dimen/vw_space_2"
                     android:layout_marginLeft="@dimen/vw_space_2"
-                    android:background="@drawable/host_action_pill"
-                    android:gravity="center_vertical"
-                    android:importantForAccessibility="no"
-                    android:orientation="horizontal"
-                    android:paddingStart="14dp"
-                    android:paddingLeft="14dp"
-                    android:paddingEnd="@dimen/vw_space_4"
-                    android:paddingRight="@dimen/vw_space_4">
-
-                    <ImageView
-                        android:id="@+id/host_action_icon"
-                        android:layout_width="20dp"
-                        android:layout_height="20dp"
-                        android:importantForAccessibility="no" />
-
-                    <TextView
-                        android:id="@+id/host_action_text"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="6dp"
-                        android:layout_marginLeft="6dp"
-                        android:maxLines="1"
-                        android:textAppearance="@style/TextAppearance.Vibe.Label" />
-                </LinearLayout>
+                    android:maxLines="1"
+                    android:textAppearance="@style/TextAppearance.Vibe.Label" />
             </LinearLayout>
         </LinearLayout>
     </FrameLayout>

@@ -27,6 +27,8 @@
     <!-- Host cards on the PC list -->
     <dimen name="vw_host_card_width">320dp</dimen>
     <dimen name="vw_host_card_height">196dp</dimen>
+    <dimen name="vw_host_tile_size">72dp</dimen>
+    <dimen name="vw_host_tile_radius">18dp</dimen>
     <!-- Host grid columns are sized between these from the available width -->
     <dimen name="vw_host_column_width">336dp</dimen>
     <dimen name="vw_host_column_min_width">252dp</dimen>

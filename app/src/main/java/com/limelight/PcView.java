@@ -24,6 +24,7 @@ import com.limelight.preferences.StreamSettings;
 import com.limelight.profiles.ProfilesManager;
 import com.limelight.ui.AdapterFragment;
 import com.limelight.ui.AdapterFragmentCallbacks;
+import com.limelight.ui.HostCardState;
 import com.limelight.ui.HostGridLayout;
 import com.limelight.utils.Dialog;
 import com.limelight.utils.HelpLauncher;
@@ -1131,15 +1132,25 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
             public void onItemClick(AdapterView<?> arg0, View arg1, int pos,
                                     long id) {
                 ComputerObject computer = (ComputerObject) pcGridAdapter.getItem(pos);
-                if (computer.details.state == ComputerDetails.State.UNKNOWN ||
-                    computer.details.state == ComputerDetails.State.OFFLINE) {
-                    // Open the context menu if a PC is offline or refreshing
-                    openContextMenu(arg1);
-                } else if (computer.details.pairState != PairState.PAIRED) {
-                    // Pair an unpaired machine by default
-                    doPair(computer.details, null, null);
-                } else {
-                    doAppList(computer.details, false, false);
+                // The card's action pill names what happens here (HostCardState)
+                HostCardState card = HostCardState.from(computer.details.state, computer.details.pairState,
+                        computer.details.runningGameId, computer.details.macAddress != null);
+                switch (card.action) {
+                    case WAKE:
+                        // Offline with a MAC address: wake it; X or a long press opens the menu
+                        doWakeOnLan(computer.details);
+                        break;
+                    case CONTEXT_MENU:
+                        // Offline without a MAC address, or refreshing
+                        openContextMenu(arg1);
+                        break;
+                    case PAIR:
+                        // Pair an unpaired machine by default
+                        doPair(computer.details, null, null);
+                        break;
+                    default:
+                        doAppList(computer.details, false, false);
+                        break;
                 }
             }
         });

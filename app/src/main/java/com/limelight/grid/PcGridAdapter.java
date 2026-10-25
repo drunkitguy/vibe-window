@@ -115,6 +115,8 @@ public class PcGridAdapter extends GenericGridAdapter<PcView.ComputerObject> {
         TextView secondary = views.secondary;
         if (secondary != null) {
             secondary.setText(secondaryTextRes(card.secondaryText));
+            // A second status line only when it says something the pill does not
+            secondary.setVisibility(card.secondaryLine ? View.VISIBLE : View.GONE);
         }
 
         View pill = views.pill;

@@ -342,6 +342,70 @@ public class PcViewUiTest {
         assertEquals(grid.getSelectedView(), activity.contextMenuView);
     }
 
+    private static ComputerDetails offlineHost(String uuid, String mac) {
+        ComputerDetails details = new ComputerDetails();
+        details.uuid = uuid;
+        details.name = "Sleeping " + uuid;
+        details.state = ComputerDetails.State.OFFLINE;
+        details.pairState = PairingManager.PairState.PAIRED;
+        details.macAddress = mac;
+        return details;
+    }
+
+    private static void addHost(PcView activity, ComputerDetails details) throws Exception {
+        Method update = PcView.class.getDeclaredMethod("updateComputer", ComputerDetails.class);
+        update.setAccessible(true);
+        update.invoke(activity, details);
+        idle();
+    }
+
+    @Test
+    @Config(qualifiers = "w731dp-h411dp-land")
+    public void aOnAnOfflineHostWithAMacAddressWakesItAndXKeepsTheMenu() throws Exception {
+        RecordingPcView activity = Robolectric.buildActivity(RecordingPcView.class).setup().get();
+        idle();
+        addHost(activity, offlineHost("wake-1", "00:11:22:33:44:55"));
+        GridView grid = grid(activity);
+        View card = grid.getChildAt(0);
+        assertNotNull(card);
+        assertEquals(activity.getString(R.string.host_action_wake),
+                ((TextView) card.findViewById(R.id.host_action_text)).getText().toString());
+        assertEquals(View.VISIBLE, card.findViewById(R.id.host_secondary_label).getVisibility());
+
+        grid.performItemClick(card, 0, grid.getItemIdAtPosition(0));
+        // The wake runs on its own thread and reports with a toast
+        String toast = null;
+        for (int i = 0; i < 100 && toast == null; i++) {
+            Thread.sleep(20);
+            idle();
+            toast = org.robolectric.shadows.ShadowToast.getTextOfLatestToast();
+        }
+        assertTrue("A wakes the host, got " + toast,
+                activity.getString(R.string.wol_waking_msg).equals(toast) ||
+                        activity.getString(R.string.wol_fail).equals(toast));
+        assertNull("A does not open the menu", activity.contextMenuView);
+
+        exitTouchMode(grid);
+        assertTrue(grid.requestFocus());
+        grid.setSelection(0);
+        idle();
+        pressKey(activity, KeyEvent.KEYCODE_BUTTON_X);
+        assertNotNull("X still opens the context menu", activity.contextMenuView);
+    }
+
+    @Test
+    @Config(qualifiers = "w731dp-h411dp-land")
+    public void aOnAnOfflineHostWithoutAMacAddressOpensTheMenu() throws Exception {
+        RecordingPcView activity = Robolectric.buildActivity(RecordingPcView.class).setup().get();
+        idle();
+        addHost(activity, offlineHost("menu-1", null));
+        GridView grid = grid(activity);
+        View card = grid.getChildAt(0);
+        assertEquals(View.GONE, card.findViewById(R.id.host_secondary_label).getVisibility());
+        grid.performItemClick(card, 0, grid.getItemIdAtPosition(0));
+        assertNotNull(activity.contextMenuView);
+    }
+
     private static void pressKey(PcView activity, int keyCode) {
         activity.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, keyCode));
         activity.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_UP, keyCode));

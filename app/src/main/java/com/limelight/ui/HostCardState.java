@@ -32,8 +32,11 @@ public final class HostCardState {
 
     public enum PillText { OPEN, RESUME, PAIR, WAKE, OPTIONS }
 
-    /** What A or a tap on the card does; matches the item click rules of the PC list. */
-    public enum Action { APP_LIST, PAIR, CONTEXT_MENU }
+    /**
+     * What A or a tap on the card does. Offline hosts with a MAC address wake directly; X and
+     * a long press still open the context menu for every host.
+     */
+    public enum Action { APP_LIST, PAIR, WAKE, CONTEXT_MENU }
 
     public static final float GLYPH_ALPHA_FULL = 1.0f;
     public static final float GLYPH_ALPHA_NOT_PAIRED = 0.63f;
@@ -53,6 +56,8 @@ public final class HostCardState {
     public final PillIcon pillIcon;
     public final PillText pillText;
     public final Action action;
+    /** Whether the secondary text earns its own line under the status (wake available, refreshing). */
+    public final boolean secondaryLine;
 
     private HostCardState(Kind kind, Tile tile, float glyphAlpha, boolean glyphVisible, Badge badge,
                           boolean spinner, boolean glow, StatusIcon statusIcon, StatusText statusText,
@@ -72,6 +77,8 @@ public final class HostCardState {
         this.pillIcon = pillIcon;
         this.pillText = pillText;
         this.action = action;
+        this.secondaryLine = secondaryText == SecondaryText.WAKE_AVAILABLE ||
+                secondaryText == SecondaryText.REFRESHING;
     }
 
     public static HostCardState from(ComputerDetails.State state, PairingManager.PairState pairState,
@@ -80,10 +87,10 @@ public final class HostCardState {
             return new HostCardState(Kind.OFFLINE, Tile.LOW, GLYPH_ALPHA_OFFLINE, true, Badge.OFFLINE,
                     false, false, StatusIcon.ICON_WARNING, StatusText.OFFLINE,
                     hasMacAddress ? SecondaryText.WAKE_AVAILABLE : SecondaryText.MORE_OPTIONS,
-                    hasMacAddress ? PillStyle.TONAL : PillStyle.NEUTRAL,
+                    PillStyle.NEUTRAL,
                     hasMacAddress ? PillIcon.POWER : PillIcon.MORE,
                     hasMacAddress ? PillText.WAKE : PillText.OPTIONS,
-                    Action.CONTEXT_MENU);
+                    hasMacAddress ? Action.WAKE : Action.CONTEXT_MENU);
         }
         if (state != ComputerDetails.State.ONLINE) {
             // Unknown or refreshing

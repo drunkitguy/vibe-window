@@ -72,10 +72,13 @@ public class HostCardStateTest {
         assertFalse(s.glow);
         assertEquals(HostCardState.StatusIcon.ICON_WARNING, s.statusIcon);
         assertEquals(HostCardState.StatusText.OFFLINE, s.statusText);
-        assertEquals(HostCardState.PillStyle.TONAL, s.pillStyle);
+        assertEquals(HostCardState.PillStyle.NEUTRAL, s.pillStyle);
         assertEquals(HostCardState.PillIcon.POWER, s.pillIcon);
         assertEquals(HostCardState.PillText.WAKE, s.pillText);
-        assertEquals(HostCardState.Action.CONTEXT_MENU, s.action);
+        // A or a tap wakes the host; X and a long press keep the context menu
+        assertEquals(HostCardState.Action.WAKE, s.action);
+        assertEquals(HostCardState.SecondaryText.WAKE_AVAILABLE, s.secondaryText);
+        assertTrue(s.secondaryLine);
     }
 
     @Test
@@ -85,6 +88,8 @@ public class HostCardStateTest {
         assertEquals(HostCardState.PillStyle.NEUTRAL, s.pillStyle);
         assertEquals(HostCardState.PillText.OPTIONS, s.pillText);
         assertEquals(HostCardState.Action.CONTEXT_MENU, s.action);
+        // "More options" repeats the pill, so there is no second line
+        assertFalse(s.secondaryLine);
     }
 
     @Test
@@ -101,6 +106,25 @@ public class HostCardStateTest {
             assertEquals(HostCardState.PillStyle.TONAL, s.pillStyle);
             assertEquals(HostCardState.PillText.OPTIONS, s.pillText);
             assertEquals(HostCardState.Action.CONTEXT_MENU, s.action);
+            assertTrue("Refreshing gets its own line", s.secondaryLine);
+        }
+    }
+
+    @Test
+    public void onlineHostsHaveNoSecondLine() {
+        assertFalse(HostCardState.from(State.ONLINE, PairState.PAIRED, 0, true).secondaryLine);
+        assertFalse(HostCardState.from(State.ONLINE, PairState.PAIRED, 3, true).secondaryLine);
+        assertFalse(HostCardState.from(State.ONLINE, PairState.NOT_PAIRED, 0, true).secondaryLine);
+    }
+
+    @Test
+    public void onlyOfflineHostsWithAMacAddressWake() {
+        for (State state : new State[] {State.ONLINE, State.UNKNOWN, State.OFFLINE, null}) {
+            for (boolean mac : new boolean[] {true, false}) {
+                HostCardState s = HostCardState.from(state, PairState.PAIRED, 0, mac);
+                assertEquals(state + " mac=" + mac, state == State.OFFLINE && mac,
+                        s.action == HostCardState.Action.WAKE);
+            }
         }
     }
 
