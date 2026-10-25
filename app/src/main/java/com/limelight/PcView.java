@@ -554,10 +554,9 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
         if (existing instanceof StreamSettings.SettingsFragment && !settingsPanelDisplayChanged()) {
             // Same display: keep the fragment (its rows and expanded sections) and only move
             // its view into the new layout
-            getSupportFragmentManager().beginTransaction()
-                    .detach(existing)
-                    .attach(existing)
-                    .commitNowAllowingStateLoss();
+            // Two transactions: detach and attach in one are folded into nothing
+            getSupportFragmentManager().beginTransaction().detach(existing).commitNowAllowingStateLoss();
+            getSupportFragmentManager().beginTransaction().attach(existing).commitNowAllowingStateLoss();
         }
         else {
             attachSettingsPanelFragment();
