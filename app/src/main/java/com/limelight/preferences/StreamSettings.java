@@ -690,21 +690,31 @@ public class StreamSettings extends AppCompatActivity implements SettingsHost {
             return list.getChildAdapterPosition(list.getFocusedChild());
         }
 
-        /** Focuses the row at (or the first focusable row after) an adapter position. */
-        public void focusRow(int position) {
+        /**
+         * Focuses the row at (or the first focusable row after) an adapter position. Returns
+         * whether a row has the focus now; otherwise it is focused after the next layout.
+         */
+        public boolean focusRow(int position) {
             final RecyclerView list = getListView();
             if (list == null) {
-                return;
+                return false;
             }
             final int target = Math.max(0, position);
-            RecyclerView.ViewHolder holder = list.findViewHolderForAdapterPosition(target);
-            if (holder != null && holder.itemView.isFocusable() && holder.itemView.requestFocus()) {
-                return;
+            RecyclerView.Adapter<?> adapter = list.getAdapter();
+            for (int pos = target; adapter != null && pos < adapter.getItemCount(); pos++) {
+                RecyclerView.ViewHolder holder = list.findViewHolderForAdapterPosition(pos);
+                if (holder == null) {
+                    break;
+                }
+                if (holder.itemView.isFocusable() && holder.itemView.requestFocus()) {
+                    return true;
+                }
             }
-            if (list.getLayoutManager() != null && holder == null) {
+            if (list.getLayoutManager() != null) {
                 list.getLayoutManager().scrollToPosition(target);
             }
             focusFirstRowAfter(list, target, 2);
+            return list.getFocusedChild() != null;
         }
 
         /** Adapter position of a preference in the list, or -1 (RecyclerView.NO_POSITION). */

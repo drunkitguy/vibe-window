@@ -614,9 +614,23 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
     }
 
     private void focusSettingsPanel() {
-        StreamSettings.SettingsFragment fragment = settingsPanelFragment();
-        if (fragment != null && fragment.getView() != null) {
-            fragment.focusRow(settingsPanelReturnPosition >= 0 ? settingsPanelReturnPosition : 0);
+        final StreamSettings.SettingsFragment fragment = settingsPanelFragment();
+        if (fragment == null || fragment.getView() == null) {
+            return;
+        }
+        final int position = settingsPanelReturnPosition >= 0 ? settingsPanelReturnPosition : 0;
+        if (!fragment.focusRow(position)) {
+            // The list may not be laid out yet (the panel was hidden): try once more after it is
+            fragment.getView().post(new Runnable() {
+                @Override
+                public void run() {
+                    if (!settingsPanelHasFocus() && fragment.getView() != null) {
+                        if (!fragment.focusRow(position) && fragment.getListView() != null) {
+                            fragment.getListView().requestFocus();
+                        }
+                    }
+                }
+            });
         }
     }
 

@@ -105,6 +105,29 @@ public class SettingsPanelTest {
         return false;
     }
 
+    /** What the settings list looks like, for failure messages. */
+    private static String describe(PcView activity) {
+        Fragment fragment = activity.getSupportFragmentManager().findFragmentById(R.id.settings_panel_list);
+        StringBuilder sb = new StringBuilder(" focus=").append(activity.getCurrentFocus());
+        if (fragment instanceof StreamSettings.SettingsFragment) {
+            androidx.recyclerview.widget.RecyclerView list = ((StreamSettings.SettingsFragment) fragment).getListView();
+            sb.append(" list=").append(list.getWidth()).append('x').append(list.getHeight())
+                    .append(" children=").append(list.getChildCount())
+                    .append(" items=").append(list.getAdapter() == null ? -1 : list.getAdapter().getItemCount())
+                    .append(" shown=").append(list.isShown())
+                    .append(" layoutRequested=").append(list.isLayoutRequested());
+            if (list.getChildCount() > 1) {
+                View row = list.getChildAt(1);
+                sb.append(" row1 focusable=").append(row.isFocusable()).append(" enabled=").append(row.isEnabled())
+                        .append(" touchMode=").append(row.isInTouchMode());
+            }
+        }
+        else {
+            sb.append(" fragment=").append(fragment);
+        }
+        return sb.toString();
+    }
+
     private static void press(PcView activity, int keyCode) {
         activity.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, keyCode));
         activity.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_UP, keyCode));
@@ -160,7 +183,7 @@ public class SettingsPanelTest {
         GridView grid = focusedGrid(activity);
 
         press(activity, KeyEvent.KEYCODE_BUTTON_START);
-        assertTrue("Start enters the settings", inside(activity.getCurrentFocus(), R.id.settings_panel_list));
+        assertTrue("Start enters the settings" + describe(activity), inside(activity.getCurrentFocus(), R.id.settings_panel_list));
         assertNull("Start does not open the settings screen", Shadows.shadowOf(activity).getNextStartedActivity());
 
         press(activity, KeyEvent.KEYCODE_BUTTON_START);
@@ -188,7 +211,7 @@ public class SettingsPanelTest {
         PcView activity = launch();
         focusedGrid(activity);
         press(activity, KeyEvent.KEYCODE_DPAD_LEFT);
-        assertTrue(inside(activity.getCurrentFocus(), R.id.settings_panel_list));
+        assertTrue("Left enters the settings" + describe(activity), inside(activity.getCurrentFocus(), R.id.settings_panel_list));
     }
 
     @Test
