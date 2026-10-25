@@ -1,4 +1,4 @@
-# Plan: "VoidLink feel" for v1.3.0 (Android client and window-only host)
+# Plan: "reference client feel" for v1.3.0 (Android client and window-only host)
 
 Status: approved plan. The evidence for every item is in the performance audit that preceded it (not part of this repository).
 
@@ -111,7 +111,7 @@ Rules:
 
 Why this shape:
 
-- It is the Android equivalent of VoidLink's queue mode (see `FrameQueue.m`, and `renderModeAVSB` in `VideoDecoderRenderer.m` 539 to 613): at most one frame per refresh, always the newest, and no frame waits for a vsync if the current interval has not shown anything yet.
+- It is the Android equivalent of the reference client's queue mode (see `FrameQueue.m`, and `renderModeAVSB` in `VideoDecoderRenderer.m` 539 to 613): at most one frame per refresh, always the newest, and no frame waits for a vsync if the current interval has not shown anything yet.
 - When the stream fps is lower than the panel Hz (60 on 120), every frame takes the immediate path, so nothing is added.
 - When two frames land in one interval, the older one is dropped explicitly and counted, instead of being silently replaced inside SurfaceFlinger.
 
@@ -257,7 +257,7 @@ Behaviour:
   - New `utils/NetHelper.isActiveNetworkWifi(Context)`: `ConnectivityManager.getNetworkCapabilities(getActiveNetwork()).hasTransport(TRANSPORT_WIFI)` on API 23 and later, `false` otherwise.
   - At 3718: `if (prefConfig.preventPacketLoss && NetHelper.isActiveNetworkWifi(this))`.
   - Ethernet and cellular get no keepalive.
-- Period: send every `max(8 ms, round(1000 / fps))` ms, capped at 20 ms. That is 8 ms at 120 fps and 16 ms at 60 fps, close to VoidLink's per-frame timer (`StreamFrameViewController.m` 2455 to 2463).
+- Period: send every `max(8 ms, round(1000 / fps))` ms, capped at 20 ms. That is 8 ms at 120 fps and 16 ms at 60 fps, close to the reference client's per-frame timer (`StreamFrameViewController.m` 2455 to 2463).
 - The runnable keeps using `MoonBridge.sendEmptyPayload()`. The host ignores the unknown control type at debug level (host `src/stream.cpp` 1033 to 1039).
 
 Tests (Robolectric):

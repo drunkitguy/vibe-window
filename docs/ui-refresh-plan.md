@@ -6,41 +6,41 @@ Primary device: AYN Thor, 1920x1080 landscape at 120 Hz main panel, a small seco
 
 ## 1. Goals
 
-1. Give the PC list (`PcView`) and the settings screen (`StreamSettings`, also used by `EditProfileActivity`) a modern, minimalist look in the style of VoidLink, using only Material Components already in the project, vector drawables and the system font.
+1. Give the PC list (`PcView`) and the settings screen (`StreamSettings`, also used by `EditProfileActivity`) a modern, minimalist look in the style of the reference client, using only Material Components already in the project, vector drawables and the system font.
 2. Make the app library (`AppView`) use the same tokens so the three screens read as one product.
 3. Add "Auto (match display)" to the video resolution list (and to the FPS list), make it the default, and resolve it into a concrete width, height and frame rate at stream start from the display the app is actually shown on, clamped to what the decoder can do.
 4. Keep every existing explicit choice (360p to 4K, native and custom entries), the virtual display flag, the window-only launch flag and the rest of the streaming path unchanged.
 
-## 2. VoidLink research findings
+## 2. Reference client research findings
 
-### 2.1 What VoidLink is (found and verified)
+### 2.1 What the reference client is (found and verified)
 
-VoidLink exists and was verified from its public source repository and its App Store listings.
+The reference client exists and was verified from its public source repository and its App Store listings.
 
-* It is an iOS, iPadOS and tvOS game streaming client for Sunshine and Apollo style hosts, a fork of moonlight-iOS that its README describes as "extensively reworked, redesigned, and expanded" with "a completely new user interface". Repository: https://github.com/The-Fried-Fish/VoidLink-previously-moonlight-zwm (default branch `master`, code on branch `Integration`, license GPL-3.0 in `LICENSE.txt`).
-* App Store listings: "VoidLink - Extreme" https://apps.apple.com/app/voidlink-extreme/id6755103808 (game category) and "VoidLink" https://apps.apple.com/app/voidlink/id6747717070 (tool category, regional). Both are paid, designed for iPad.
-* There is no Android build. Searches for a Google Play listing, an APK or an Android launcher named VoidLink returned nothing; every result is the iOS app. So "styled like VoidLink" can only mean: recreate an iOS client's visual language on Android.
+* It is an iOS, iPadOS and tvOS game streaming client for Sunshine and Apollo style hosts, a fork of moonlight-iOS that its README describes as "extensively reworked, redesigned, and expanded" with "a completely new user interface". Repository: (link removed) (default branch `master`, code on branch `Integration`, license GPL-3.0 in `LICENSE.txt`).
+* App Store listings: the client's two listings (link removed) (game category) (link removed) (tool category, regional). Both are paid, designed for iPad.
+* There is no Android build. Searches for a Google Play listing, an APK or an Android launcher with that name returned nothing; every result is the iOS app. So "styled like the reference client" can only mean: recreate an iOS client's visual language on Android.
 
 ### 2.2 What could not be verified
 
-* Screenshots: the README embeds seven screenshots (host view, favorites, app view, settings during streaming, on-screen widgets) as GitHub `user-attachments` URLs, which could not be downloaded from this environment, and the App Store pages could not be fetched either. The repository's own `Screenshots/` folder only holds 2018 and 2019 images from upstream moonlight-iOS, not VoidLink. So nobody in this plan has looked at a VoidLink screenshot. The tokens below are read from VoidLink's source code (exact numbers), not eyeballed from images.
+* Screenshots: the README embeds seven screenshots (host view, favorites, app view, settings during streaming, on-screen widgets) as GitHub `user-attachments` URLs, which could not be downloaded from this environment, and the App Store pages could not be fetched either. The repository's own `Screenshots/` folder only holds 2018 and 2019 images from upstream moonlight-iOS, not the reference client. So nobody in this plan has looked at a reference client screenshot. The tokens below are read from the reference client's source code (exact numbers), not eyeballed from images.
 * Exact layout of the host screen beyond the host card (navigation placement, header) is not known; section 4 fills that in with a direction that fits the source-derived tokens. Treat it as a proposal for the user to confirm (open question Q1 in section 14).
 
-### 2.3 Design language extracted from the VoidLink source
+### 2.3 Design language extracted from the reference client source
 
-All paths are inside the VoidLink repository, branch `Integration`.
+All paths are inside the reference client repository, branch `Integration`.
 
-* Theme (`VoidLink/ThemeManager.swift`): follows the iOS grouped style. Dark mode host background is iOS `systemGroupedBackground` (pure black, #000000); menu and panel background is `secondarySystemBackground` (#1C1C1E); cards ("widgets") are `secondarySystemGroupedBackground` (#1C1C1E, #2C2C2E on tvOS); offline host icon tile #111113. Light mode uses #F2F2F7 background and white cards. Accent ("appPrimaryColor") is iOS system blue `(0, 0.48, 1.0)` = #007AFF (the comment says #0A84FF, the dark mode variant), with a 24 percent alpha tonal variant for secondary buttons. Gray text `(0.55, 0.55, 0.60, 0.95)`. Separators: dark `(84, 84, 88)` at 60 percent alpha, light `(60, 60, 67)` at 29 percent.
-* Host card (`VoidLink/HostCardView.swift`): one card per host on the widget background, corner radius about 6 percent of the card width; an 80 pt rounded square icon tile (radius 20, so 25 percent) filled with the accent and a white computer glyph; host name bold 18 pt; a status line in medium 14 pt with a small icon, green #34C759 for "Online", gray with a warning triangle for offline, gray with an antenna icon while checking; a hairline separator; a bottom row with a text button "Applications" and a filled accent "Launch" button with a play icon (39 pt tall, radius about 3.8 percent of card width); "Pair with PIN" and "Wake-on-LAN" are tonal buttons (accent at 24 percent alpha, accent text, lock or power icon); offline tiles drop to #111113 with a 40 percent gray glyph. A soft diagonal blue glow (#0051A3, full strength in dark mode, 52 percent in light) sits in one corner of the card.
-* Grid (`VoidLink/ViewControllers/HostCollectionViewController.swift`): line spacing 10 pt, small top inset (10 to 17 pt).
-* Settings (`VoidLink/MenuSectionView.swift`, `VoidLink/ViewControllers/SettingsSwiftUI.swift`): collapsible sections, each with an icon and a 19.5 pt medium title and a right chevron that rotates when expanded; header 37 pt plus 24 pt vertical spacing; row spacing 10 to 12 pt; section spacing 12 pt; item label 17 pt, value label 16 pt; segmented pickers and switches (switch column 150 pt); radii 10 for sections, 6 to 8 for small controls; a "Favorites" section at the top that users fill by long pressing any setting (default favorites: resolution, FPS, bitrate, codec, HDR, YUV 4:4:4, PiP, touch mode and a few others); sections in order Video, Touch and Controller, Controller, Motion Control, Pencil, Gestures, Peripherals, Audio, Others, Experimental.
+* Theme (`ThemeManager.swift`): follows the iOS grouped style. Dark mode host background is iOS `systemGroupedBackground` (pure black, #000000); menu and panel background is `secondarySystemBackground` (#1C1C1E); cards ("widgets") are `secondarySystemGroupedBackground` (#1C1C1E, #2C2C2E on tvOS); offline host icon tile #111113. Light mode uses #F2F2F7 background and white cards. Accent ("appPrimaryColor") is iOS system blue `(0, 0.48, 1.0)` = #007AFF (the comment says #0A84FF, the dark mode variant), with a 24 percent alpha tonal variant for secondary buttons. Gray text `(0.55, 0.55, 0.60, 0.95)`. Separators: dark `(84, 84, 88)` at 60 percent alpha, light `(60, 60, 67)` at 29 percent.
+* Host card (`HostCardView.swift`): one card per host on the widget background, corner radius about 6 percent of the card width; an 80 pt rounded square icon tile (radius 20, so 25 percent) filled with the accent and a white computer glyph; host name bold 18 pt; a status line in medium 14 pt with a small icon, green #34C759 for "Online", gray with a warning triangle for offline, gray with an antenna icon while checking; a hairline separator; a bottom row with a text button "Applications" and a filled accent "Launch" button with a play icon (39 pt tall, radius about 3.8 percent of card width); "Pair with PIN" and "Wake-on-LAN" are tonal buttons (accent at 24 percent alpha, accent text, lock or power icon); offline tiles drop to #111113 with a 40 percent gray glyph. A soft diagonal blue glow (#0051A3, full strength in dark mode, 52 percent in light) sits in one corner of the card.
+* Grid (`ViewControllers/HostCollectionViewController.swift`): line spacing 10 pt, small top inset (10 to 17 pt).
+* Settings (`MenuSectionView.swift`, `ViewControllers/SettingsSwiftUI.swift`): collapsible sections, each with an icon and a 19.5 pt medium title and a right chevron that rotates when expanded; header 37 pt plus 24 pt vertical spacing; row spacing 10 to 12 pt; section spacing 12 pt; item label 17 pt, value label 16 pt; segmented pickers and switches (switch column 150 pt); radii 10 for sections, 6 to 8 for small controls; a "Favorites" section at the top that users fill by long pressing any setting (default favorites: resolution, FPS, bitrate, codec, HDR, YUV 4:4:4, PiP, touch mode and a few others); sections in order Video, Touch and Controller, Controller, Motion Control, Pencil, Gestures, Peripherals, Audio, Others, Experimental.
 * Motion (all files): short eased animations of 0.12 to 0.2 s, press feedback scale 0.97, focus scale 1.06 (tvOS style), one spring with damping 0.9.
-* Controller UX (`VoidLink/GamepadNavigationIllustrationHud.swift`): an optional on-screen hint bar that shows controller button glyphs next to their current action.
+* Controller UX (`GamepadNavigationIllustrationHud.swift`): an optional on-screen hint bar that shows controller button glyphs next to their current action.
 * Typography and icons: Apple system font (SF Pro) and SF Symbols, both Apple-licensed and not usable on Android. The app also bundles Roboto (Apache 2.0).
 
 ### 2.4 Translation to Android and licensing
 
-* No VoidLink name, logo or wording appears in the app or its release notes; it is only cited in this doc. Vibe Window is GPL-3.0 like VoidLink, but nothing is copied: no code, no images, no logos, no icon assets, no fonts. Only numeric design decisions (colors, sizes, radii, durations), which are recreated from scratch.
+* No name, logo or wording appears in the app or its release notes; it is only cited in this doc. Vibe Window is GPL-3.0 like the reference client, but nothing is copied: no code, no images, no logos, no icon assets, no fonts. Only numeric design decisions (colors, sizes, radii, durations), which are recreated from scratch.
 * Font: Roboto, which is already the Android system font (Apache 2.0). No font file is added, so no licensing question arises. Weights via `sans-serif` and `sans-serif-medium`.
 * Icons: Material Symbols Rounded path data as vector drawables (Apache 2.0, https://github.com/google/material-design-icons). The rounded variant is the closest free match to the SF Symbols feel.
 * Components: Material Components 1.13.0 (`app/build.gradle` line 170): `MaterialCardView`, `MaterialButton`, `MaterialSwitch`, `ExtendedFloatingActionButton`, `CircularProgressIndicator`, `MaterialAlertDialogBuilder` theme overlays.
@@ -53,7 +53,7 @@ All tokens live in new resources so every screen references names, not literals.
 
 | Token | Value | Use | Contrast notes |
 | --- | --- | --- | --- |
-| `vw_bg` | #000000 | Window and screen background (OLED friendly, same as VoidLink dark host view) | |
+| `vw_bg` | #000000 | Window and screen background (OLED friendly, same as the reference client dark host view) | |
 | `vw_surface` | #1C1C1E | Cards, settings groups, search field | |
 | `vw_surface_high` | #2C2C2E | Focused rows, dialogs, FAB, chips | |
 | `vw_surface_low` | #111113 | Offline host icon tile | |
@@ -76,9 +76,9 @@ White text on #0A84FF is only about 3.6:1, which fails AA for normal size text; 
 | --- | --- | --- | --- |
 | `Display` | 28sp | medium | Screen titles ("Computers", "Settings") |
 | `Title` | 22sp | medium | Library PC name (`appListText`), dialog titles |
-| `Section` | 20sp | medium | Settings section headers, library group headers (VoidLink 19.5) |
-| `CardTitle` | 20sp | bold | Host name on the host card (VoidLink 18 on a larger card) |
-| `Body` | 16sp | regular | Setting titles, list items (VoidLink 17) |
+| `Section` | 20sp | medium | Settings section headers, library group headers (reference client 19.5) |
+| `CardTitle` | 20sp | bold | Host name on the host card (reference client 18 on a larger card) |
+| `Body` | 16sp | regular | Setting titles, list items (reference client 17) |
 | `Label` | 15sp | medium | Buttons, chips, values |
 | `Secondary` | 14sp | regular or medium | Summaries, status line, counts |
 | `Caption` | 12sp | medium | Controller hint bar labels |
@@ -93,7 +93,7 @@ White text on #0A84FF is only about 3.6:1, which fails AA for normal size text; 
 
 ### 3.5 Elevation
 
-Flat, like VoidLink: hierarchy comes from surface tone (bg, surface, surface_high) and hairlines, not shadows. `cardElevation` 0 everywhere (today 8dp in `app_grid_item.xml`). The FAB keeps 2dp so it reads as floating over content.
+Flat, like the reference client: hierarchy comes from surface tone (bg, surface, surface_high) and hairlines, not shadows. `cardElevation` 0 everywhere (today 8dp in `app_grid_item.xml`). The FAB keeps 2dp so it reads as floating over content.
 
 ### 3.6 Motion (`values/integers.xml`)
 
@@ -130,7 +130,7 @@ Keep the data path exactly as it is: `PcView` plus `AdapterFragment` plus `GridV
 
 ### 4.3 Host card (`res/layout/pc_grid_item.xml`, rewritten)
 
-Card 320dp by 196dp (VoidLink proportions), `vw_surface`, radius `vw_radius_xl`, no elevation, 16dp inner padding, new root id `host_card`. Ids used by `GenericGridAdapter.getView()` are kept: `grid_image`, `grid_overlay`, `grid_spinner`, `grid_text` (`grid_mask` stays absent; the adapter already tolerates null).
+Card 320dp by 196dp (reference client proportions), `vw_surface`, radius `vw_radius_xl`, no elevation, 16dp inner padding, new root id `host_card`. Ids used by `GenericGridAdapter.getView()` are kept: `grid_image`, `grid_overlay`, `grid_spinner`, `grid_text` (`grid_mask` stays absent; the adapter already tolerates null).
 
 * Top row: icon tile 64dp, radius 16dp (new id `host_icon_tile`) holding `grid_image` (computer glyph, 40dp) with `grid_overlay` (lock or offline badge, 20dp, bottom right of the tile) and `grid_spinner` (centered, 32dp, shown while the state is unknown). To its right: `grid_text` (host name, CardTitle, one line, ellipsize end) and a status row: 8dp dot (`host_status_dot`) plus `host_status_text` (Secondary, medium).
 * Hairline (`vw_separator`, 1px) 16dp below the top row.
@@ -166,7 +166,7 @@ Keep `preferences.xml`, every key, every listener in `StreamSettings.SettingsFra
 ### 5.2 Frame (`res/layout/activity_stream_settings.xml`, today an empty `RelativeLayout`)
 
 * Horizontal `LinearLayout` with background `vw_bg`.
-* No category rail (manager decision: VoidLink itself uses a single scrolling list of sections, and the rail adds focus and scroll-sync code for little gain). The single pane holds a top bar (back `MaterialButton` with new `ic_arrow_back`, title "Settings" in Display style; on `EditProfileActivity` the activity title stays as it is) and the fragment container `stream_settings` (id kept), content max width 840dp, centered.
+* No category rail (manager decision: the reference client itself uses a single scrolling list of sections, and the rail adds focus and scroll-sync code for little gain). The single pane holds a top bar (back `MaterialButton` with new `ic_arrow_back`, title "Settings" in Display style; on `EditProfileActivity` the activity title stays as it is) and the fragment container `stream_settings` (id kept), content max width 840dp, centered.
 * L1 and R1 jump to the previous or next top-level category with `fragment.scrollToPreference(categoryKey)` and focus its first row. The category list is read at runtime from the inflated screen, so categories removed on some devices are skipped.
 * Three categories have no key today and need one for lookup (no stored values involved): audio (`preferences.xml` line 228) `category_audio_settings`, host (line 497) `category_host_settings`, general (line 514) `category_general_settings`.
 
@@ -180,7 +180,7 @@ Keep `preferences.xml`, every key, every listener in `StreamSettings.SettingsFra
 * Grouped cards: `GroupedCardDecoration` (new, `com.limelight.preferences`) added to `getListView()` in `SettingsFragment.onViewCreated`. It draws, behind each run of rows between two category headers, a `vw_surface` rounded rectangle (`vw_radius_lg` on the outer corners only) and 1px `vw_separator` hairlines inset 16dp between rows. The position rule ("first, middle, last, single" from the adapter item types of the previous and next positions) lives in a pure static function for unit tests. `setDivider(null)` removes the default dividers.
 * The "Advanced" expander created by `app:initialExpandedChildrenCount` (eleven categories use it) keeps its behavior. Its look is changed by providing `res/layout/expand_button.xml` in the app, which overrides the androidx resource of the same name (same ids: `@android:id/icon`, `@android:id/title`, `@android:id/summary`): a row inside the card reading "Show more" in `vw_accent` with a chevron-down icon and the hidden titles as the secondary line. If overriding the library layout proves fragile in CI, fall back to theming via `preferenceStyle` only.
 * Dialogs (list choices, edit text, the custom `SeekBarPreference` dialog): `ThemeOverlay.Vibe.Dialog` from section 3.8, 20dp corners, `vw_surface_high`, radio buttons and seek bars tinted `vw_accent`.
-* Not in this version: VoidLink's Favorites section. Androidx preferences cannot show the same key twice without breaking `findPreference()` based listeners. Offered as a follow-up question (Q4).
+* Not in this version: the reference client's Favorites section. Androidx preferences cannot show the same key twice without breaking `findPreference()` based listeners. Offered as a follow-up question (Q4).
 
 ## 6. App library (`AppView`) adoption
 
@@ -398,7 +398,7 @@ Manual on the Thor (CI built APK, no local SDK): the acceptance list below with 
 * Overriding androidx's `expand_button` layout depends on a library resource name; covered by a Robolectric inflation test, with a theming-only fallback.
 * `MaterialSwitch` inside `CheckBoxPreference` relies on the documented `android:id/checkbox` binding; covered by the settings UI test.
 * Contrast: white on #0A84FF fails AA, so filled controls use `vw_accent_container`; secondary text #8E8E93 passes on both surfaces.
-* The VoidLink look was reconstructed from source code, not screenshots; the overall composition may differ from what the user has in mind (Q1).
+* The reference client look was reconstructed from source code, not screenshots; the overall composition may differ from what the user has in mind (Q1).
 * No local Android SDK: land in small commits (tokens, PC list, settings, library, auto resolution data layer, Game hook) so each CI run is bisectable.
 
 ## 13. Phasing and version
@@ -415,18 +415,17 @@ Manual on the Thor (CI built APK, no local SDK): the acceptance list below with 
 None of these block coding. The coordinator proceeds on the stated assumptions (Q1 the direction in sections 3 to 5, Q3 mirror rule on by default) and tells the user.
 
 
-* Q1: VoidLink is an iOS only client and its screenshots could not be viewed here. Is the direction in sections 3 to 5 (true black, iOS style blue accent, grouped cards, host cards with a primary action pill) what you mean by "styled like VoidLink", or did you mean a different product?
+* Q1: The reference client is an iOS only client and its screenshots could not be viewed here. Is the direction in sections 3 to 5 (true black, iOS style blue accent, grouped cards, host cards with a primary action pill) what you mean by "styled like the reference client", or did you mean a different product?
 * Q2: decided by the manager: existing installs on exactly the old defaults are migrated to Auto once (8.4).
 * Q3: On your Thor with an external monitor, does the screen mirror the main panel or does the app move to the monitor? The Displays dump in debug info will tell; the mirror rule defaults to "use the external display's resolution".
-* Q4: Do you want VoidLink's "Favorites" (pin settings to the top) in a later version?
+* Q4: Do you want the reference client's "Favorites" (pin settings to the top) in a later version?
 
 ## 15. Sources
 
-VoidLink:
+The reference client:
 
-* Repository and README: https://github.com/The-Fried-Fish/VoidLink-previously-moonlight-zwm (files cited: `VoidLink/ThemeManager.swift`, `VoidLink/HostCardView.swift`, `VoidLink/MenuSectionView.swift`, `VoidLink/ViewControllers/SettingsSwiftUI.swift`, `VoidLink/ViewControllers/HostCollectionViewController.swift`, `VoidLink/GamepadNavigationIllustrationHud.swift`, `LICENSE.txt`, branch `Integration`)
-* App Store: https://apps.apple.com/app/voidlink-extreme/id6755103808 , https://apps.apple.com/app/voidlink/id6747717070
-* Project page mention: https://www.patreon.com/cw/TrueZhuanjia
+* Repository and README: (link removed) (files cited: `ThemeManager.swift`, `HostCardView.swift`, `MenuSectionView.swift`, `ViewControllers/SettingsSwiftUI.swift`, `ViewControllers/HostCollectionViewController.swift`, `GamepadNavigationIllustrationHud.swift`, `LICENSE.txt`, branch `Integration`)
+* App Store: (link removed) , (link removed)
 
 AYN Thor:
 

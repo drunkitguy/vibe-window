@@ -4,7 +4,7 @@ Status: approved plan, edited by the Manager. Implemented step by step on this b
 
 Revision read: drunkitguy/vibe-window branch claude/clever-clarke-k7hhhj at de0b1ec (VERSION 1.3.5). The tv/ folder is out of scope.
 
-Reference: four landscape screenshots of the VoidLink iOS client supplied by the user. VoidLink is the visual and interaction reference only. No VoidLink name, logo, icon, asset or wording goes into the app; every label below is our own wording and every icon is a new Material Symbols style vector drawable.
+Reference: four landscape screenshots of a third-party iOS streaming client supplied by the user. That client is the visual and interaction reference only. No name, logo, icon, asset or wording goes into the app; every label below is our own wording and every icon is a new Material Symbols style vector drawable.
 
 ## 0. What the reference does, and what we take from it
 
