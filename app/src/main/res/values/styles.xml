@@ -175,6 +175,25 @@
         <item name="strokeWidth">@dimen/vw_row_focus_stroke</item>
         <item name="cornerRadius">@dimen/vw_radius_md</item>
     </style>
+    <!-- Round 48dp icon button of the settings and PC list headers -->
+    <style name="Widget.Vibe.RoundIconButton" parent="Widget.MaterialComponents.Button.UnelevatedButton">
+        <item name="android:layout_width">48dp</item>
+        <item name="android:layout_height">48dp</item>
+        <item name="android:minWidth">0dp</item>
+        <item name="android:minHeight">0dp</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="android:padding">12dp</item>
+        <item name="iconPadding">0dp</item>
+        <item name="iconSize">24dp</item>
+        <item name="iconGravity">textStart</item>
+        <item name="iconTint">@color/vw_accent_text</item>
+        <item name="backgroundTint">@color/vw_surface_high</item>
+        <item name="rippleColor">@color/vw_accent_tonal</item>
+        <item name="strokeColor">@color/vw_focus_stroke</item>
+        <item name="strokeWidth">@dimen/vw_row_focus_stroke</item>
+        <item name="cornerRadius">24dp</item>
+    </style>
     <style name="Widget.Vibe.TonalButton" parent="Widget.MaterialComponents.Button.UnelevatedButton">
         <item name="android:minHeight">48dp</item>
         <item name="android:insetTop">0dp</item>

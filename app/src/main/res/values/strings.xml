@@ -802,6 +802,9 @@
     <!-- Settings screen -->
     <string name="settings_screen_title">Settings</string>
     <string name="settings_back">Back</string>
+    <string name="settings_more">More options</string>
+    <string name="settings_menu_jump">Jump to section</string>
+    <string name="settings_menu_profiles">Profiles</string>
     <!-- Overrides the androidx preference expander title -->
     <string name="expand_button_title">Show more</string>
     <!-- Info button and dialog on settings rows -->

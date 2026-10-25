@@ -18,6 +18,7 @@ import android.os.Vibrator;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.widget.PopupMenu;
 import androidx.core.content.FileProvider;
 import androidx.fragment.app.DialogFragment;
 import androidx.preference.CheckBoxPreference;
@@ -42,6 +43,9 @@ import android.view.Display;
 import android.view.DisplayCutout;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
+import android.view.Menu;
+import android.view.MenuItem;
+import android.view.SubMenu;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowInsets;
@@ -54,11 +58,13 @@ import com.limelight.BuildConfig;
 import com.limelight.GameMenu;
 import com.limelight.LimeLog;
 import com.limelight.PcView;
+import com.limelight.ProfilesActivity;
 import com.limelight.R;
 import com.limelight.binding.input.virtual_controller.keyboard.KeyBoardControllerConfigurationLoader;
 import com.limelight.binding.video.MediaCodecHelper;
 import com.limelight.utils.Dialog;
 import com.limelight.utils.FileUriUtils;
+import com.limelight.utils.HelpLauncher;
 import com.limelight.utils.PerformanceDataTracker;
 import com.limelight.utils.UiHelper;
 import org.json.JSONObject;
@@ -119,6 +125,17 @@ public class StreamSettings extends AppCompatActivity {
                 }
             });
         }
+        View moreButton = findViewById(R.id.settingsMoreButton);
+        if (moreButton != null) {
+            moreButton.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    if (prefsFragment != null && prefsFragment.getView() != null) {
+                        prefsFragment.showMoreMenu(v);
+                    }
+                }
+            });
+        }
 
 //        UiHelper.notifyNewRootView(this);
     }
@@ -131,6 +148,14 @@ public class StreamSettings extends AppCompatActivity {
                 prefsFragment != null && prefsFragment.getView() != null) {
             if (event.getAction() == KeyEvent.ACTION_DOWN) {
                 prefsFragment.jumpToCategory(keyCode == KeyEvent.KEYCODE_BUTTON_R1 ? 1 : -1);
+            }
+            return true;
+        }
+        // Select opens the "..." menu
+        if (keyCode == KeyEvent.KEYCODE_BUTTON_SELECT && prefsFragment != null && prefsFragment.getView() != null) {
+            View moreButton = findViewById(R.id.settingsMoreButton);
+            if (event.getAction() == KeyEvent.ACTION_UP && moreButton != null) {
+                prefsFragment.showMoreMenu(moreButton);
             }
             return true;
         }
@@ -667,35 +692,48 @@ public class StreamSettings extends AppCompatActivity {
             }
         }
 
-        /** Scrolls to the previous (-1) or next (1) category and focuses its first row. */
-        public boolean jumpToCategory(int direction) {
+        /** The visible sections L1, R1 and "Jump to section" move between, in list order. */
+        List<PreferenceCategory> jumpTargets() {
+            List<PreferenceCategory> result = new ArrayList<>();
             final RecyclerView list = getListView();
             PreferenceScreen screen = getPreferenceScreen();
             if (list == null || screen == null ||
-                    !(list.getAdapter() instanceof PreferenceGroup.PreferencePositionCallback) ||
-                    !(list.getLayoutManager() instanceof LinearLayoutManager)) {
-                return false;
+                    !(list.getAdapter() instanceof PreferenceGroup.PreferencePositionCallback)) {
+                return result;
             }
-
             // Categories are read from the inflated screen, so removed ones are skipped
-            PreferenceGroup.PreferencePositionCallback positions =
+            final PreferenceGroup.PreferencePositionCallback positions =
                     (PreferenceGroup.PreferencePositionCallback) list.getAdapter();
-            List<Integer> categoryPositions = new ArrayList<>();
             for (int i = 0; i < screen.getPreferenceCount(); i++) {
                 Preference preference = screen.getPreference(i);
                 // The "All settings" caption has no rows of its own
                 if (preference instanceof PreferenceCategory && preference.isVisible() &&
-                        !ALL_SETTINGS_KEY.equals(preference.getKey())) {
-                    int position = positions.getPreferenceAdapterPosition(preference);
-                    if (position != RecyclerView.NO_POSITION) {
-                        categoryPositions.add(position);
-                    }
+                        !ALL_SETTINGS_KEY.equals(preference.getKey()) &&
+                        positions.getPreferenceAdapterPosition(preference) != RecyclerView.NO_POSITION) {
+                    result.add((PreferenceCategory) preference);
                 }
             }
-            if (categoryPositions.isEmpty()) {
+            Collections.sort(result, new java.util.Comparator<PreferenceCategory>() {
+                @Override
+                public int compare(PreferenceCategory a, PreferenceCategory b) {
+                    return Integer.compare(positions.getPreferenceAdapterPosition(a),
+                            positions.getPreferenceAdapterPosition(b));
+                }
+            });
+            return result;
+        }
+
+        /** Scrolls to the previous (-1) or next (1) category and focuses its first row. */
+        public boolean jumpToCategory(int direction) {
+            final RecyclerView list = getListView();
+            List<PreferenceCategory> targets = jumpTargets();
+            if (targets.isEmpty() || !(list.getLayoutManager() instanceof LinearLayoutManager)) {
                 return false;
             }
-            Collections.sort(categoryPositions);
+            List<Integer> categoryPositions = new ArrayList<>();
+            for (PreferenceCategory category : targets) {
+                categoryPositions.add(adapterPositionOf(category.getKey()));
+            }
 
             LinearLayoutManager layoutManager = (LinearLayoutManager) list.getLayoutManager();
             int focusedPosition = RecyclerView.NO_POSITION;
@@ -710,9 +748,18 @@ public class StreamSettings extends AppCompatActivity {
 
             int current = CategoryNavigation.currentCategoryIndex(categoryPositions, focusedPosition);
             int target = CategoryNavigation.nextCategoryIndex(current, direction, categoryPositions.size());
-            final int headerPosition = categoryPositions.get(target);
+            return jumpToCategoryAt(target);
+        }
 
-            layoutManager.scrollToPositionWithOffset(headerPosition, 0);
+        /** Scrolls to the section at an index of jumpTargets() and focuses its first row. */
+        public boolean jumpToCategoryAt(int index) {
+            final RecyclerView list = getListView();
+            List<PreferenceCategory> targets = jumpTargets();
+            if (index < 0 || index >= targets.size() || !(list.getLayoutManager() instanceof LinearLayoutManager)) {
+                return false;
+            }
+            final int headerPosition = adapterPositionOf(targets.get(index).getKey());
+            ((LinearLayoutManager) list.getLayoutManager()).scrollToPositionWithOffset(headerPosition, 0);
             list.post(new Runnable() {
                 @Override
                 public void run() {
@@ -720,6 +767,64 @@ public class StreamSettings extends AppCompatActivity {
                 }
             });
             return true;
+        }
+
+        static final int MENU_JUMP = 1;
+        static final int MENU_DESCRIPTIONS = 2;
+        static final int MENU_PROFILES = 3;
+        static final int MENU_HELP = 4;
+        static final int MENU_JUMP_FIRST_SECTION = 100;
+
+        // The menu shown last, for tests
+        PopupMenu shownMoreMenu;
+
+        /** The "..." menu of the settings header. */
+        public void showMoreMenu(View anchor) {
+            PopupMenu popup = new PopupMenu(requireContext(), anchor);
+            buildMoreMenu(popup.getMenu());
+            popup.setOnMenuItemClickListener(new PopupMenu.OnMenuItemClickListener() {
+                @Override
+                public boolean onMenuItemClick(MenuItem item) {
+                    return onMoreMenuItem(item);
+                }
+            });
+            shownMoreMenu = popup;
+            popup.show();
+        }
+
+        void buildMoreMenu(Menu menu) {
+            SubMenu jump = menu.addSubMenu(Menu.NONE, MENU_JUMP, 0, R.string.settings_menu_jump);
+            List<PreferenceCategory> targets = jumpTargets();
+            for (int i = 0; i < targets.size(); i++) {
+                jump.add(Menu.NONE, MENU_JUMP_FIRST_SECTION + i, i, targets.get(i).getTitle());
+            }
+            menu.add(Menu.NONE, MENU_DESCRIPTIONS, 1, R.string.pref_show_descriptions)
+                    .setCheckable(true)
+                    .setChecked(isShowingDescriptions());
+            menu.add(Menu.NONE, MENU_PROFILES, 2, R.string.settings_menu_profiles);
+            if (!requireContext().getPackageManager().hasSystemFeature("amazon.hardware.fire_tv")) {
+                menu.add(Menu.NONE, MENU_HELP, 3, R.string.help);
+            }
+        }
+
+        boolean onMoreMenuItem(MenuItem item) {
+            int id = item.getItemId();
+            if (id >= MENU_JUMP_FIRST_SECTION) {
+                return jumpToCategoryAt(id - MENU_JUMP_FIRST_SECTION);
+            }
+            if (id == MENU_DESCRIPTIONS) {
+                setShowDescriptions(!isShowingDescriptions());
+                return true;
+            }
+            if (id == MENU_PROFILES) {
+                startActivity(new Intent(requireContext(), ProfilesActivity.class));
+                return true;
+            }
+            if (id == MENU_HELP) {
+                HelpLauncher.launchSetupGuide(requireContext());
+                return true;
+            }
+            return false;
         }
 
         @NonNull
