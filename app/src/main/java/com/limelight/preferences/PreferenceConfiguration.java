@@ -53,6 +53,8 @@ public class PreferenceConfiguration {
     static final String MIGRATED_FRAME_PACING_NEWEST_PREF_STRING = "migrated_frame_pacing_newest_v130";
     // One-time return to the 1.2.2 streaming defaults, stored in the base preferences only
     static final String RESTORED_122_DEFAULTS_PREF_STRING = "restored_122_defaults_v134";
+    // One-time return of every saved profile to the 1.2.2 streaming settings (flag in base prefs)
+    static final String RESTORED_122_PROFILES_PREF_STRING = "restored_122_profiles_v135";
     private static final String BITRATE_PREF_OLD_STRING = "seekbar_bitrate";
     private static final String METERED_BITRATE_PREF_STRING = "seekbar_metered_bitrate_kbps";
     private static final String ENABLE_ULTRA_LOW_LATENCY_PREF_STRING = "checkbox_ultra_low_latency";
@@ -781,6 +783,69 @@ private static int getFramePacingValue(Context context) {
     public static void runOneTimeMigrations(Context context) {
         migrateToAutoDisplayDefaults(context);
         restoreStreamingDefaultsOf122(context);
+        restoreProfilesOf122(context);
+    }
+
+    /**
+     * Returns every saved profile to the 1.2.2 streaming settings, once. A profile saves a full
+     * copy of the base preferences, so profiles made with 1.3.0 to 1.3.3 carry that version's
+     * defaults. Up to 1.2.2 every stream used Balanced whatever pacing value was stored, so
+     * "newest", "latency", "smoothness" and "cap-fps" become "balanced" ("balanced", "warp"
+     * and "warp2" are kept). The vendor decoder keys setting is removed, so the profile uses
+     * the base value, and a stored Wi-Fi keepalive is turned off. Profiles are saved again if
+     * anything changed; the flag is only set once that save succeeds.
+     *
+     * @return true if any profile was changed
+     */
+    public static boolean restoreProfilesOf122(Context context) {
+        return restoreProfilesOf122(PreferenceManager.getDefaultSharedPreferences(context),
+                ProfilesManager.getInstance(), context);
+    }
+
+    static boolean restoreProfilesOf122(SharedPreferences prefs, ProfilesManager manager, Context context) {
+        if (prefs.getBoolean(RESTORED_122_PROFILES_PREF_STRING, false)) {
+            return false;
+        }
+
+        boolean changed = false;
+        for (com.limelight.profiles.SettingsProfile profile : manager.getProfiles()) {
+            java.util.Map<String, Object> options = profile.getOptions();
+            if (options != null && restoreProfileOptionsOf122(options)) {
+                changed = true;
+            }
+        }
+
+        if (changed && !manager.save(context)) {
+            // Try again at the next start
+            return true;
+        }
+        prefs.edit().putBoolean(RESTORED_122_PROFILES_PREF_STRING, true).apply();
+        return changed;
+    }
+
+    /** Applies the 1.2.2 streaming settings to one profile's options. */
+    static boolean restoreProfileOptionsOf122(java.util.Map<String, Object> options) {
+        boolean changed = false;
+
+        Object pacing = options.get(FRAME_PACING_PREF_STRING);
+        if ("newest".equals(pacing) || "latency".equals(pacing) ||
+                "smoothness".equals(pacing) || "cap-fps".equals(pacing)) {
+            options.put(FRAME_PACING_PREF_STRING, "balanced");
+            changed = true;
+        }
+
+        if (options.containsKey(VENDOR_DECODER_KEYS_PREF_STRING)) {
+            options.remove(VENDOR_DECODER_KEYS_PREF_STRING);
+            changed = true;
+        }
+
+        if (options.containsKey(PREVENT_PACKET_LOSS_PREF_STRING) &&
+                !Boolean.FALSE.equals(options.get(PREVENT_PACKET_LOSS_PREF_STRING))) {
+            options.put(PREVENT_PACKET_LOSS_PREF_STRING, false);
+            changed = true;
+        }
+
+        return changed;
     }
 
     /**

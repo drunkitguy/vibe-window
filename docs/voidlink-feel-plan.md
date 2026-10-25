@@ -42,6 +42,7 @@ A real test of client 1.3.3 with host 1.3.1 stuttered badly (HEVC and AV1, docke
 - Frame pacing defaults to Balanced (what 1.2.2 used for every stream). "Lowest latency (newest frame, experimental)" stays selectable. The warp entries run as Balanced with their frame rate factor, as in 1.2.2.
 - "Use vendor decoder low-latency keys" and "Keep Wi-Fi awake while streaming" default to off.
 - The 1.3.0 migrations no longer run. A one-time migration (`restored_122_defaults_v134`, base preferences only) moves values that came from the 1.3.x defaults back: see `PreferenceConfiguration.restoreStreamingDefaultsOf122`.
+- 1.3.5: saved profiles get the same restore once (`restored_122_profiles_v135`, `PreferenceConfiguration.restoreProfilesOf122`), because a profile saves a full copy of the base preferences: "newest", "latency", "smoothness" and "cap-fps" become "balanced", the vendor keys entry is removed and a stored keepalive is turned off.
 - On the default path the renderer again calls `Surface.setFrameRate` after configure, as in 1.2.2 (C5 is reverted), and the stats changes that touched the render thread are reverted or made lock-free.
 
 The sections below describe the 1.3.0 to 1.3.3 work, which is now opt-in.

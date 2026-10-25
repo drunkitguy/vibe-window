@@ -172,24 +172,104 @@ public class Restore122DefaultsTest {
         assertFalse(prefs.contains(RAN_13_KEEPALIVE));
     }
 
-    @Test
-    public void profileOverlayIsUntouched() {
-        Map<String, Object> options = new HashMap<>();
-        options.put(PACING, "newest");
-        options.put(KEEPALIVE, true);
-        SettingsProfile profile = new SettingsProfile(UUID.randomUUID(), "Profile", 0, 0, options);
-        ProfilesManager.getInstance().add(profile);
-        ProfilesManager.getInstance().setActive(profile.getUuid());
+    private static final String PROFILES_FLAG = "restored_122_profiles_v135";
 
+    private SettingsProfile addProfile(String name, Map<String, Object> options) {
+        SettingsProfile profile = new SettingsProfile(UUID.randomUUID(), name, 0, 0, options);
+        ProfilesManager.getInstance().add(profile);
+        return profile;
+    }
+
+    /** What EditProfileActivity saved with 1.3.3: a full copy of the base preferences. */
+    private static Map<String, Object> profileFrom133() {
+        Map<String, Object> options = new HashMap<>();
+        options.put("list_resolution", "auto");
+        options.put("list_fps", "auto");
+        options.put("seekbar_bitrate_kbps", 50000);
+        options.put(PACING, "newest");
+        options.put(VENDOR, true);
+        options.put(KEEPALIVE, true);
+        return options;
+    }
+
+    @Test
+    public void activeProfileOverlayIsRestoredToo() {
+        SettingsProfile profile = addProfile("Profile", profileFrom133());
+        ProfilesManager.getInstance().setActive(profile.getUuid());
         as13xInstall();
         prefs.edit().putString(PACING, "newest").putBoolean(KEEPALIVE, true).commit();
-        assertTrue(PreferenceConfiguration.restoreStreamingDefaultsOf122(context));
+
+        PreferenceConfiguration.runOneTimeMigrations(context);
 
         assertEquals("balanced", prefs.getString(PACING, null));
+        assertEquals("balanced", profile.getOptions().get(PACING));
+        assertFalse(profile.getOptions().containsKey(VENDOR));
+        assertEquals(false, profile.getOptions().get(KEEPALIVE));
+        PreferenceConfiguration config = PreferenceConfiguration.readPreferences(context);
+        assertEquals(PreferenceConfiguration.FRAME_PACING_BALANCED, config.framePacing);
+        assertFalse(config.vendorDecoderKeys);
+        assertFalse(config.preventPacketLoss);
+    }
+
+    @Test
+    public void profileCreatedWith133IsRestoredAndSaved() throws Exception {
+        SettingsProfile profile = addProfile("Docked", profileFrom133());
+        // A 1.3.4 install: the base preferences were already restored, profiles were not
+        prefs.edit().putBoolean(FLAG, true).commit();
+
+        assertTrue(PreferenceConfiguration.restoreProfilesOf122(context));
+        assertTrue(prefs.getBoolean(PROFILES_FLAG, false));
+
+        // Only the 1.3 settings changed
+        Map<String, Object> options = profile.getOptions();
+        assertEquals("balanced", options.get(PACING));
+        assertFalse(options.containsKey(VENDOR));
+        assertEquals(false, options.get(KEEPALIVE));
+        assertEquals("auto", options.get("list_resolution"));
+        assertEquals(50000, options.get("seekbar_bitrate_kbps"));
+
+        // And the change was written to the profiles file
+        resetProfiles();
+        assertTrue(ProfilesManager.getInstance().load(context));
+        SettingsProfile reloaded = ProfilesManager.getInstance().getProfiles().get(0);
+        assertEquals("balanced", reloaded.getOptions().get(PACING));
+        assertFalse(reloaded.getOptions().containsKey(VENDOR));
+        assertEquals(false, reloaded.getOptions().get(KEEPALIVE));
+    }
+
+    @Test
+    public void profilePacingValuesFollowThe122Rule() {
+        String[][] cases = {
+                {"newest", "balanced"}, {"latency", "balanced"}, {"smoothness", "balanced"},
+                {"cap-fps", "balanced"}, {"balanced", "balanced"}, {"warp", "warp"}, {"warp2", "warp2"},
+        };
+        for (String[] c : cases) {
+            Map<String, Object> options = new HashMap<>();
+            options.put(PACING, c[0]);
+            PreferenceConfiguration.restoreProfileOptionsOf122(options);
+            assertEquals(c[0], c[1], options.get(PACING));
+        }
+
+        // A profile without these settings is left alone
+        Map<String, Object> empty = new HashMap<>();
+        empty.put("list_fps", "60");
+        assertFalse(PreferenceConfiguration.restoreProfileOptionsOf122(empty));
+        assertEquals(1, empty.size());
+        assertFalse(empty.containsKey(KEEPALIVE));
+    }
+
+    @Test
+    public void profileRestoreRunsOnce() {
+        SettingsProfile profile = addProfile("Profile", profileFrom133());
+        PreferenceConfiguration.runOneTimeMigrations(context);
+        assertEquals("balanced", profile.getOptions().get(PACING));
+
+        // Opting in again in the profile sticks
+        profile.getOptions().put(PACING, "newest");
+        profile.getOptions().put(KEEPALIVE, true);
+        PreferenceConfiguration.runOneTimeMigrations(context);
         assertEquals("newest", profile.getOptions().get(PACING));
         assertEquals(true, profile.getOptions().get(KEEPALIVE));
-        PreferenceConfiguration config = PreferenceConfiguration.readPreferences(context);
-        assertEquals(PreferenceConfiguration.FRAME_PACING_NEWEST, config.framePacing);
     }
 
     @Test
