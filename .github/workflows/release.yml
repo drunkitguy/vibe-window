@@ -176,6 +176,11 @@ jobs:
 
             Defaults: Auto resolution and frame rate (match the display), virtual display on, "Show only the app window" on, frame pacing Balanced.
 
+            **Fixes in 1.3.5**
+
+            - Saved profiles are restored to the 1.2.2 streaming settings too, once: a profile keeps its own copy of every setting, so profiles made with 1.3.0 to 1.3.3 still used the newest-frame pacing, the vendor decoder keys and the Wi-Fi keepalive. Their frame pacing becomes Balanced (Warp Drive entries are kept), the vendor decoder keys follow the main setting (off unless you turned it on), and the keepalive is off. Changes you make to a profile afterwards stay.
+            - With "Keep Wi-Fi awake while streaming" on, the packet goes out every 20 ms again, as in 1.2.2. Sending once per frame is a separate opt-in: Settings, Advanced Settings, Show more, "Keep Wi-Fi awake every frame (experimental)".
+
             **1.3.4: Restores 1.2.2 streaming behaviour by default after stutter reports; new options are opt-in**
 
             - Streams play as in 1.2.2 again: frame pacing is Balanced, the decoder uses the 1.2.2 configuration, the Wi-Fi keepalive is off, and the video decoder again sets the stream's frame rate on the screen surface as 1.2.2 did. 1.3.0 to 1.3.3 are superseded.
@@ -187,7 +192,7 @@ jobs:
             - Newest-frame pacing: Settings, Video Settings, Show more, Video frame pacing, "Lowest latency (newest frame, experimental)". At most one frame per screen refresh, always the newest; on Android 13 and later each frame is scheduled for the earliest refresh it can still make. Only on the built-in display. The full overlay shows its counters.
             - Other pacing modes: "Lowest latency (legacy)", "Prefer smoothest video" and "Balanced with FPS limit" in the same list now pace as their names say (up to 1.2.2 every stream used Balanced).
             - Snapdragon vendor decoder keys: Settings, Video Settings, Show more, "Use vendor decoder low-latency keys". Applies Qualcomm's low-latency decoder settings and steps down to the 1.2 configuration if the decoder refuses them.
-            - Wi-Fi keepalive: Settings, Advanced Settings, Show more, "Keep Wi-Fi awake while streaming". Sends a tiny packet about once per frame on Wi-Fi only, from its own thread.
+            - Wi-Fi keepalive: Settings, Advanced Settings, Show more, "Keep Wi-Fi awake while streaming". Sends a tiny packet every 20 ms on Wi-Fi only, from its own thread; "Keep Wi-Fi awake every frame (experimental)" sends it once per frame instead.
 
             **Other changes in 1.3**
 
