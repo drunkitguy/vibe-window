@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- "About this setting" button at the end of a settings row. It is not focusable:
+     the row keeps the focus and Y opens the same dialog. -->
+<ImageButton xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/vw_pref_info"
+    android:layout_width="40dp"
+    android:layout_height="40dp"
+    android:layout_gravity="center_vertical"
+    android:layout_marginStart="@dimen/vw_space_1"
+    android:layout_marginLeft="@dimen/vw_space_1"
+    android:background="?attr/selectableItemBackgroundBorderless"
+    android:contentDescription="@string/pref_info_button"
+    android:focusable="false"
+    android:padding="8dp"
+    android:scaleType="fitCenter"
+    android:src="@drawable/ic_info_outline"
+    android:tint="@color/vw_accent_text"
+    android:visibility="gone" />

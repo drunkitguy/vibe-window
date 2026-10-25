@@ -677,6 +677,25 @@ public class StreamSettings extends AppCompatActivity {
             return true;
         }
 
+        @NonNull
+        @Override
+        protected RecyclerView.Adapter onCreateAdapter(@NonNull PreferenceScreen preferenceScreen) {
+            return new VwPreferenceAdapter(preferenceScreen, requireContext());
+        }
+
+        /** Shows the row summaries inline (true) or behind the info buttons (false). */
+        public void setShowDescriptions(boolean show) {
+            UiState.setShowDescriptions(requireContext(), show);
+            RecyclerView list = getListView();
+            if (list != null && list.getAdapter() != null) {
+                list.getAdapter().notifyDataSetChanged();
+            }
+        }
+
+        public boolean isShowingDescriptions() {
+            return UiState.showDescriptions(requireContext());
+        }
+
         @Override
         public void onCreatePreferences(Bundle bundle, String s) {
             initializePreferences();

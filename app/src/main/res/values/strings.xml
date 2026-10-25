@@ -804,6 +804,10 @@
     <string name="settings_back">Back</string>
     <!-- Overrides the androidx preference expander title -->
     <string name="expand_button_title">Show more</string>
+    <!-- Info button and dialog on settings rows -->
+    <string name="pref_info_button">About this setting</string>
+    <string name="pref_info_current">Current: %1$s</string>
+    <string name="pref_show_descriptions">Show descriptions</string>
 
     <!-- Auto resolution -->
     <string name="resolution_auto">Auto (match display)</string>

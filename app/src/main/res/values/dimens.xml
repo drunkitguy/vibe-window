@@ -35,5 +35,7 @@
 
     <!-- Settings content never grows wider than this -->
     <dimen name="vw_settings_max_width">840dp</dimen>
+    <!-- The value text on a settings row's title line wraps before this width -->
+    <dimen name="vw_pref_value_max_width">220dp</dimen>
 
 </resources>
