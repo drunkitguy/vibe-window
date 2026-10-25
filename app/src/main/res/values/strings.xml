@@ -808,6 +808,8 @@
     <string name="pref_info_button">About this setting</string>
     <string name="pref_info_current">Current: %1$s</string>
     <string name="pref_show_descriptions">Show descriptions</string>
+    <!-- After the bitrate value while it follows the resolution -->
+    <string name="pref_value_auto">Auto</string>
 
     <!-- Auto resolution -->
     <string name="resolution_auto">Auto (match display)</string>

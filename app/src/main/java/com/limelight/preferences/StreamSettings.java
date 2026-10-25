@@ -475,6 +475,12 @@ public class StreamSettings extends AppCompatActivity {
             if (fpsPref != null) {
                 fpsPref.setSummary(withHint(autoFps ? hint : null, R.string.summary_fps_list));
             }
+
+            // The inline bitrate slider shows the stored value, which the listeners may have reset
+            Preference bitrate = findPreference(PreferenceConfiguration.BITRATE_PREF_STRING);
+            if (bitrate instanceof SeekBarPreference) {
+                ((SeekBarPreference) bitrate).refreshFromStore();
+            }
         }
 
         private CharSequence withHint(String hint, int summaryRes) {

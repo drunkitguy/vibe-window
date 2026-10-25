@@ -253,6 +253,22 @@
         <item name="android:layout">@layout/vw_pref_category</item>
     </style>
 
+    <!-- Inline slider on settings rows: accent fill, white thumb -->
+    <style name="Widget.Vibe.Slider" parent="Widget.AppCompat.SeekBar">
+        <item name="android:progressDrawable">@drawable/vw_slider_track</item>
+        <item name="android:thumb">@drawable/vw_slider_thumb</item>
+        <item name="android:splitTrack">false</item>
+        <item name="android:minHeight">6dp</item>
+        <item name="android:maxHeight">6dp</item>
+        <item name="android:paddingTop">@dimen/vw_space_3</item>
+        <item name="android:paddingBottom">@dimen/vw_space_3</item>
+        <item name="android:paddingStart">12dp</item>
+        <item name="android:paddingLeft">12dp</item>
+        <item name="android:paddingEnd">12dp</item>
+        <item name="android:paddingRight">12dp</item>
+        <item name="android:background">@null</item>
+    </style>
+
     <!-- Switch on API 29+, where the base theme is Material 3 -->
     <style name="Widget.Vibe.Switch" parent="Widget.Material3.CompoundButton.MaterialSwitch">
         <item name="thumbTint">@color/vw_switch_thumb</item>
