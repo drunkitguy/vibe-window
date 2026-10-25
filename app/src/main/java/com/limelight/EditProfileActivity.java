@@ -271,6 +271,14 @@ public class EditProfileActivity extends AppCompatActivity {
             super(PreferenceConfiguration.readPreferences(context, prefs));
         }
 
+        /**
+         * Used by the FragmentManager after process death. The activity replaces this
+         * instance with a fresh one in onCreate, once its in-memory prefs exist.
+         */
+        public ProfilePreferenceFragment() {
+            super();
+        }
+
         @NonNull
         @Override
         public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
@@ -281,6 +289,12 @@ public class EditProfileActivity extends AppCompatActivity {
         public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
             EditProfileActivity act = (EditProfileActivity) requireActivity();
             SharedPreferences memPrefs = act.getInMemoryPrefs();
+            if (memPrefs == null) {
+                // Restored before the activity set up the profile: show nothing, the activity
+                // replaces this fragment right away. Never fall back to the base preferences.
+                setPreferenceScreen(getPreferenceManager().createPreferenceScreen(requireContext()));
+                return;
+            }
             // Route preference storage to in-memory prefs
             getPreferenceManager().setPreferenceDataStore(new InMemoryPreferenceDataStore(memPrefs));
 

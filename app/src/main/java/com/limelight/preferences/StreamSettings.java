@@ -212,6 +212,24 @@ public class StreamSettings extends AppCompatActivity {
             prevPrefConfig = prefCfg;
         }
 
+        /**
+         * Used by the FragmentManager when it recreates the fragment after process death or a
+         * configuration change. The configuration is read in onCreatePreferences.
+         */
+        public SettingsFragment() {
+            prevPrefConfig = null;
+        }
+
+        /** Removes a preference from whichever group holds it. Missing keys are ignored. */
+        protected boolean removePreferenceByKey(String key) {
+            Preference preference = findPreference(key);
+            if (preference == null) {
+                return false;
+            }
+            PreferenceGroup parent = preference.getParent();
+            return parent != null && parent.removePreference(preference);
+        }
+
         protected SharedPreferences getPrefs() {
             return getPreferenceManager().getSharedPreferences();
         }
@@ -665,56 +683,52 @@ public class StreamSettings extends AppCompatActivity {
         }
 
         public void initializePreferences() {
+            if (prevPrefConfig == null) {
+                // Recreated by the FragmentManager with the no-argument constructor
+                prevPrefConfig = PreferenceConfiguration.readPreferences(requireActivity(), getPrefs());
+            }
             addPreferencesFromResource(R.xml.preferences);
             PreferenceScreen screen = getPreferenceScreen();
 
             AppCompatActivity activity = (AppCompatActivity) requireActivity();
             PackageManager pm = activity.getPackageManager();
 
+            // Every removal goes through the key, never through a fixed category, so a row
+            // can live in any category (the quick settings at the top move several of them)
+
             // hide on-screen controls category on non touch screen devices
             if (!pm.hasSystemFeature(PackageManager.FEATURE_TOUCHSCREEN)) {
-                PreferenceCategory category = findPreference("category_onscreen_controls");
-                if (category != null) {
-                    screen.removePreference(category);
-                }
-                category = findPreference("category_special_key_layout");
-                if (category != null) {
-                    screen.removePreference(category);
-                }
+                removePreferenceByKey("category_onscreen_controls");
+                removePreferenceByKey("category_special_key_layout");
+                // The on-screen controls switch and its opacity may sit outside that category
+                removePreferenceByKey("checkbox_show_onscreen_controls");
+                removePreferenceByKey("seekbar_osc_opacity");
             }
 
             // Hide remote desktop mouse mode on pre-Oreo (which doesn't have pointer capture)
             // and NVIDIA SHIELD devices (which support raw mouse input in pointer capture mode)
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O ||
                     getActivity().getPackageManager().hasSystemFeature("com.nvidia.feature.shield")) {
-                PreferenceCategory category =
-                        (PreferenceCategory) findPreference("category_input_settings");
-                category.removePreference(findPreference("checkbox_absolute_mouse_mode"));
+                removePreferenceByKey("checkbox_absolute_mouse_mode");
             }
 
             // Hide gamepad motion sensor option when running on OSes before Android 12.
             // Support for motion, LED, battery, and other extensions were introduced in S.
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
-                PreferenceCategory category =
-                        (PreferenceCategory) findPreference("category_gamepad_settings");
-                category.removePreference(findPreference("checkbox_gamepad_motion_sensors"));
+                removePreferenceByKey("checkbox_gamepad_motion_sensors");
             }
 
             // Hide gamepad motion sensor fallback option if the device has no gyro or accelerometer
             if (!pm.hasSystemFeature(PackageManager.FEATURE_SENSOR_ACCELEROMETER) &&
                     !activity.getPackageManager().hasSystemFeature(PackageManager.FEATURE_SENSOR_GYROSCOPE)) {
-                PreferenceCategory category =
-                        (PreferenceCategory) findPreference("category_gamepad_settings");
-                category.removePreference(findPreference("checkbox_force_device_motion"));
-                category.removePreference(findPreference("checkbox_gamepad_motion_fallback"));
+                removePreferenceByKey("checkbox_force_device_motion");
+                removePreferenceByKey("checkbox_gamepad_motion_fallback");
             }
 
             // Hide USB driver options on devices without USB host support
             if (!pm.hasSystemFeature(PackageManager.FEATURE_USB_HOST)) {
-                PreferenceCategory category =
-                        (PreferenceCategory) findPreference("category_gamepad_settings");
-                category.removePreference(findPreference("checkbox_usb_bind_all"));
-                category.removePreference(findPreference("checkbox_usb_driver"));
+                removePreferenceByKey("checkbox_usb_bind_all");
+                removePreferenceByKey("checkbox_usb_driver");
             }
 
             // Remove PiP mode on devices pre-Oreo, where the feature is not available (some low RAM devices),
@@ -722,9 +736,7 @@ public class StreamSettings extends AppCompatActivity {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O ||
                     !pm.hasSystemFeature("android.software.picture_in_picture") ||
                     pm.hasSystemFeature("com.amazon.software.fireos")) {
-                PreferenceCategory category =
-                        (PreferenceCategory) findPreference("category_ui_settings");
-                category.removePreference(findPreference("checkbox_enable_pip"));
+                removePreferenceByKey("checkbox_enable_pip");
             }
 
             // Fire TV apps are not allowed to use WebViews or browsers, so hide the Help category
@@ -733,30 +745,19 @@ public class StreamSettings extends AppCompatActivity {
                         (PreferenceCategory) findPreference("category_help");
                 screen.removePreference(category);
             }*/
-            PreferenceCategory category_gamepad_settings =
-                    (PreferenceCategory) findPreference("category_gamepad_settings");
             // Remove the vibration options if the device can't vibrate
             if (!((Vibrator)getActivity().getSystemService(Context.VIBRATOR_SERVICE)).hasVibrator()) {
-                category_gamepad_settings.removePreference(findPreference("checkbox_vibrate_fallback"));
-                category_gamepad_settings.removePreference(findPreference("seekbar_vibrate_fallback_strength"));
+                removePreferenceByKey("checkbox_vibrate_fallback");
+                removePreferenceByKey("seekbar_vibrate_fallback_strength");
                 // The entire OSC category may have already been removed by the touchscreen check above
-                PreferenceCategory category = findPreference("category_onscreen_controls");
-                if (category != null) {
-                    category.removePreference(findPreference("checkbox_vibrate_osc"));
-                }
-                category = findPreference("category_special_key_layout");
-                if (category != null) {
-                    category.removePreference(findPreference("checkbox_vibrate_keyboard"));
-                }
-                category = findPreference("category_gamepad_settings");
-                if (category != null) {
-                    category.removePreference(findPreference("checkbox_enable_device_rumble"));
-                }
+                removePreferenceByKey("checkbox_vibrate_osc");
+                removePreferenceByKey("checkbox_vibrate_keyboard");
+                removePreferenceByKey("checkbox_enable_device_rumble");
             }
             else if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O ||
                     !((Vibrator)getActivity().getSystemService(Context.VIBRATOR_SERVICE)).hasAmplitudeControl()) {
                 // Remove the vibration strength selector of the device doesn't have amplitude control
-                category_gamepad_settings.removePreference(findPreference("seekbar_vibrate_fallback_strength"));
+                removePreferenceByKey("seekbar_vibrate_fallback_strength");
             }
 
             // Check custom resolution
@@ -964,9 +965,7 @@ public class StreamSettings extends AppCompatActivity {
             // Remove HDR preference for devices below Nougat
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
                 LimeLog.info("Excluding HDR toggle based on OS");
-                PreferenceCategory category =
-                        (PreferenceCategory) findPreference("category_video_settings");
-                category.removePreference(findPreference("checkbox_enable_hdr"));
+                removePreferenceByKey("checkbox_enable_hdr");
             }
             else {
                 Display.HdrCapabilities hdrCaps = display.getHdrCapabilities();
@@ -985,18 +984,16 @@ public class StreamSettings extends AppCompatActivity {
 
                 if (!foundHdr10) {
                     LimeLog.info("Excluding HDR toggle based on display capabilities");
-                    PreferenceCategory category =
-                            (PreferenceCategory) findPreference("category_video_settings");
-                    category.removePreference(findPreference("checkbox_enable_hdr"));
+                    removePreferenceByKey("checkbox_enable_hdr");
                 }
                 else if (PreferenceConfiguration.isShieldAtvFirmwareWithBrokenHdr()) {
                     LimeLog.info("Disabling HDR toggle on old broken SHIELD TV firmware");
-                    PreferenceCategory category =
-                            (PreferenceCategory) findPreference("category_video_settings");
-                    CheckBoxPreference hdrPref = (CheckBoxPreference) category.findPreference("checkbox_enable_hdr");
-                    hdrPref.setEnabled(false);
-                    hdrPref.setChecked(false);
-                    hdrPref.setSummary("Update the firmware on your NVIDIA SHIELD Android TV to enable HDR");
+                    CheckBoxPreference hdrPref = findPreference("checkbox_enable_hdr");
+                    if (hdrPref != null) {
+                        hdrPref.setEnabled(false);
+                        hdrPref.setChecked(false);
+                        hdrPref.setSummary("Update the firmware on your NVIDIA SHIELD Android TV to enable HDR");
+                    }
                 }
             }
 
