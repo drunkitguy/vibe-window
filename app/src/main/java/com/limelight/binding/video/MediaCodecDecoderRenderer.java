@@ -23,7 +23,6 @@ import com.limelight.utils.Stereo3DRenderer;
 import com.limelight.utils.TrafficStatsHelper;
 
 import android.annotation.SuppressLint;
-import android.util.LongSparseArray;
 import android.annotation.TargetApi;
 import android.app.Activity;
 import android.content.Context;
@@ -55,7 +54,11 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
     public void setForceTightThresholds(boolean v) { this.forceTightThresholds = v; }
     // Toggle at runtime if needed
     // Decode latency tracking: map PTS(us) -> enqueue time (ns)
-    private final LongSparseArray<Long> enqueueNsByPtsUs = new LongSparseArray<>();
+    // Enqueue time per PTS: written by the input thread, read by the renderer thread. Lock-free
+    // so neither thread ever waits for the other.
+    private final java.util.concurrent.ConcurrentHashMap<Long, Long> enqueueNsByPtsUs = new java.util.concurrent.ConcurrentHashMap<>();
+    // Frames dropped before their stats were taken leave entries behind; keep the map small
+    private static final int ENQUEUE_TIMES_MAX = 512;
 
     // When preferLowerDelays=true we use this configurable timeout (µs) for output dequeue.
 // When preferLowerDelays=false we force 0µs (non-blocking, latest-frame rendering).
@@ -84,14 +87,7 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
 
     // Update stats using real decode time: enqueue->dequeue, instead of uptime - PTS
     private void updateDecodeLatencyStats(long presentationTimeUs) {
-        Long enqNs;
-        // Written by the input thread and read by the renderer thread
-        synchronized (enqueueNsByPtsUs) {
-            enqNs = enqueueNsByPtsUs.get(presentationTimeUs);
-            if (enqNs != null) {
-                enqueueNsByPtsUs.delete(presentationTimeUs);
-            }
-        }
+        Long enqNs = enqueueNsByPtsUs.remove(presentationTimeUs);
         if (enqNs != null) {
             long decMs = (System.nanoTime() - enqNs) / 1_000_000L;
             if (decMs >= 0 && decMs < 1000) {
@@ -1440,7 +1436,6 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
                                 }
                                 __last = __idx;
                                 __lastPtsUs = __tmpInfo.presentationTimeUs;
-                                numFramesOut++; // stats only
                                 __idx = videoDecoder.dequeueOutputBuffer(__tmpInfo, 0);
                             }
 
@@ -1449,8 +1444,6 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
                                 if (android.os.Build.VERSION.SDK_INT >= 21) {
                                     releaseWithPolicy(__last, System.nanoTime());} else {
                                     releaseWithPolicy(__last, System.nanoTime());}
-                                // Stats only: count the rendered frame like the other paths do
-                                activeWindowVideoStats.totalFramesRendered++;
 
                                 // Update decode->present EWMA and decode stats if we have a valid PTS
                                 if (__lastPtsUs >= 0) {
@@ -1917,9 +1910,10 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
 
             // Track enqueue time for this PTS
             try {
-                synchronized (enqueueNsByPtsUs) {
-                    enqueueNsByPtsUs.put(timestampUs, System.nanoTime());
+                if (enqueueNsByPtsUs.size() > ENQUEUE_TIMES_MAX) {
+                    enqueueNsByPtsUs.clear();
                 }
+                enqueueNsByPtsUs.put(timestampUs, System.nanoTime());
             } catch (Throwable ignored) {}
 
             // We need a new buffer now

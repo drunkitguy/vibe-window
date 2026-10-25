@@ -172,6 +172,7 @@ Measure on the Thor (1080p120 HEVC, Wi-Fi):
 - Overlay full mode: received fps and rendered fps should be within 0.5 at 120 fps. Compare with the 115 to 119 rendered that Balanced shows in Artemis #246. The new line "Frames dropped by pacing" (C6) should be below 1%.
 - `adb shell dumpsys SurfaceFlinger --latency "<SurfaceView layer name>"` before and after: present intervals should sit at 8.3 ms with no 16.7 ms gaps.
 - Press-to-photon: a 240 fps camera, 20 presses per mode (Balanced vs newest). The newest-mode median should be lower.
+- 1.3.4: the "latest only" path no longer counts its releases (back to 1.2.2), so its rendering frame rate undercounts as in 1.2.2.
 - Caveats for comparing modes (1.3.1): "Average decoding time" is measured from enqueue to dequeue in every mode, but where it is sampled differs (newest: every decoded frame; Balanced and legacy: frames not dropped before release), so it is not a like-for-like latency number across modes. The rendering frame rate counts frames the display showed in the newest mode (Android 6.0 and later, frame-rendered callback) and released frames elsewhere; since 1.3.1 the Balanced and legacy "latest only" path also counts its releases. Compare modes with `dumpsys SurfaceFlinger --latency` and the camera, not with the overlay alone.
 
 Risks:
