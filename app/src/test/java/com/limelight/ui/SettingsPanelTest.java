@@ -108,14 +108,19 @@ public class SettingsPanelTest {
     /** What the settings list looks like, for failure messages. */
     private static String describe(PcView activity) {
         Fragment fragment = activity.getSupportFragmentManager().findFragmentById(R.id.settings_panel_list);
-        StringBuilder sb = new StringBuilder(" focus=").append(activity.getCurrentFocus());
+        StringBuilder sb = new StringBuilder(" focus=").append(activity.getCurrentFocus())
+                .append(" decorFocus=").append(activity.getWindow().getDecorView().findFocus())
+                .append(" panelHasFocus=").append(activity.findViewById(R.id.settings_panel).hasFocus())
+                .append(" gridHasFocus=").append(activity.findViewById(R.id.fragmentView) != null &&
+                        activity.findViewById(R.id.fragmentView).hasFocus());
         if (fragment instanceof StreamSettings.SettingsFragment) {
             androidx.recyclerview.widget.RecyclerView list = ((StreamSettings.SettingsFragment) fragment).getListView();
             sb.append(" list=").append(list.getWidth()).append('x').append(list.getHeight())
                     .append(" children=").append(list.getChildCount())
                     .append(" items=").append(list.getAdapter() == null ? -1 : list.getAdapter().getItemCount())
                     .append(" shown=").append(list.isShown())
-                    .append(" layoutRequested=").append(list.isLayoutRequested());
+                    .append(" layoutRequested=").append(list.isLayoutRequested())
+                    .append(" focusedChild=").append(list.getFocusedChild());
             if (list.getChildCount() > 1) {
                 View row = list.getChildAt(1);
                 sb.append(" row1 focusable=").append(row.isFocusable()).append(" enabled=").append(row.isEnabled())
@@ -158,7 +163,7 @@ public class SettingsPanelTest {
         float density = activity.getResources().getDisplayMetrics().density;
         assertEquals(Math.round(SplitLayout.panelWidthDp(960) * density), panel.getLayoutParams().width);
         // The focus starts on the PC list side, not in the settings
-        assertFalse(inside(activity.getCurrentFocus(), R.id.settings_panel));
+        assertFalse(activity.findViewById(R.id.settings_panel).hasFocus());
     }
 
     @Test
@@ -183,14 +188,14 @@ public class SettingsPanelTest {
         GridView grid = focusedGrid(activity);
 
         press(activity, KeyEvent.KEYCODE_BUTTON_START);
-        assertTrue("Start enters the settings" + describe(activity), inside(activity.getCurrentFocus(), R.id.settings_panel_list));
+        assertTrue("Start enters the settings" + describe(activity), activity.findViewById(R.id.settings_panel_list).hasFocus());
         assertNull("Start does not open the settings screen", Shadows.shadowOf(activity).getNextStartedActivity());
 
         press(activity, KeyEvent.KEYCODE_BUTTON_START);
         assertTrue("Start again returns to the hosts", grid.hasFocus());
 
         press(activity, KeyEvent.KEYCODE_BUTTON_START);
-        assertTrue(inside(activity.getCurrentFocus(), R.id.settings_panel_list));
+        assertTrue(activity.findViewById(R.id.settings_panel_list).hasFocus());
         press(activity, KeyEvent.KEYCODE_BUTTON_B);
         assertTrue("B returns to the hosts", grid.hasFocus());
     }
@@ -211,7 +216,7 @@ public class SettingsPanelTest {
         PcView activity = launch();
         focusedGrid(activity);
         press(activity, KeyEvent.KEYCODE_DPAD_LEFT);
-        assertTrue("Left enters the settings" + describe(activity), inside(activity.getCurrentFocus(), R.id.settings_panel_list));
+        assertTrue("Left enters the settings" + describe(activity), activity.findViewById(R.id.settings_panel_list).hasFocus());
     }
 
     @Test
@@ -219,14 +224,14 @@ public class SettingsPanelTest {
         PcView activity = launch();
         focusedGrid(activity);
         press(activity, KeyEvent.KEYCODE_BUTTON_START);
-        assertTrue(inside(activity.getCurrentFocus(), R.id.settings_panel_list));
+        assertTrue(activity.findViewById(R.id.settings_panel_list).hasFocus());
 
         press(activity, KeyEvent.KEYCODE_BUTTON_Y);
         Intent next = Shadows.shadowOf(activity).getNextStartedActivity();
         assertTrue("Y must not open Profiles from the settings",
                 next == null || !ProfilesActivity.class.getName().equals(next.getComponent().getClassName()));
         press(activity, KeyEvent.KEYCODE_BUTTON_X);
-        assertTrue("The focus stays in the settings", inside(activity.getCurrentFocus(), R.id.settings_panel));
+        assertTrue("The focus stays in the settings", activity.findViewById(R.id.settings_panel).hasFocus());
     }
 
     @Test

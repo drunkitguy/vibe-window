@@ -591,26 +591,12 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
 
     boolean settingsPanelHasFocus() {
         View panel = findViewById(R.id.settings_panel);
-        View focus = getCurrentFocus();
-        while (panel != null && focus != null) {
-            if (focus == panel) {
-                return true;
-            }
-            focus = focus.getParent() instanceof View ? (View) focus.getParent() : null;
-        }
-        return false;
+        return panel != null && panel.hasFocus();
     }
 
     private boolean settingsListHasFocus() {
         View list = findViewById(R.id.settings_panel_list);
-        View focus = getCurrentFocus();
-        while (list != null && focus != null) {
-            if (focus == list) {
-                return true;
-            }
-            focus = focus.getParent() instanceof View ? (View) focus.getParent() : null;
-        }
-        return false;
+        return list != null && list.hasFocus();
     }
 
     private void focusSettingsPanel() {
