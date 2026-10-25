@@ -53,7 +53,7 @@ public class WifiKeepaliveTest {
     public void sendsOnWifiAndNeverAfterStop() {
         setActiveTransport(NetworkCapabilities.TRANSPORT_WIFI);
         // A long first delay keeps the background thread idle; ticks are driven directly
-        keepalive.start(context, 120, 60_000);
+        keepalive.start(context, 8, 60_000);
         assertTrue(keepalive.isRunning());
         assertEquals(8, keepalive.getPeriodMs());
 
@@ -81,7 +81,7 @@ public class WifiKeepaliveTest {
             } catch (InterruptedException ignored) {
             }
         });
-        blocking.start(context, 120, 60_000);
+        blocking.start(context, 8, 60_000);
 
         Thread ticker = new Thread(blocking::tickOnce);
         ticker.start();
@@ -113,15 +113,15 @@ public class WifiKeepaliveTest {
         setActiveTransport(NetworkCapabilities.TRANSPORT_WIFI);
         // The stream ends before the queued "connection started" callback runs
         keepalive.stopAndWait();
-        keepalive.start(context, 120, 0);
+        keepalive.start(context, 8, 0);
         assertFalse(keepalive.isRunning());
         assertFalse(keepalive.tickOnce());
 
         // Also after a normal start and stop
         WifiKeepalive second = new WifiKeepalive(sent::incrementAndGet);
-        second.start(context, 120, 60_000);
+        second.start(context, 8, 60_000);
         second.stopAndWait();
-        second.start(context, 120, 0);
+        second.start(context, 8, 0);
         assertFalse(second.isRunning());
         assertFalse(second.tickOnce());
         assertEquals(0, sent.get());
@@ -130,7 +130,7 @@ public class WifiKeepaliveTest {
     @Test
     public void rechecksTheTransportOnceASecond() {
         setActiveTransport(NetworkCapabilities.TRANSPORT_WIFI);
-        keepalive.start(context, 60, 60_000);
+        keepalive.start(context, 16, 60_000);
         assertEquals(16, keepalive.getPeriodMs());
 
         // Moving to Ethernet is noticed at the next once-a-second check
@@ -155,8 +155,8 @@ public class WifiKeepaliveTest {
     @Test
     public void startingTwiceKeepsOneThreadAndStopIsRepeatable() {
         setActiveTransport(NetworkCapabilities.TRANSPORT_WIFI);
-        keepalive.start(context, 120, 60_000);
-        keepalive.start(context, 30, 60_000);
+        keepalive.start(context, 8, 60_000);
+        keepalive.start(context, 20, 60_000);
         assertEquals(8, keepalive.getPeriodMs());
         keepalive.stopAndWait();
         keepalive.stopAndWait();

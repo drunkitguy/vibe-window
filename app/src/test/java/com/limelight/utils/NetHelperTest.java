@@ -67,4 +67,12 @@ public class NetHelperTest {
         assertEquals(20, NetHelper.keepalivePeriodMs(0));
         assertEquals(20, NetHelper.keepalivePeriodMs(Float.NaN));
     }
+
+    @Test
+    public void keepalivePeriodIs20MsUnlessPerFrameIsOn() {
+        assertEquals(20, NetHelper.keepalivePeriodMs(120, false));
+        assertEquals(20, NetHelper.keepalivePeriodMs(60, false));
+        assertEquals(8, NetHelper.keepalivePeriodMs(120, true));
+        assertEquals(16, NetHelper.keepalivePeriodMs(60, true));
+    }
 }

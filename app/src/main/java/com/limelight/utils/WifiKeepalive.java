@@ -80,16 +80,17 @@ public final class WifiKeepalive {
     }
 
     /**
-     * Starts sending after {@code initialDelayMs}, every {@link NetHelper#keepalivePeriodMs}
-     * for the stream frame rate. Does nothing if it is already running or was stopped.
+     * Starts sending after {@code initialDelayMs}, every {@code periodMs} (see
+     * {@link NetHelper#keepalivePeriodMs(float, boolean)}). Does nothing if it is already
+     * running or was stopped.
      */
-    public synchronized void start(Context context, float fps, long initialDelayMs) {
+    public synchronized void start(Context context, int periodMs, long initialDelayMs) {
         if (thread != null || closed) {
             return;
         }
         appContext = context.getApplicationContext();
         synchronized (tickLock) {
-            periodMs = NetHelper.keepalivePeriodMs(fps);
+            this.periodMs = Math.max(1, periodMs);
             lastWifiCheckMs = SystemClock.uptimeMillis();
             onWifi = NetHelper.isActiveNetworkWifi(appContext);
             active = true;

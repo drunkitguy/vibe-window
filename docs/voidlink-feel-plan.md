@@ -43,6 +43,7 @@ A real test of client 1.3.3 with host 1.3.1 stuttered badly (HEVC and AV1, docke
 - "Use vendor decoder low-latency keys" and "Keep Wi-Fi awake while streaming" default to off.
 - The 1.3.0 migrations no longer run. A one-time migration (`restored_122_defaults_v134`, base preferences only) moves values that came from the 1.3.x defaults back: see `PreferenceConfiguration.restoreStreamingDefaultsOf122`.
 - 1.3.5: saved profiles get the same restore once (`restored_122_profiles_v135`, `PreferenceConfiguration.restoreProfilesOf122`), because a profile saves a full copy of the base preferences: "newest", "latency", "smoothness" and "cap-fps" become "balanced", the vendor keys entry is removed and a stored keepalive is turned off.
+- 1.3.5: with "Keep Wi-Fi awake while streaming" on, the packet goes out every 20 ms as in 1.2.2. The per-frame period (8 ms at 120 FPS) is a separate opt-in, "Keep Wi-Fi awake every frame (experimental)" (`checkbox_keepalive_per_frame`, off by default).
 - On the default path the renderer again calls `Surface.setFrameRate` after configure, as in 1.2.2 (C5 is reverted), and the stats changes that touched the render thread are reverted or made lock-free.
 
 The sections below describe the 1.3.0 to 1.3.3 work, which is now opt-in.

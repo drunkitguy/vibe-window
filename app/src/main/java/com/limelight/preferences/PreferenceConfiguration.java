@@ -112,6 +112,9 @@ public class PreferenceConfiguration {
 
     private static final String ENABLE_RUMBLE_PREF_STRING = "checkbox_enable_rumble";
     static final String PREVENT_PACKET_LOSS_PREF_STRING = "checkbox_prevent_packet_loss";
+    static final String KEEPALIVE_PER_FRAME_PREF_STRING = "checkbox_keepalive_per_frame";
+    // Opt-in: send the keepalive once per frame instead of every 20 ms (1.2.2)
+    private static final boolean DEFAULT_KEEPALIVE_PER_FRAME = false;
     // Set by the 1.3.0 to 1.3.3 keepalive migration (to on); read to tell 1.3.x installs apart
     static final String MIGRATED_PREVENT_PACKET_LOSS_PREF_STRING = "migrated_prevent_packet_loss_v130";
 
@@ -422,6 +425,7 @@ public class PreferenceConfiguration {
     public boolean forceMotionSensorsFallbackToDevice;
     public boolean enableRumble;
     public boolean preventPacketLoss;
+    public boolean keepalivePerFrame;
 
     public boolean rememberZoomPan;
     public float zoomScale;
@@ -1307,6 +1311,7 @@ private static int getFramePacingValue(Context context) {
         config.forceMotionSensorsFallbackToDevice = prefs.getBoolean(FORCE_MOTION_SENSORS_FALLBACK_PREF_STRING, DEFAULT_FORCE_MOTION_SENSORS_FALLBACK);
         config.enableRumble = prefs.getBoolean(ENABLE_RUMBLE_PREF_STRING, DEFAULT_ENABLE_RUMBLE);
         config.preventPacketLoss = prefs.getBoolean(PREVENT_PACKET_LOSS_PREF_STRING, DEFAULT_PREVENT_PACKET_LOSS);
+        config.keepalivePerFrame = prefs.getBoolean(KEEPALIVE_PER_FRAME_PREF_STRING, DEFAULT_KEEPALIVE_PER_FRAME);
 
         // Read custom values
         config.customResolution = prefs.getString(CUSTOM_RESOLUTION_PREF_STRING, null);

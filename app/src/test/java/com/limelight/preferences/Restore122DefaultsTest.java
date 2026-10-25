@@ -68,12 +68,15 @@ public class Restore122DefaultsTest {
         assertEquals("balanced", prefs.getString(PACING, null));
         assertFalse(prefs.getBoolean(VENDOR, true));
         assertFalse(prefs.getBoolean(KEEPALIVE, true));
+        assertFalse(prefs.getBoolean("checkbox_keepalive_per_frame", true));
 
         assertFalse(PreferenceConfiguration.restoreStreamingDefaultsOf122(context));
         PreferenceConfiguration config = PreferenceConfiguration.readPreferences(context);
         assertEquals(PreferenceConfiguration.FRAME_PACING_BALANCED, config.framePacing);
         assertFalse(config.vendorDecoderKeys);
         assertFalse(config.preventPacketLoss);
+        // The keepalive, when turned on, sends every 20 ms as in 1.2.2 unless per-frame is on
+        assertFalse(config.keepalivePerFrame);
     }
 
     @Test

@@ -1012,6 +1012,13 @@
             android:summary="@string/summary_prevent_packet_loss"
             android:title="@string/title_prevent_packet_loss"
             app:iconSpaceReserved="false" />
+        <CheckBoxPreference
+            android:defaultValue="false"
+            android:dependency="checkbox_prevent_packet_loss"
+            android:key="checkbox_keepalive_per_frame"
+            android:summary="@string/summary_keepalive_per_frame"
+            android:title="@string/title_keepalive_per_frame"
+            app:iconSpaceReserved="false" />
     </PreferenceCategory>
 
     <PreferenceCategory

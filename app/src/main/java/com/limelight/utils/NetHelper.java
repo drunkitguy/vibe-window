@@ -12,6 +12,17 @@ public class NetHelper {
     static final int KEEPALIVE_MIN_PERIOD_MS = 8;
     static final int KEEPALIVE_MAX_PERIOD_MS = 20;
 
+    // The keepalive period of 1.2.2, used unless the per-frame period is turned on
+    public static final int KEEPALIVE_LEGACY_PERIOD_MS = 20;
+
+    /**
+     * The Wi-Fi keepalive period: 20 ms as in 1.2.2, or with {@code perFrame} one frame time
+     * (see {@link #keepalivePeriodMs(float)}).
+     */
+    public static int keepalivePeriodMs(float fps, boolean perFrame) {
+        return perFrame ? keepalivePeriodMs(fps) : KEEPALIVE_LEGACY_PERIOD_MS;
+    }
+
     /**
      * The Wi-Fi keepalive period for a stream frame rate: one frame time rounded down,
      * between 8 and 20 ms. 120 FPS gives 8 ms, 60 FPS gives 16 ms, 30 FPS gives 20 ms.

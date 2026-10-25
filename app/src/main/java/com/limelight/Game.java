@@ -3706,7 +3706,7 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
                 hideSystemUi(1000);
 
                 if (prefConfig.preventPacketLoss && NetHelper.isActiveNetworkWifi(Game.this)) {
-                    backgroundPing.start(Game.this, prefConfig.fps, 1000);
+                    backgroundPing.start(Game.this, NetHelper.keepalivePeriodMs(prefConfig.fps, prefConfig.keepalivePerFrame), 1000);
                 }
             }
         });
