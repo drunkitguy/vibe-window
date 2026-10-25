@@ -11,7 +11,14 @@ import android.view.KeyEvent;
 import android.view.View;
 import android.widget.GridView;
 
+import android.content.res.Configuration;
+import android.view.ViewGroup;
+
 import androidx.fragment.app.Fragment;
+import androidx.preference.Preference;
+import androidx.preference.PreferenceGroup;
+import androidx.preference.PreferenceManager;
+import androidx.recyclerview.widget.RecyclerView;
 import androidx.test.core.app.ApplicationProvider;
 
 import com.limelight.PcView;
@@ -42,6 +49,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 
@@ -268,5 +276,113 @@ public class SettingsPanelTest {
         Intent next = Shadows.shadowOf(activity).getNextStartedActivity();
         assertNotNull(next);
         assertEquals(StreamSettings.class.getName(), next.getComponent().getClassName());
+    }
+
+    private static StreamSettings.SettingsFragment panelFragment(PcView activity) {
+        return (StreamSettings.SettingsFragment)
+                activity.getSupportFragmentManager().findFragmentById(R.id.settings_panel_list);
+    }
+
+    private static View bindRow(StreamSettings.SettingsFragment fragment, String key) {
+        RecyclerView list = fragment.getListView();
+        Preference preference = fragment.findPreference(key);
+        int position = ((PreferenceGroup.PreferencePositionCallback) list.getAdapter())
+                .getPreferenceAdapterPosition(preference);
+        assertTrue(key + " should be in the list", position >= 0);
+        @SuppressWarnings("unchecked")
+        RecyclerView.Adapter<RecyclerView.ViewHolder> adapter =
+                (RecyclerView.Adapter<RecyclerView.ViewHolder>) list.getAdapter();
+        RecyclerView.ViewHolder holder = adapter.createViewHolder(list, adapter.getItemViewType(position));
+        adapter.bindViewHolder(holder, position);
+        return holder.itemView;
+    }
+
+    @Test
+    public void thePanelShowsSettingsChangedWhileAwayAndATapWrites() {
+        Context ctx = ApplicationProvider.getApplicationContext();
+        ActivityController<PcView> controller = Robolectric.buildActivity(PcView.class).setup();
+        idle();
+        assertEquals("0", ((androidx.preference.ListPreference) panelFragment(controller.get())
+                .findPreference("mouse_mode_list")).getValue());
+
+        // A stream changes the touchscreen mode in the stored settings
+        controller.pause().stop();
+        PreferenceManager.getDefaultSharedPreferences(ctx).edit().putString("mouse_mode_list", "2").commit();
+        controller.restart().start().resume();
+        idle();
+
+        StreamSettings.SettingsFragment fragment = panelFragment(controller.get());
+        androidx.preference.ListPreference mouse = fragment.findPreference("mouse_mode_list");
+        assertEquals("2", mouse.getValue());
+
+        // Touch is the first segment
+        View row = bindRow(fragment, "mouse_mode_list");
+        ((ViewGroup) row.findViewById(R.id.vw_pref_segments)).getChildAt(0).performClick();
+        idle();
+        assertEquals("0", PreferenceManager.getDefaultSharedPreferences(ctx).getString("mouse_mode_list", null));
+    }
+
+    @Test
+    public void backInThePanelReturnsToTheHostsOrDropsAHighlight() throws Exception {
+        PcView activity = launch();
+        GridView grid = focusedGrid(activity);
+        press(activity, KeyEvent.KEYCODE_BUTTON_START);
+        assertTrue(activity.findViewById(R.id.settings_panel_list).hasFocus());
+
+        activity.getOnBackPressedDispatcher().onBackPressed();
+        idle();
+        assertTrue("Back returns to the hosts", grid.hasFocus());
+        assertFalse(activity.isFinishing());
+
+        press(activity, KeyEvent.KEYCODE_BUTTON_START);
+        assertTrue(activity.findViewById(R.id.settings_panel_list).hasFocus());
+        // Right on the resolution row highlights a segment
+        activity.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT));
+        activity.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DPAD_RIGHT));
+        activity.getOnBackPressedDispatcher().onBackPressed();
+        idle();
+        assertTrue("The first Back only drops the highlight", activity.findViewById(R.id.settings_panel_list).hasFocus());
+        assertFalse(panelFragment(activity).dropPendingChoice());
+        assertFalse(activity.isFinishing());
+    }
+
+    @Test
+    public void aConfigurationChangeKeepsThePanelAndItsFocus() throws Exception {
+        ActivityController<PcView> controller = Robolectric.buildActivity(PcView.class).setup();
+        idle();
+        PcView activity = controller.get();
+        focusedGrid(activity);
+        press(activity, KeyEvent.KEYCODE_BUTTON_START);
+        assertTrue(activity.findViewById(R.id.settings_panel_list).hasFocus());
+        Fragment before = panelFragment(activity);
+
+        Configuration config = new Configuration(activity.getResources().getConfiguration());
+        config.fontScale = 1.15f;
+        controller.configurationChange(config);
+        idle();
+
+        assertSame("The same panel fragment is kept", before, panelFragment(activity));
+        assertNotNull(before.getView());
+        assertTrue("The focus returns to the panel" + describe(activity),
+                activity.findViewById(R.id.settings_panel_list).hasFocus());
+    }
+
+    @Test
+    public void aListDialogRestoredAfterProcessDeathIsDropped() {
+        ActivityController<PcView> controller = Robolectric.buildActivity(PcView.class).setup();
+        idle();
+        panelFragment(controller.get()).findPreference("list_resolution").performClick();
+        idle();
+        assertNotNull(controller.get().getSupportFragmentManager()
+                .findFragmentByTag("androidx.preference.PreferenceFragment.DIALOG"));
+        Bundle saved = new Bundle();
+        controller.saveInstanceState(saved);
+        controller.pause().stop().destroy();
+
+        ActivityController<PcView> restored = Robolectric.buildActivity(PcView.class).setup(saved);
+        idle();
+        assertNull(restored.get().getSupportFragmentManager()
+                .findFragmentByTag("androidx.preference.PreferenceFragment.DIALOG"));
+        assertTrue(panelFragment(restored.get()) instanceof StreamSettings.SettingsFragment);
     }
 }

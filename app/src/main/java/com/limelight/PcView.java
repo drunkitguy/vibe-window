@@ -18,6 +18,7 @@ import com.limelight.nvstream.http.PairingManager;
 import com.limelight.nvstream.http.PairingManager.PairState;
 import com.limelight.nvstream.wol.WakeOnLanSender;
 import com.limelight.preferences.AddComputerManually;
+import com.limelight.preferences.AutoResolutionAndroid;
 import com.limelight.preferences.GlPreferences;
 import com.limelight.preferences.PreferenceConfiguration;
 import com.limelight.preferences.SettingsHost;
@@ -75,6 +76,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 import android.widget.AdapterView.AdapterContextMenuInfo;
 
+import androidx.activity.OnBackPressedCallback;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.fragment.app.Fragment;
 import androidx.preference.PreferenceManager;
@@ -101,9 +103,26 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
     private static final String SETTINGS_PANEL_TAG = "vw_settings_panel";
     private static final long SETTINGS_PANEL_ANIMATION_MS = 180;
     private boolean splitMode;
+    private boolean settingsPanelRestoreFocus;
     private ValueAnimator settingsPanelAnimator;
     private int settingsPanelReturnPosition = -1;
     private String settingsPanelLanguage;
+    // Display the panel's entries were built for (native resolution and rate entries)
+    private int settingsPanelDisplayPixels = -1;
+    private int settingsPanelDisplayId = android.view.Display.INVALID_DISPLAY;
+    // Set when another screen (a stream) may have changed settings behind the panel
+    private boolean settingsPanelStale;
+    // Android 13+ sends Back as a callback, not a key: the panel takes it while it has the focus
+    private final OnBackPressedCallback settingsPanelBack = new OnBackPressedCallback(false) {
+        @Override
+        public void handleOnBackPressed() {
+            StreamSettings.SettingsFragment fragment = settingsPanelFragment();
+            if (fragment != null && fragment.dropPendingChoice()) {
+                return;
+            }
+            focusHosts();
+        }
+    };
     private PcGridAdapter pcGridAdapter;
     private ShortcutHelper shortcutHelper;
     private ComputerManagerService.ComputerManagerBinder managerBinder;
@@ -170,6 +189,15 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
     private final static int PAIR_ID_OTP = 21;
 
     private void initializeViews() {
+        // The panel fragment survives a layout change; remember where its focus was
+        boolean panelHadFocus = settingsPanelHasFocus();
+        if (panelHadFocus) {
+            StreamSettings.SettingsFragment panelFragment = settingsPanelFragment();
+            if (panelFragment != null) {
+                settingsPanelReturnPosition = panelFragment.focusedRowPosition();
+            }
+        }
+        settingsPanelRestoreFocus = panelHadFocus;
         Configuration config = getResources().getConfiguration();
         splitMode = SplitLayout.useSplit(config.orientation, config.screenWidthDp);
         setContentView(splitMode ? R.layout.activity_pc_view_split : R.layout.activity_pc_view);
@@ -402,6 +430,8 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
 
         if (splitMode && completeOnCreateCalled) {
             Boolean handled = dispatchSplitKeyEvent(event);
+            // Keys move the focus: keep the Back callback in step with it
+            updateSettingsPanelBack();
             if (handled != null) {
                 return handled;
             }
@@ -476,7 +506,10 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
         return fragment instanceof StreamSettings.SettingsFragment ? (StreamSettings.SettingsFragment) fragment : null;
     }
 
-    /** Adds the settings panel in split mode (fresh after every layout change), removes it otherwise. */
+    /**
+     * Adds the settings panel in split mode, removes it otherwise. After a layout change the
+     * same fragment moves into the new layout; it is rebuilt only for another display.
+     */
     private void setupSettingsPanel() {
         Fragment existing = getSupportFragmentManager().findFragmentByTag(SETTINGS_PANEL_TAG);
         View panel = findViewById(R.id.settings_panel);
@@ -518,10 +551,68 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
             });
         }
 
+        if (existing instanceof StreamSettings.SettingsFragment && !settingsPanelDisplayChanged()) {
+            // Same display: keep the fragment (its rows and expanded sections) and only move
+            // its view into the new layout
+            getSupportFragmentManager().beginTransaction()
+                    .detach(existing)
+                    .attach(existing)
+                    .commitNowAllowingStateLoss();
+        }
+        else {
+            attachSettingsPanelFragment();
+        }
+        if (settingsPanelRestoreFocus) {
+            settingsPanelRestoreFocus = false;
+            panel.post(new Runnable() {
+                @Override
+                public void run() {
+                    focusSettingsPanel();
+                }
+            });
+        }
+    }
+
+    /** The display's physical pixel count, as the settings screen compares it. */
+    private int currentDisplayPixels() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            android.view.Display.Mode mode = AutoResolutionAndroid.getActivityDisplay(this).getMode();
+            return mode.getPhysicalWidth() * mode.getPhysicalHeight();
+        }
+        return -1;
+    }
+
+    /** Whether the panel's entries were built for another display (as StreamSettings checks). */
+    private boolean settingsPanelDisplayChanged() {
+        return currentDisplayPixels() != settingsPanelDisplayPixels ||
+                AutoResolutionAndroid.getActivityDisplay(this).getDisplayId() != settingsPanelDisplayId;
+    }
+
+    /** Rebuilds the panel from the stored settings, keeping the focus where it was. */
+    private void refreshSettingsPanel() {
+        if (!splitMode || findViewById(R.id.settings_panel_list) == null) {
+            return;
+        }
+        final boolean hadFocus = settingsPanelHasFocus();
+        StreamSettings.SettingsFragment fragment = settingsPanelFragment();
+        if (hadFocus && fragment != null) {
+            settingsPanelReturnPosition = fragment.focusedRowPosition();
+        }
         attachSettingsPanelFragment();
+        if (hadFocus) {
+            View panel = findViewById(R.id.settings_panel);
+            panel.post(new Runnable() {
+                @Override
+                public void run() {
+                    focusSettingsPanel();
+                }
+            });
+        }
     }
 
     private void attachSettingsPanelFragment() {
+        settingsPanelDisplayPixels = currentDisplayPixels();
+        settingsPanelDisplayId = AutoResolutionAndroid.getActivityDisplay(this).getDisplayId();
         PreferenceConfiguration prefs = PreferenceConfiguration.readPreferences(this);
         settingsPanelLanguage = prefs.language;
         StreamSettings.SettingsFragment fragment = new StreamSettings.SettingsFragment(prefs);
@@ -594,6 +685,10 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
         return panel != null && panel.hasFocus();
     }
 
+    private void updateSettingsPanelBack() {
+        settingsPanelBack.setEnabled(splitMode && settingsPanelHasFocus());
+    }
+
     private boolean settingsListHasFocus() {
         View list = findViewById(R.id.settings_panel_list);
         return list != null && list.hasFocus();
@@ -605,7 +700,9 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
             return;
         }
         final int position = settingsPanelReturnPosition >= 0 ? settingsPanelReturnPosition : 0;
-        if (!fragment.focusRow(position)) {
+        boolean focused = fragment.focusRow(position);
+        updateSettingsPanelBack();
+        if (!focused) {
             // The list may not be laid out yet (the panel was hidden): try once more after it is
             fragment.getView().post(new Runnable() {
                 @Override
@@ -614,6 +711,7 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
                         if (!fragment.focusRow(position) && fragment.getListView() != null) {
                             fragment.getListView().requestFocus();
                         }
+                        updateSettingsPanelBack();
                     }
                 }
             });
@@ -621,6 +719,7 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
     }
 
     private void focusHosts() {
+        settingsPanelBack.setEnabled(false);
         StreamSettings.SettingsFragment fragment = settingsPanelFragment();
         if (fragment != null && settingsPanelHasFocus()) {
             settingsPanelReturnPosition = fragment.focusedRowPosition();
@@ -744,6 +843,13 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
     public void onAttachedToWindow() {
         super.onAttachedToWindow();
         StreamSettings.rememberDisplayCutout(this);
+        getWindow().getDecorView().getViewTreeObserver().addOnGlobalFocusChangeListener(
+                new android.view.ViewTreeObserver.OnGlobalFocusChangeListener() {
+                    @Override
+                    public void onGlobalFocusChanged(View oldFocus, View newFocus) {
+                        updateSettingsPanelBack();
+                    }
+                });
     }
 
     @Override
@@ -752,10 +858,17 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
 
         // A settings panel restored after process death has no container until the views
         // exist; drop it, setupSettingsPanel() adds a fresh one
-        Fragment restoredPanel = getSupportFragmentManager().findFragmentByTag(SETTINGS_PANEL_TAG);
-        if (restoredPanel != null) {
-            getSupportFragmentManager().beginTransaction().remove(restoredPanel).commitNow();
+        // The support fragment manager only holds the panel and the dialogs it opened (the
+        // list dialog is tagged androidx.preference.PreferenceFragment.DIALOG); a restored
+        // dialog without its panel would be orphaned, so every restored one goes
+        if (!getSupportFragmentManager().getFragments().isEmpty()) {
+            androidx.fragment.app.FragmentTransaction drop = getSupportFragmentManager().beginTransaction();
+            for (Fragment restored : getSupportFragmentManager().getFragments()) {
+                drop.remove(restored);
+            }
+            drop.commitNow();
         }
+        getOnBackPressedDispatcher().addCallback(this, settingsPanelBack);
 
         // Assume we're in the foreground when created to avoid a race
         // between binding to CMS and onResume()
@@ -929,6 +1042,12 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
 
         inForeground = true;
         startComputerUpdates();
+
+        // A stream (or the settings screen) may have changed settings behind the panel
+        if (settingsPanelStale) {
+            settingsPanelStale = false;
+            refreshSettingsPanel();
+        }
     }
 
     @Override
@@ -945,6 +1064,8 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
     @Override
     protected void onStop() {
         super.onStop();
+
+        settingsPanelStale = true;
 
         Dialog.closeDialogs();
     }
