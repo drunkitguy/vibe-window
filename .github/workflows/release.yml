@@ -176,6 +176,15 @@ jobs:
 
             Defaults: Auto resolution and frame rate (match the display), virtual display on, "Show only the app window" on, frame pacing Balanced.
 
+            **Fixes in 1.4.1**
+
+            - Sliders show and step from their real default again when you never changed them (for example on-screen controls opacity reads 90%, not 0%).
+            - The settings beside the PC list show values changed while you were away (a stream saves the touchscreen mode, for example), and a tap on the current choice is always saved.
+            - Leaving a row with a pending choice, or jumping sections with L1 and R1 while a choice is highlighted, no longer risks a crash.
+            - Rotating or resizing keeps the settings panel as it was, with the focus on the same row; it is rebuilt only for another display.
+            - A list that was open in the settings panel when Android closed the app no longer stays behind on its own.
+            - On Android 13 and later Back in the settings panel first drops a highlighted choice, then returns to the PC list, as B does.
+
             **New in 1.4.0**
 
             - Simpler settings: the settings you change most are at the top of Settings with their controls in place. Tap a choice, or press Left and Right and then A; drag a slider, or press Left and Right; flip a switch. The "i" button (or Y on a controller) explains a setting; turn on "Show descriptions" in the "..." menu (Select on a controller) to see the explanations in the list again. Every other setting is under "All settings", grouped as before; each section opens with its "Show N settings" row. All your settings and profiles are kept as they were.
