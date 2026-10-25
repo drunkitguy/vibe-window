@@ -55,6 +55,8 @@ public class PreferenceConfiguration {
     static final String RESTORED_122_DEFAULTS_PREF_STRING = "restored_122_defaults_v134";
     // One-time return of every saved profile to the 1.2.2 streaming settings (flag in base prefs)
     static final String RESTORED_122_PROFILES_PREF_STRING = "restored_122_profiles_v135";
+    // 1.4.3: device motion for controllers without sensors is on by default, once
+    static final String MOTION_DEFAULT_ON_PREF_STRING = "motion_default_on_v143";
     private static final String BITRATE_PREF_OLD_STRING = "seekbar_bitrate";
     private static final String METERED_BITRATE_PREF_STRING = "seekbar_metered_bitrate_kbps";
     private static final String ENABLE_ULTRA_LOW_LATENCY_PREF_STRING = "checkbox_ultra_low_latency";
@@ -225,7 +227,7 @@ public class PreferenceConfiguration {
     private static final boolean DEFAULT_FULL_RANGE = false;
     private static final boolean DEFAULT_GAMEPAD_TOUCHPAD_AS_MOUSE = false;
     private static final boolean DEFAULT_GAMEPAD_MOTION_SENSORS = true;
-    private static final boolean DEFAULT_GAMEPAD_MOTION_FALLBACK = false;
+    private static final boolean DEFAULT_GAMEPAD_MOTION_FALLBACK = true;
     private static final boolean DEFAULT_FORCE_MOTION_SENSORS_FALLBACK = false;
     private static final boolean DEFAULT_ENABLE_RUMBLE = true;
     // Off by default again since 1.3.4, as in 1.2.2; opt-in
@@ -788,6 +790,63 @@ private static int getFramePacingValue(Context context) {
         migrateToAutoDisplayDefaults(context);
         restoreStreamingDefaultsOf122(context);
         restoreProfilesOf122(context);
+        migrateMotionDefaultOn(context);
+    }
+
+    /**
+     * Turns device motion on, once, for the base settings and every saved profile: the motion
+     * fallback (the device's gyro and accelerometer for a controller without sensors) and the
+     * use of controller sensors. Later choices are kept. On Android 12 the controller sensor
+     * setting is left alone: it stays off there to avoid a platform crash (see readPreferences).
+     * The flag is only set once the profiles were saved.
+     *
+     * @return true if the migration ran
+     */
+    public static boolean migrateMotionDefaultOn(Context context) {
+        return migrateMotionDefaultOn(PreferenceManager.getDefaultSharedPreferences(context),
+                ProfilesManager.getInstance(), context, Build.VERSION.SDK_INT);
+    }
+
+    static boolean migrateMotionDefaultOn(SharedPreferences prefs, ProfilesManager manager, Context context, int sdk) {
+        if (prefs.getBoolean(MOTION_DEFAULT_ON_PREF_STRING, false)) {
+            return false;
+        }
+        boolean setSensors = sdk != Build.VERSION_CODES.S;
+
+        boolean profilesChanged = false;
+        for (com.limelight.profiles.SettingsProfile profile : manager.getProfiles()) {
+            java.util.Map<String, Object> options = profile.getOptions();
+            if (options != null && motionOnInOptions(options, setSensors)) {
+                profilesChanged = true;
+            }
+        }
+        if (profilesChanged && !manager.save(context)) {
+            // Try again at the next start
+            return true;
+        }
+
+        SharedPreferences.Editor editor = prefs.edit()
+                .putBoolean(MOTION_DEFAULT_ON_PREF_STRING, true)
+                .putBoolean(GAMEPAD_MOTION_FALLBACK_PREF_STRING, true);
+        if (setSensors) {
+            editor.putBoolean(GAMEPAD_MOTION_SENSORS_PREF_STRING, true);
+        }
+        editor.apply();
+        return true;
+    }
+
+    /** Turns device motion on in one profile's options. */
+    static boolean motionOnInOptions(java.util.Map<String, Object> options, boolean setSensors) {
+        boolean changed = false;
+        if (!Boolean.TRUE.equals(options.get(GAMEPAD_MOTION_FALLBACK_PREF_STRING))) {
+            options.put(GAMEPAD_MOTION_FALLBACK_PREF_STRING, true);
+            changed = true;
+        }
+        if (setSensors && !Boolean.TRUE.equals(options.get(GAMEPAD_MOTION_SENSORS_PREF_STRING))) {
+            options.put(GAMEPAD_MOTION_SENSORS_PREF_STRING, true);
+            changed = true;
+        }
+        return changed;
     }
 
     /**

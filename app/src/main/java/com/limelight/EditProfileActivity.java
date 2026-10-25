@@ -354,6 +354,10 @@ public class EditProfileActivity extends AppCompatActivity {
                 boolean compositeChanged = com.limelight.preferences.StatsOverlayPreference.KEY.equals(key) &&
                         (changedKeys.contains("checkbox_enable_perf_overlay") ||
                                 changedKeys.contains("checkbox_enable_perf_overlay_lite"));
+                // The motion row stands for the motion switches
+                compositeChanged |= com.limelight.preferences.MotionPreference.KEY.equals(key) &&
+                        (changedKeys.contains("checkbox_gamepad_motion_sensors") ||
+                                changedKeys.contains("checkbox_gamepad_motion_fallback"));
                 if (key != null && (changedKeys.contains(key) || compositeChanged)) {
                     pref.setTitle("*" + pref.getTitle());
                 }

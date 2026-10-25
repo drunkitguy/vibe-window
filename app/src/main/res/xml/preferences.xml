@@ -153,6 +153,16 @@
             android:summary="@string/summary_checkbox_mouse_emulation"
             android:title="@string/title_checkbox_mouse_emulation"
             app:iconSpaceReserved="false" />
+        <com.limelight.preferences.MotionPreference
+            android:entries="@array/motion_names"
+            android:entryValues="@array/motion_values"
+            android:key="quick_motion"
+            android:persistent="false"
+            android:summary="@string/summary_quick_motion"
+            android:title="@string/title_quick_motion"
+            app:iconSpaceReserved="false"
+            app:vwSegmentValues="@array/motion_values"
+            app:vwSegmentLabels="@array/motion_labels" />
     </PreferenceCategory>
 
     <PreferenceCategory
@@ -467,7 +477,7 @@
             android:title="@string/title_checkbox_gamepad_motion_sensors"
             app:iconSpaceReserved="false" />
         <CheckBoxPreference
-            android:defaultValue="false"
+            android:defaultValue="true"
             android:key="checkbox_gamepad_motion_fallback"
             android:summary="@string/summary_checkbox_gamepad_motion_fallback"
             android:title="@string/title_checkbox_gamepad_motion_fallback"

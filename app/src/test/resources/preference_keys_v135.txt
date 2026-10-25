@@ -1,5 +1,6 @@
 # key	family	defaultValue	entryValues	dependency	seekbar(min;max;step;divisor;keyStep)
 # Generated from res/xml/preferences.xml at de0b1ec (1.3.5). Do not edit.
+# 1.4.3: checkbox_gamepad_motion_fallback defaults to true on purpose (motion on by default); nothing else changed.
 analog_scrolling	List	right	@array/analog_scrolling_values	checkbox_mouse_emulation	-
 balance_shift	SeekBar	50	-	-	min=-0;max=100;step=1;divisor=;keyStep=
 category_advanced_settings	Category	-	-	-	-
@@ -56,7 +57,7 @@ checkbox_force_qwerty	CheckBox	true	-	-	-
 checkbox_full_range	CheckBox	false	-	-	-
 checkbox_full_screen	CheckBox	true	-	-	-
 checkbox_gamepad_enable_battery_report	CheckBox	true	-	-	-
-checkbox_gamepad_motion_fallback	CheckBox	false	-	-	-
+checkbox_gamepad_motion_fallback	CheckBox	true	-	-	-
 checkbox_gamepad_motion_sensors	CheckBox	true	-	-	-
 checkbox_gamepad_touchpad_as_mouse	CheckBox	false	-	-	-
 checkbox_hide_clipboard_content	CheckBox	true	-	-	-

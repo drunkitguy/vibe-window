@@ -18,6 +18,7 @@
     <string name="seg_fill">Fill</string>
     <string name="seg_stretch">Stretch</string>
     <string name="seg_off">Off</string>
+    <string name="seg_on">On</string>
     <string name="seg_lite">Lite</string>
     <string name="seg_full">Full</string>
     <string name="seg_touch">Touch</string>
@@ -145,6 +146,19 @@
         <item>@string/seg_2d</item>
         <item>@string/seg_3d</item>
         <item>@string/seg_3d_film</item>
+    </string-array>
+
+    <string-array name="motion_values" translatable="false">
+        <item>off</item>
+        <item>on</item>
+    </string-array>
+    <string-array name="motion_labels">
+        <item>@string/seg_off</item>
+        <item>@string/seg_on</item>
+    </string-array>
+    <string-array name="motion_names">
+        <item>@string/motion_off</item>
+        <item>@string/motion_on</item>
     </string-array>
 
     <string-array name="stats_overlay_values" translatable="false">

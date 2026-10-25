@@ -30,7 +30,8 @@ import static org.junit.Assert.fail;
 /**
  * Every preference key of 1.3.5 (de0b1ec) stays in res/xml/preferences.xml with the same
  * class family, default value, entry values, dependency and seek bar range. Profiles and the
- * one-time migrations depend on them. The golden file was generated from de0b1ec.
+ * one-time migrations depend on them. The golden file was generated from de0b1ec; the only
+ * deliberate change since is the motion fallback default (true from 1.4.3).
  */
 public class PreferenceKeyInventoryTest {
 
@@ -53,6 +54,7 @@ public class PreferenceKeyInventoryTest {
         FAMILIES.put("Preference", "Plain");
         FAMILIES.put("com.limelight.preferences.WebLauncherPreference", "Plain");
         FAMILIES.put("com.limelight.preferences.StatsOverlayPreference", "Composite");
+        FAMILIES.put("com.limelight.preferences.MotionPreference", "Composite");
         FAMILIES.put("PreferenceCategory", "Category");
         FAMILIES.put("com.limelight.preferences.CaptionCategory", "Category");
     }
@@ -60,7 +62,7 @@ public class PreferenceKeyInventoryTest {
     /** The only keys 1.4.0 may add. None of them stores a value. */
     static final Set<String> ALLOWED_NEW_KEYS = new HashSet<>(Arrays.asList(
             "category_quick_stream", "category_quick_controls", "category_quick_audio",
-            "category_quick_app", "category_all_settings", "quick_stats_overlay"));
+            "category_quick_app", "category_all_settings", "quick_stats_overlay", "quick_motion"));
 
     static File preferencesXml() {
         for (String path : new String[] {"src/main/res/xml/preferences.xml", "app/src/main/res/xml/preferences.xml"}) {

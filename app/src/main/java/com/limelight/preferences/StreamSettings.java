@@ -994,6 +994,8 @@ public class StreamSettings extends AppCompatActivity implements SettingsHost {
                     !activity.getPackageManager().hasSystemFeature(PackageManager.FEATURE_SENSOR_GYROSCOPE)) {
                 removePreferenceByKey("checkbox_force_device_motion");
                 removePreferenceByKey("checkbox_gamepad_motion_fallback");
+                // Nothing to send without device sensors
+                removePreferenceByKey(MotionPreference.KEY);
             }
 
             // Hide USB driver options on devices without USB host support

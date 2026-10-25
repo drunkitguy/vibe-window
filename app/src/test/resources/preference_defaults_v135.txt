@@ -1,4 +1,5 @@
 # key	type	value written by PreferenceManager.setDefaultValues on a clean install, 1.3.5 (de0b1ec). Do not edit.
+# 1.4.3: checkbox_gamepad_motion_fallback defaults to true on purpose (motion on by default); nothing else changed.
 analog_scrolling	String	right
 checkbox_absolute_mouse_mode	Boolean	false
 checkbox_auto_invert_video_resolution	Boolean	true
@@ -41,7 +42,7 @@ checkbox_force_qwerty	Boolean	true
 checkbox_full_range	Boolean	false
 checkbox_full_screen	Boolean	true
 checkbox_gamepad_enable_battery_report	Boolean	true
-checkbox_gamepad_motion_fallback	Boolean	false
+checkbox_gamepad_motion_fallback	Boolean	true
 checkbox_gamepad_motion_sensors	Boolean	true
 checkbox_gamepad_touchpad_as_mouse	Boolean	false
 checkbox_hide_clipboard_content	Boolean	true
