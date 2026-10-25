@@ -103,6 +103,10 @@ public class SeekBarPreference extends Preference
         if (inline) {
             setLayoutResource(R.layout.vw_pref_slider);
         }
+
+        // androidx never calls onSetInitialValue for a row without a stored value (the XML
+        // default is not handed over), so start from the XML default as the dialog does
+        currentValue = defaultValue;
     }
 
     /** The text shown for a value: the divisor gives one decimal, a suffix longer than one character gets a space. */
@@ -256,7 +260,7 @@ public class SeekBarPreference extends Preference
     /** Re-reads the stored value (for example after the bitrate was reset) and redraws the row. */
     public void refreshFromStore() {
         if (pendingValue == null && shouldPersist()) {
-            currentValue = getPersistedInt(currentValue);
+            currentValue = getPersistedInt(defaultValue);
         }
         notifyChanged();
     }
@@ -321,7 +325,7 @@ public class SeekBarPreference extends Preference
             return;
         }
         if (pendingValue == null && shouldPersist()) {
-            currentValue = getPersistedInt(currentValue);
+            currentValue = getPersistedInt(defaultValue);
         }
         final View row = holder.itemView;
         final SeekBar slider = row.findViewById(R.id.vw_pref_seekbar);

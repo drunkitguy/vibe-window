@@ -115,6 +115,8 @@ public class InlineSliderTest {
         View row = SettingsTestUtil.shownRow(fragment, "seekbar_bitrate_kbps");
         press(KeyEvent.KEYCODE_DPAD_LEFT);
         row.getOnFocusChangeListener().onFocusChange(row, false);
+        // Settled right after the focus change, without waiting for the key pause
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
         assertEquals(followed - 1000, prefs.getInt("seekbar_bitrate_kbps", -1));
     }
 
@@ -189,8 +191,30 @@ public class InlineSliderTest {
         View row = SettingsTestUtil.shownRow(fragment, "seekbar_bitrate_kbps");
         press(KeyEvent.KEYCODE_DPAD_RIGHT);
         row.getOnFocusChangeListener().onFocusChange(row, false);
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
         Set<String> after = new HashSet<>(prefs.getAll().keySet());
         after.removeAll(before);
         assertTrue("New keys: " + after, after.isEmpty());
+    }
+
+    @Test
+    public void withNothingStoredTheSlidersStartAtTheirXmlDefault() {
+        prefs.edit().clear().commit();
+        StreamSettings.SettingsFragment fragment = launch();
+        TextView value = SettingsTestUtil.bindRow(fragment, "seekbar_osc_opacity").itemView
+                .findViewById(R.id.vw_pref_value);
+        assertEquals("90%", value.getText().toString());
+        assertFalse("Showing a slider stores nothing", prefs.contains("seekbar_osc_opacity"));
+        assertEquals(100, ((SeekBarPreference) fragment.findPreference("seekbar_resolution_scale_factor"))
+                .getDisplayedValue());
+    }
+
+    @Test
+    public void withNothingStoredOneRightPressStepsFromTheXmlDefault() {
+        prefs.edit().clear().commit();
+        launchAndFocus("seekbar_resolution_scale_factor");
+        assertTrue(press(KeyEvent.KEYCODE_DPAD_RIGHT));
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(SeekBarPreference.KEY_COMMIT_DELAY_MS + 50));
+        assertEquals(101, prefs.getInt("seekbar_resolution_scale_factor", -1));
     }
 }
