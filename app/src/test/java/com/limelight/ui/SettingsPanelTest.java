@@ -304,6 +304,7 @@ public class SettingsPanelTest {
         idle();
         assertEquals("0", ((androidx.preference.ListPreference) panelFragment(controller.get())
                 .findPreference("mouse_mode_list")).getValue());
+        Fragment before = panelFragment(controller.get());
 
         // A stream changes the touchscreen mode in the stored settings
         controller.pause().stop();
@@ -312,6 +313,7 @@ public class SettingsPanelTest {
         idle();
 
         StreamSettings.SettingsFragment fragment = panelFragment(controller.get());
+        assertTrue("Changed settings rebuild the panel", fragment != before);
         androidx.preference.ListPreference mouse = fragment.findPreference("mouse_mode_list");
         assertEquals("2", mouse.getValue());
 
@@ -384,5 +386,74 @@ public class SettingsPanelTest {
         assertNull(restored.get().getSupportFragmentManager()
                 .findFragmentByTag("androidx.preference.PreferenceFragment.DIALOG"));
         assertTrue(panelFragment(restored.get()) instanceof StreamSettings.SettingsFragment);
+    }
+
+    /** Opens a collapsed section as tapping its "Show N settings" row does. */
+    private static void expand(StreamSettings.SettingsFragment fragment, String categoryKey) {
+        androidx.preference.PreferenceGroupAdapter adapter =
+                (androidx.preference.PreferenceGroupAdapter) fragment.getListView().getAdapter();
+        Preference category = fragment.findPreference(categoryKey);
+        int position = adapter.getPreferenceAdapterPosition(category);
+        Preference expander = adapter.getItem(position + 1);
+        assertEquals("ExpandButton", expander.getClass().getSimpleName());
+        expander.performClick();
+        idle();
+    }
+
+    @Test
+    public void returningWithoutChangesKeepsThePanelAsItWas() {
+        ActivityController<PcView> controller = Robolectric.buildActivity(PcView.class).setup();
+        idle();
+        StreamSettings.SettingsFragment before = panelFragment(controller.get());
+        expand(before, "category_video_settings");
+        PreferenceGroup video = before.findPreference("category_video_settings");
+        assertEquals(Integer.MAX_VALUE, video.getInitialExpandedChildrenCount());
+
+        controller.pause().stop();
+        controller.restart().start().resume();
+        idle();
+
+        assertSame("No change, no rebuild", before, panelFragment(controller.get()));
+        assertEquals("The opened section stays open", Integer.MAX_VALUE,
+                ((PreferenceGroup) panelFragment(controller.get()).findPreference("category_video_settings"))
+                        .getInitialExpandedChildrenCount());
+    }
+
+    @Test
+    public void aRebuildWaitsForAnOpenListDialog() {
+        Context ctx = ApplicationProvider.getApplicationContext();
+        ActivityController<PcView> controller = Robolectric.buildActivity(PcView.class).setup();
+        idle();
+        StreamSettings.SettingsFragment before = panelFragment(controller.get());
+        before.findPreference("list_resolution").performClick();
+        idle();
+        androidx.preference.ListPreferenceDialogFragmentCompat dialog =
+                (androidx.preference.ListPreferenceDialogFragmentCompat) controller.get().getSupportFragmentManager()
+                        .findFragmentByTag("androidx.preference.PreferenceFragment.DIALOG");
+        assertNotNull(dialog);
+
+        // Home and back while the list is open, with a setting changed meanwhile
+        controller.pause().stop();
+        PreferenceManager.getDefaultSharedPreferences(ctx).edit().putString("mouse_mode_list", "2").commit();
+        controller.restart().start().resume();
+        idle();
+        assertSame("No rebuild while the dialog is open", before, panelFragment(controller.get()));
+
+        // Pick 1440p in the list
+        androidx.preference.ListPreference resolution = before.findPreference("list_resolution");
+        int index = resolution.findIndexOfValue("2560x1440");
+        assertTrue(index >= 0);
+        androidx.appcompat.app.AlertDialog alert = (androidx.appcompat.app.AlertDialog) dialog.getDialog();
+        assertNotNull(alert);
+        alert.getListView().performItemClick(null, index, index);
+        idle();
+
+        assertEquals("2560x1440", PreferenceManager.getDefaultSharedPreferences(ctx).getString("list_resolution", null));
+        assertNull(controller.get().getSupportFragmentManager()
+                .findFragmentByTag("androidx.preference.PreferenceFragment.DIALOG"));
+        StreamSettings.SettingsFragment after = panelFragment(controller.get());
+        assertTrue("The waiting rebuild ran after the dialog closed", after != before);
+        assertEquals("2560x1440", ((androidx.preference.ListPreference) after.findPreference("list_resolution")).getValue());
+        assertEquals("2", ((androidx.preference.ListPreference) after.findPreference("mouse_mode_list")).getValue());
     }
 }

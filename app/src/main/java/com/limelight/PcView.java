@@ -110,8 +110,12 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
     // Display the panel's entries were built for (native resolution and rate entries)
     private int settingsPanelDisplayPixels = -1;
     private int settingsPanelDisplayId = android.view.Display.INVALID_DISPLAY;
-    // Set when another screen (a stream) may have changed settings behind the panel
-    private boolean settingsPanelStale;
+    // Stored settings when the PC list was left; the panel is rebuilt on return only if
+    // they changed meanwhile (a stream saves the touchscreen mode, for example)
+    private java.util.Map<String, ?> settingsPanelSnapshot;
+    // A rebuild that waits for the panel's open list dialog to close
+    private boolean settingsPanelRebuildPending;
+    private static final String PREFERENCE_DIALOG_TAG = "androidx.preference.PreferenceFragment.DIALOG";
     // Android 13+ sends Back as a callback, not a key: the panel takes it while it has the focus
     private final OnBackPressedCallback settingsPanelBack = new OnBackPressedCallback(false) {
         @Override
@@ -551,7 +555,12 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
             });
         }
 
-        if (existing instanceof StreamSettings.SettingsFragment && !settingsPanelDisplayChanged()) {
+        boolean displayChanged = settingsPanelDisplayChanged();
+        if (existing instanceof StreamSettings.SettingsFragment && displayChanged && settingsPanelDialogOpen()) {
+            // Keep the fragment the open dialog belongs to; rebuild for the new display after it closes
+            settingsPanelRebuildPending = true;
+        }
+        if (existing instanceof StreamSettings.SettingsFragment && (!displayChanged || settingsPanelRebuildPending)) {
             // Same display: keep the fragment (its rows and expanded sections) and only move
             // its view into the new layout
             // Two transactions: detach and attach in one are folded into nothing
@@ -581,6 +590,11 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
         return -1;
     }
 
+    /** Whether a list or text dialog of the panel is open (it holds on to the panel fragment). */
+    private boolean settingsPanelDialogOpen() {
+        return getSupportFragmentManager().findFragmentByTag(PREFERENCE_DIALOG_TAG) != null;
+    }
+
     /** Whether the panel's entries were built for another display (as StreamSettings checks). */
     private boolean settingsPanelDisplayChanged() {
         return currentDisplayPixels() != settingsPanelDisplayPixels ||
@@ -592,6 +606,12 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
         if (!splitMode || findViewById(R.id.settings_panel_list) == null) {
             return;
         }
+        if (settingsPanelDialogOpen()) {
+            // The dialog's choice must reach the fragment that opened it: rebuild after it closes
+            settingsPanelRebuildPending = true;
+            return;
+        }
+        settingsPanelRebuildPending = false;
         final boolean hadFocus = settingsPanelHasFocus();
         StreamSettings.SettingsFragment fragment = settingsPanelFragment();
         if (hadFocus && fragment != null) {
@@ -815,6 +835,10 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
     @Override
     public void reloadSettings() {
         if (splitMode && findViewById(R.id.settings_panel_list) != null) {
+            if (settingsPanelDialogOpen()) {
+                settingsPanelRebuildPending = true;
+                return;
+            }
             attachSettingsPanelFragment();
         }
     }
@@ -868,6 +892,24 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
             drop.commitNow();
         }
         getOnBackPressedDispatcher().addCallback(this, settingsPanelBack);
+        // Run a rebuild that waited for the panel's dialog once the dialog is gone
+        getSupportFragmentManager().registerFragmentLifecycleCallbacks(
+                new androidx.fragment.app.FragmentManager.FragmentLifecycleCallbacks() {
+                    @Override
+                    public void onFragmentDestroyed(@androidx.annotation.NonNull androidx.fragment.app.FragmentManager fm,
+                                                    @androidx.annotation.NonNull Fragment fragment) {
+                        if (PREFERENCE_DIALOG_TAG.equals(fragment.getTag()) && settingsPanelRebuildPending) {
+                            getWindow().getDecorView().post(new Runnable() {
+                                @Override
+                                public void run() {
+                                    if (settingsPanelRebuildPending && !isFinishing() && !isDestroyed()) {
+                                        refreshSettingsPanel();
+                                    }
+                                }
+                            });
+                        }
+                    }
+                }, false);
 
         // Assume we're in the foreground when created to avoid a race
         // between binding to CMS and onResume()
@@ -1042,10 +1084,13 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
         inForeground = true;
         startComputerUpdates();
 
-        // A stream (or the settings screen) may have changed settings behind the panel
-        if (settingsPanelStale) {
-            settingsPanelStale = false;
-            refreshSettingsPanel();
+        // A stream may have changed settings behind the panel: rebuild only if they differ
+        if (settingsPanelSnapshot != null) {
+            java.util.Map<String, ?> before = settingsPanelSnapshot;
+            settingsPanelSnapshot = null;
+            if (!before.equals(PreferenceManager.getDefaultSharedPreferences(this).getAll())) {
+                refreshSettingsPanel();
+            }
         }
     }
 
@@ -1064,7 +1109,9 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
     protected void onStop() {
         super.onStop();
 
-        settingsPanelStale = true;
+        if (splitMode) {
+            settingsPanelSnapshot = new java.util.HashMap<>(PreferenceManager.getDefaultSharedPreferences(this).getAll());
+        }
 
         Dialog.closeDialogs();
     }
