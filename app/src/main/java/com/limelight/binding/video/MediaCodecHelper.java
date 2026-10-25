@@ -535,7 +535,10 @@ public class MediaCodecHelper {
     static final int QUALCOMM_SAFE_TRY = 4;
 
     public static boolean setDecoderLowLatencyOptions(MediaFormat videoFormat, MediaCodecInfo decoderInfo, boolean ultraLowLatency, boolean vendorKeysEnabled, int tryNumber) {
-        boolean featureLowLatency = decoderSupportsAndroidRLowLatency(decoderInfo, videoFormat.getString(MediaFormat.KEY_MIME));
+        // Query the feature only where 1.2.2 did (try 0 without Ultra low latency), unless the
+        // opt-in vendor keys need it for every try
+        boolean featureLowLatency = (vendorKeysEnabled || (tryNumber < 1 && !ultraLowLatency)) &&
+                decoderSupportsAndroidRLowLatency(decoderInfo, videoFormat.getString(MediaFormat.KEY_MIME));
         return applyLowLatencyOptions(videoFormat, decoderInfo.getName(), featureLowLatency, ultraLowLatency, vendorKeysEnabled, tryNumber);
     }
 

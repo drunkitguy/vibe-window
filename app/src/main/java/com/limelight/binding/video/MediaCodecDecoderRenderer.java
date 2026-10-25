@@ -635,6 +635,9 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
 
         videoDecoder.configure(format, renderTarget, null, 0);
 
+        // As in 1.2.2: hint the stream frame rate on the surface after configure
+        try { applySurfaceFrameRate(renderTarget, targetFps); } catch (Throwable ignored) {}
+
         // The newest-frame mode counts the frames the display actually showed (Android 6.0 and
         // later), so a buffer the display skipped for a newer one does not count as rendered.
         // Only for the 2D SurfaceView target: the Stereo 3D renderer draws from a SurfaceTexture.
@@ -867,11 +870,13 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
 
     @Override
     public int setup(int format, int width, int height, int redrawRate) {
-        // The newest-frame pacer follows the primary display's vsync
-        int pacing = PacingModeResolver.forDisplay(prefs.framePacing, isOnPrimaryDisplay());
-        if (pacing != prefs.framePacing) {
-            LimeLog.info("Not on the primary display, frame pacing mode: " + PacingModeResolver.modeName(pacing));
-            prefs.framePacing = pacing;
+        // The newest-frame pacer follows the primary display's vsync (other modes skip the check)
+        if (prefs.framePacing == PreferenceConfiguration.FRAME_PACING_NEWEST) {
+            int pacing = PacingModeResolver.forDisplay(prefs.framePacing, isOnPrimaryDisplay());
+            if (pacing != prefs.framePacing) {
+                LimeLog.info("Not on the primary display, frame pacing mode: " + PacingModeResolver.modeName(pacing));
+                prefs.framePacing = pacing;
+            }
         }
 
         this.targetFps = (redrawRate > 0 ? redrawRate : 60);
@@ -2673,6 +2678,20 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
 
 
 
+
+    private void applySurfaceFrameRate(android.view.Surface surface, int targetFps) {
+        if (surface == null) return;
+        try {
+            // API 30+ supports Surface.setFrameRate; for older, attempt View-based call elsewhere.
+            if (android.os.Build.VERSION.SDK_INT >= 30) {
+                surface.setFrameRate((float) targetFps,
+                        android.view.Surface.FRAME_RATE_COMPATIBILITY_DEFAULT);
+                LimeLog.info("Applied Surface frame rate: " + targetFps + " Hz");
+            }
+        } catch (Throwable t) {
+            // best-effort
+        }
+    }
 
     private boolean isMTKDecoderName(String name) {
         if (name == null) return false;
