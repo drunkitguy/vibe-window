@@ -145,6 +145,8 @@ android {
     testOptions {
         unitTests.includeAndroidResources = true
         unitTests.all {
+            // Robolectric settings and PC list tests launch many activities in one JVM
+            maxHeapSize = "2g"
             // Show why a test failed directly in the CI log
             testLogging {
                 events "failed"
