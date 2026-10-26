@@ -108,4 +108,18 @@ public class ImportCustomKeysTest {
         String toast = ShadowToast.getTextOfLatestToast();
         assertTrue(toast, toast.startsWith(fragment.getString(R.string.pref_import_refused, "").trim()));
     }
+
+    @Test
+    public void aKeyboardLayoutExportIsRefusedAndTheKeysStay() throws Exception {
+        StreamSettings.SettingsFragment fragment = SettingsTestUtil.launch();
+        importFile(fragment, "{\"data\":[{\"name\":\"Esc\",\"keys\":[\"VK_ESCAPE\"]}]}");
+        // Shaped like Settings, Export keyboard layout: one string per button, no data list
+        importFile(fragment, "{\"VK_ESCAPE\":\"{\\\"x\\\":10,\\\"y\\\":20}\",\"layout\":\"OSC_Keyboard\"}");
+        assertTrue("The previous keys stay", stored().contains("Esc"));
+        String toast = ShadowToast.getTextOfLatestToast();
+        assertTrue(toast, toast.startsWith(fragment.getString(R.string.pref_import_refused, "").trim()));
+
+        importFile(fragment, "{}");
+        assertTrue("{} does not clear the keys", stored().contains("Esc"));
+    }
 }

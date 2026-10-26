@@ -1,6 +1,9 @@
 package com.limelight.utils;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 
 import java.lang.reflect.Field;
 import java.util.ArrayList;
@@ -270,8 +273,28 @@ public class KeyConfigHelper {
         return new Entries(entries, rejected);
     }
 
+    /**
+     * Whether the text is a JSON object with a "data" key holding an array. Anything else (for
+     * example {} or an on-screen keyboard layout export) is not a custom key file.
+     */
+    static boolean hasDataArray(String json) {
+        try {
+            JsonElement root = JsonParser.parseString(json);
+            if (!root.isJsonObject()) {
+                return false;
+            }
+            JsonObject object = root.getAsJsonObject();
+            return object.has("data") && object.get("data").isJsonArray();
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
     /** Whether a valid file has no entries, so importing it clears the custom keys. */
     public static boolean clearsCustomKeys(String json) {
+        if (json == null || !hasDataArray(json)) {
+            return false;
+        }
         try {
             ShortcutFile file = parseShortcutFile(json);
             return file != null && file.data != null && file.data.isEmpty();
@@ -285,6 +308,9 @@ public class KeyConfigHelper {
      * why not. An entry with steps must also have keys: the on-screen keyboard only reads keys.
      */
     public static String validateForImport(String json) {
+        if (json == null || !hasDataArray(json)) {
+            return "no \"data\" list";
+        }
         ShortcutFile file;
         try {
             file = parseShortcutFile(json);
