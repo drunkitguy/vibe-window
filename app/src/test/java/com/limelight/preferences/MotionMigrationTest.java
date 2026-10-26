@@ -151,7 +151,7 @@ public class MotionMigrationTest {
         PreferenceConfiguration.runOneTimeMigrations(context);
         assertFalse(prefs.getBoolean(FALLBACK, true));
         assertFalse(PreferenceConfiguration.readPreferences(context).gamepadMotionSensorsFallbackToDevice);
-        assertEquals("Profiles are left alone", true, profile.getOptions().get(FALLBACK));
+        assertEquals("Profiles get the fallback off too", false, profile.getOptions().get(FALLBACK));
     }
 
     @Test
@@ -171,5 +171,34 @@ public class MotionMigrationTest {
         Shadows.shadowOf(pm).setSystemFeature(PackageManager.FEATURE_SENSOR_ACCELEROMETER, true);
         PreferenceConfiguration.runOneTimeMigrations(context);
         assertTrue(prefs.getBoolean(FALLBACK, false));
+    }
+
+    @Test
+    public void aProfileWithTheFallbackOnIsTurnedOffOnceOnADeviceWithoutSensors() throws Exception {
+        setDeviceSensors(false);
+        // 1.4.3 already ran: base and profile carry the fallback on
+        prefs.edit().putBoolean(FLAG, true).putBoolean(FALLBACK, true).commit();
+        Map<String, Object> options = new HashMap<>();
+        options.put(FALLBACK, true);
+        options.put(SENSORS, true);
+        SettingsProfile profile = new SettingsProfile(UUID.randomUUID(), "Docked", 0, 0, options);
+        ProfilesManager.getInstance().add(profile);
+
+        PreferenceConfiguration.runOneTimeMigrations(context);
+        assertEquals(false, profile.getOptions().get(FALLBACK));
+        assertEquals("Controller sensors are left as they are", true, profile.getOptions().get(SENSORS));
+        assertTrue(prefs.getBoolean("motion_sensorless_profiles_v144", false));
+        assertFalse(prefs.getBoolean(FALLBACK, true));
+
+        // Saved to the profiles file
+        resetProfiles();
+        assertTrue(ProfilesManager.getInstance().load(context));
+        SettingsProfile reloaded = ProfilesManager.getInstance().getProfiles().get(0);
+        assertEquals(false, reloaded.getOptions().get(FALLBACK));
+
+        // Runs once: a later value in a profile is not touched again
+        reloaded.getOptions().put(FALLBACK, true);
+        PreferenceConfiguration.runOneTimeMigrations(context);
+        assertEquals(true, reloaded.getOptions().get(FALLBACK));
     }
 }

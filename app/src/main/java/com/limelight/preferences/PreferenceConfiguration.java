@@ -57,6 +57,8 @@ public class PreferenceConfiguration {
     static final String RESTORED_122_PROFILES_PREF_STRING = "restored_122_profiles_v135";
     // 1.4.3: device motion for controllers without sensors is on by default, once
     static final String MOTION_DEFAULT_ON_PREF_STRING = "motion_default_on_v143";
+    // 1.4.5: profiles on devices without motion sensors get the fallback off, once
+    static final String MOTION_SENSORLESS_PROFILES_PREF_STRING = "motion_sensorless_profiles_v144";
     private static final String BITRATE_PREF_OLD_STRING = "seekbar_bitrate";
     private static final String METERED_BITRATE_PREF_STRING = "seekbar_metered_bitrate_kbps";
     private static final String ENABLE_ULTRA_LOW_LATENCY_PREF_STRING = "checkbox_ultra_low_latency";
@@ -802,7 +804,7 @@ private static int getFramePacingValue(Context context) {
      * <p>
      * A device without a gyroscope and accelerometer (the same check as the settings screen,
      * which then hides the switch) cannot emulate motion: there the base fallback is kept off
-     * at every start, also after 1.4.3 turned it on, and profiles are left alone.
+     * at every start, also after 1.4.3 turned it on, and saved profiles get it off once.
      *
      * @return true if the migration ran
      */
@@ -821,6 +823,21 @@ private static int getFramePacingValue(Context context) {
     static boolean migrateMotionDefaultOn(SharedPreferences prefs, ProfilesManager manager, Context context,
                                           int sdk, boolean hasSensors) {
         if (!hasSensors) {
+            // Profiles saved by 1.4.3 (or copied from its base settings) may carry the fallback
+            // on; there is no switch for it on this device, so turn it off there too, once
+            if (!prefs.getBoolean(MOTION_SENSORLESS_PROFILES_PREF_STRING, false)) {
+                boolean profilesChanged = false;
+                for (com.limelight.profiles.SettingsProfile profile : manager.getProfiles()) {
+                    java.util.Map<String, Object> options = profile.getOptions();
+                    if (options != null && Boolean.TRUE.equals(options.get(GAMEPAD_MOTION_FALLBACK_PREF_STRING))) {
+                        options.put(GAMEPAD_MOTION_FALLBACK_PREF_STRING, false);
+                        profilesChanged = true;
+                    }
+                }
+                if (!profilesChanged || manager.save(context)) {
+                    prefs.edit().putBoolean(MOTION_SENSORLESS_PROFILES_PREF_STRING, true).apply();
+                }
+            }
             // Nothing to emulate with, and no switch to turn it off: keep the fallback off
             if (prefs.getBoolean(GAMEPAD_MOTION_FALLBACK_PREF_STRING, DEFAULT_GAMEPAD_MOTION_FALLBACK) ||
                     !prefs.getBoolean(MOTION_DEFAULT_ON_PREF_STRING, false)) {
