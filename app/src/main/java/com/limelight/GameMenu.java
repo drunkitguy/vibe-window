@@ -19,8 +19,8 @@ import com.limelight.binding.input.KeyboardTranslator;
 import com.limelight.preferences.PreferenceConfiguration;
 import com.limelight.utils.KeyConfigHelper;
 import com.limelight.utils.KeyMapper;
+import com.limelight.utils.KeySequencePlayer;
 
-import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -59,15 +59,24 @@ public class GameMenu implements Game.GameMenuCallbacks {
     private final Context dialogScreenContext;
 
     private AlertDialog currentDialog;
+    // Custom key entries with steps play through this, one combination at a time
+    private final KeySequencePlayer keySequencePlayer;
 
     public GameMenu(Game game, Context dialogScreenContext) {
         this.game = game;
         this.dialogScreenContext = dialogScreenContext;
+        this.keySequencePlayer = createKeySequencePlayer(game);
     }
 
     public GameMenu(Game game) {
-        this.game = game;
-        this.dialogScreenContext = game;
+        this(game, game);
+    }
+
+    private static KeySequencePlayer createKeySequencePlayer(final Game game) {
+        return new KeySequencePlayer(new Handler(Looper.getMainLooper()),
+                keys -> game.sendKeys(keys),
+                () -> !game.isFinishing() && !game.isDestroyed(),
+                game::hasWindowFocus);
     }
 
     private String getString(int id) {
@@ -171,6 +180,10 @@ public class GameMenu implements Game.GameMenuCallbacks {
             options.add(new MenuOption(getString(R.string.game_menu_send_keys_ctrl_v),
                     () -> sendKeys(new short[]{KeyboardTranslator.VK_LCONTROL, KeyboardTranslator.VK_V})));
 
+            // The common "open settings" shortcut of desktop apps
+            options.add(new MenuOption(getString(R.string.game_menu_send_keys_ctrl_comma),
+                    () -> sendKeys(new short[]{KeyboardTranslator.VK_LCONTROL, (short) KeyMapper.VK_OEM_COMMA})));
+
             options.add(new MenuOption(getString(R.string.game_menu_send_keys_win),
                     () -> sendKeys(new short[]{KeyboardTranslator.VK_LWIN})));
 
@@ -209,26 +222,15 @@ public class GameMenu implements Game.GameMenuCallbacks {
                 if (shortcutFile != null && shortcutFile.data != null && !shortcutFile.data.isEmpty()) {
                     List<KeyConfigHelper.Shortcut> data = shortcutFile.data;
                     for (KeyConfigHelper.Shortcut sc : data) {
-                        List<String> keys = sc.keys;
-                        short[] keyCodes = new short[keys.size()];
-
-                        for (int i = 0; i < keys.size(); i++) {
-                            String code = keys.get(i);
-                            int keycode;
-
-                            if (code.startsWith("0x")) {               // literal hex value
-                                keycode = Integer.parseInt(code.substring(2), 16);
-                            } else if (code.startsWith("VK_")) {       // symbolic constant in KeyMapper
-                                Field field = KeyMapper.class.getDeclaredField(code);
-                                keycode = field.getInt(null);
-                            } else {                                   // unsupported
-                                throw new IllegalArgumentException("Unknown key code: " + code);
-                            }
-                            keyCodes[i] = (short) keycode;
+                        final List<KeyConfigHelper.Step> steps = KeyConfigHelper.parseSteps(sc);
+                        MenuOption option;
+                        if (KeyConfigHelper.isSequence(steps)) {
+                            // Played after the menu has closed and the stream has the focus again
+                            option = new MenuOption(sc.name, () -> keySequencePlayer.play(steps));
+                        } else {
+                            final short[] keyCodes = steps.get(0).chord;
+                            option = new MenuOption(sc.name, () -> sendKeys(keyCodes));
                         }
-
-                        // Whatever MenuOption looks like in your project
-                        MenuOption option = new MenuOption(sc.name, () -> sendKeys(keyCodes));
                         options.add(option);
                     }
                 }
@@ -286,6 +288,9 @@ public class GameMenu implements Game.GameMenuCallbacks {
     }
 
     public void showMenu(GameInputDevice device) {
+        // Opening the menu again stops a key sequence that is still playing
+        keySequencePlayer.cancel();
+
         List<MenuOption> options = new ArrayList<>();
 
         options.add(new MenuOption(getString(R.string.game_menu_disconnect), game::disconnect));
@@ -316,6 +321,12 @@ public class GameMenu implements Game.GameMenuCallbacks {
 
         options.add(new MenuOption(getString(R.string.game_menu_toggle_keyboard), true,
                 game::toggleKeyboard));
+
+        // The special keys list right from the quick menu (it also stays under Advanced)
+        options.add(new MenuOption(getString(R.string.game_menu_send_keys), () -> {
+            hideMenu();
+            showSpecialKeysMenu();
+        }));
 
         options.add(new MenuOption(getString(game.isZoomModeEnabled() ? R.string.game_menu_disable_zoom_mode : R.string.game_menu_enable_zoom_mode), true,
                 game::toggleZoomMode));

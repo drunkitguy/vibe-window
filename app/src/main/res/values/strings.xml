@@ -419,6 +419,7 @@
     <string name="game_menu_send_keys_f11">F11</string>
     <string name="game_menu_send_keys_alt_f4">Alt + F4</string>
     <string name="game_menu_send_keys_ctrl_v">Ctrl + V</string>
+    <string name="game_menu_send_keys_ctrl_comma">Ctrl + ,</string>
     <string name="game_menu_send_keys_win">Win (Meta)</string>
     <string name="game_menu_send_keys_win_d">Win + D</string>
     <string name="game_menu_send_keys_alt_b">ALT + B</string>
@@ -496,7 +497,7 @@
     <string name="title_auto_orientation">Auto Orientation</string>
     <string name="summary_auto_orientation">The streaming screen will be displayed according to the device\'s orientation when the stream begins.</string>
     <string name="title_import_special_button">Import Custom Keys</string>
-    <string name="summary_import_special_button">Available in Back Menu and special keys.\nNote: Importing will overwrite current configuration, please backup accordingly.</string>
+    <string name="summary_import_special_button">Adds entries to Send special keys in the in-stream menu and to the on-screen keyboard. An entry sends its \"keys\" together, or, with \"steps\", one step after another: key combinations such as VK_LSHIFT+VK_TAB, 150 ms apart, and waits such as wait:800 (milliseconds; up to 32 steps, 5 s per wait, 10 s in all). Keep \"keys\" set for the on-screen keyboard.\nNote: Importing will overwrite current configuration, please backup accordingly.</string>
     <string name="summary_share_performance_logs">Share your performance with friends or the community</string>
     <string name="title_share_performance_logs_button">Share Performance Logs</string>
     <string name="title_software_update">Software Update</string>

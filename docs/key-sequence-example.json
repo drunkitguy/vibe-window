@@ -1,0 +1,16 @@
+{
+  "note": "Example for Settings, Import Custom Keys. Open settings, Controls page sends Ctrl+, (the common settings shortcut), waits 1 s for the window, moves the keyboard focus back twice with Shift+Tab to the page list and selects its last entry with End. The number of Shift+Tab steps depends on the app and its version: add one if the focus stops short, remove one if it goes too far. keys holds the first combination for the on-screen keyboard.",
+  "data": [
+    {
+      "id": "open_settings_controls",
+      "name": "Open settings, Controls page",
+      "keys": ["VK_LCONTROL", "VK_OEM_COMMA"],
+      "steps": ["VK_LCONTROL+VK_OEM_COMMA", "wait:1000", "VK_LSHIFT+VK_TAB", "VK_LSHIFT+VK_TAB", "VK_END"]
+    },
+    {
+      "id": "close_dialog",
+      "name": "Close dialog (Esc)",
+      "keys": ["VK_ESCAPE"]
+    }
+  ]
+}
