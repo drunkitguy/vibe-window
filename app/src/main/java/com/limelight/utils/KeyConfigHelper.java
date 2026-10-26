@@ -281,8 +281,8 @@ public class KeyConfigHelper {
         } catch (RuntimeException e) {
             return "not a custom key file (" + e.getMessage() + ")";
         }
-        if (file == null || file.data == null) {
-            return "no \"data\" list";
+        if (file == null || file.data == null || file.data.isEmpty()) {
+            return "no entries in a \"data\" list";
         }
         for (int i = 0; i < file.data.size(); i++) {
             Shortcut sc = file.data.get(i);
