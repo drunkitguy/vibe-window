@@ -421,6 +421,7 @@
     <string name="game_menu_send_keys_ctrl_v">Ctrl + V</string>
     <string name="game_menu_send_keys_ctrl_comma">Ctrl + ,</string>
     <string name="pref_import_refused">Custom keys not imported: %1$s</string>
+    <string name="pref_import_cleared">Custom keys cleared</string>
     <string name="game_menu_send_keys_win">Win (Meta)</string>
     <string name="game_menu_send_keys_win_d">Win + D</string>
     <string name="game_menu_send_keys_alt_b">ALT + B</string>

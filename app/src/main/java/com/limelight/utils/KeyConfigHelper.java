@@ -270,6 +270,16 @@ public class KeyConfigHelper {
         return new Entries(entries, rejected);
     }
 
+    /** Whether a valid file has no entries, so importing it clears the custom keys. */
+    public static boolean clearsCustomKeys(String json) {
+        try {
+            ShortcutFile file = parseShortcutFile(json);
+            return file != null && file.data != null && file.data.isEmpty();
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
     /**
      * Checks a file before it is imported. Returns null when it can be imported, otherwise
      * why not. An entry with steps must also have keys: the on-screen keyboard only reads keys.
@@ -281,8 +291,9 @@ public class KeyConfigHelper {
         } catch (RuntimeException e) {
             return "not a custom key file (" + e.getMessage() + ")";
         }
-        if (file == null || file.data == null || file.data.isEmpty()) {
-            return "no entries in a \"data\" list";
+        if (file == null || file.data == null) {
+            // An empty list is fine: importing it clears the custom keys
+            return "no \"data\" list";
         }
         for (int i = 0; i < file.data.size(); i++) {
             Shortcut sc = file.data.get(i);

@@ -152,7 +152,14 @@ public class KeyConfigHelperTest {
                 "{\"data\":[{\"name\":\"W\",\"keys\":[\"VK_ESCAPE\"],\"steps\":[\"VK_ESCAPE\",\"wait:9000\"]}]}");
         assertTrue(badWait != null);
         assertTrue(KeyConfigHelper.validateForImport("not json at all {") != null);
-        assertTrue(KeyConfigHelper.validateForImport("{}") != null);
+        // An empty list (also {} where Gson gives an empty list) is valid and clears the keys
+        assertNull(KeyConfigHelper.validateForImport("{\"data\":[]}"));
+        assertNull(KeyConfigHelper.validateForImport("{}"));
+        assertTrue(KeyConfigHelper.clearsCustomKeys("{\"data\":[]}"));
+        assertFalse(KeyConfigHelper.clearsCustomKeys("{\"data\":[{\"name\":\"Esc\",\"keys\":[\"VK_ESCAPE\"]}]}"));
+        // A JSON null list is refused
+        String nullData = KeyConfigHelper.validateForImport("{\"data\":null}");
+        assertTrue(nullData, nullData != null && nullData.contains("data"));
     }
 
     @Test

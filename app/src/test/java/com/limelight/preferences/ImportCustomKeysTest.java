@@ -85,4 +85,27 @@ public class ImportCustomKeysTest {
         importFile(fragment, "{\"data\":[{\"name\":\"B\",\"keys\":[\"VK_NOPE\"]}]}");
         assertFalse(stored() != null);
     }
+
+    @Test
+    public void anEmptyListClearsTheCustomKeys() throws Exception {
+        StreamSettings.SettingsFragment fragment = SettingsTestUtil.launch();
+        importFile(fragment, "{\"data\":[{\"name\":\"Esc\",\"keys\":[\"VK_ESCAPE\"]}]}");
+        assertTrue(stored().contains("Esc"));
+
+        importFile(fragment, "{\"data\":[]}");
+        assertEquals("{\"data\":[]}", stored());
+        assertEquals(fragment.getString(R.string.pref_import_cleared), ShadowToast.getTextOfLatestToast());
+        assertTrue(com.limelight.utils.KeyConfigHelper.parseEntries(
+                com.limelight.utils.KeyConfigHelper.parseShortcutFile(stored())).entries.isEmpty());
+    }
+
+    @Test
+    public void aNullDataListIsRefused() throws Exception {
+        StreamSettings.SettingsFragment fragment = SettingsTestUtil.launch();
+        importFile(fragment, "{\"data\":[{\"name\":\"Esc\",\"keys\":[\"VK_ESCAPE\"]}]}");
+        importFile(fragment, "{\"data\":null}");
+        assertTrue("The previous keys stay", stored().contains("Esc"));
+        String toast = ShadowToast.getTextOfLatestToast();
+        assertTrue(toast, toast.startsWith(fragment.getString(R.string.pref_import_refused, "").trim()));
+    }
 }

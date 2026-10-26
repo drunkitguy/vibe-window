@@ -1716,7 +1716,8 @@ public class StreamSettings extends AppCompatActivity implements SettingsHost {
                     SharedPreferences.Editor prefEditor = getActivity().getSharedPreferences(GameMenu.PREF_NAME, Activity.MODE_PRIVATE).edit();
                     prefEditor.putString(GameMenu.KEY_NAME, json);
                     prefEditor.apply();
-                    Toast.makeText(getActivity(), getString(R.string.pref_import_success), Toast.LENGTH_SHORT).show();
+                    Toast.makeText(getActivity(), getString(com.limelight.utils.KeyConfigHelper.clearsCustomKeys(json) ?
+                            R.string.pref_import_cleared : R.string.pref_import_success), Toast.LENGTH_SHORT).show();
                 } catch (Exception e) {
                     e.printStackTrace();
                     Toast.makeText(getActivity(), getString(R.string.pref_error_occurred) + e.getMessage(), Toast.LENGTH_SHORT).show();
