@@ -799,15 +799,39 @@ private static int getFramePacingValue(Context context) {
      * use of controller sensors. Later choices are kept. On Android 12 the controller sensor
      * setting is left alone: it stays off there to avoid a platform crash (see readPreferences).
      * The flag is only set once the profiles were saved.
+     * <p>
+     * A device without a gyroscope and accelerometer (the same check as the settings screen,
+     * which then hides the switch) cannot emulate motion: there the base fallback is kept off
+     * at every start, also after 1.4.3 turned it on, and profiles are left alone.
      *
      * @return true if the migration ran
      */
     public static boolean migrateMotionDefaultOn(Context context) {
         return migrateMotionDefaultOn(PreferenceManager.getDefaultSharedPreferences(context),
-                ProfilesManager.getInstance(), context, Build.VERSION.SDK_INT);
+                ProfilesManager.getInstance(), context, Build.VERSION.SDK_INT, hasDeviceMotionSensors(context));
     }
 
-    static boolean migrateMotionDefaultOn(SharedPreferences prefs, ProfilesManager manager, Context context, int sdk) {
+    /** Whether the device has a motion sensor the fallback could use (as StreamSettings checks). */
+    static boolean hasDeviceMotionSensors(Context context) {
+        PackageManager pm = context.getPackageManager();
+        return pm.hasSystemFeature(PackageManager.FEATURE_SENSOR_ACCELEROMETER) ||
+                pm.hasSystemFeature(PackageManager.FEATURE_SENSOR_GYROSCOPE);
+    }
+
+    static boolean migrateMotionDefaultOn(SharedPreferences prefs, ProfilesManager manager, Context context,
+                                          int sdk, boolean hasSensors) {
+        if (!hasSensors) {
+            // Nothing to emulate with, and no switch to turn it off: keep the fallback off
+            if (prefs.getBoolean(GAMEPAD_MOTION_FALLBACK_PREF_STRING, DEFAULT_GAMEPAD_MOTION_FALLBACK) ||
+                    !prefs.getBoolean(MOTION_DEFAULT_ON_PREF_STRING, false)) {
+                prefs.edit()
+                        .putBoolean(MOTION_DEFAULT_ON_PREF_STRING, true)
+                        .putBoolean(GAMEPAD_MOTION_FALLBACK_PREF_STRING, false)
+                        .apply();
+                return true;
+            }
+            return false;
+        }
         if (prefs.getBoolean(MOTION_DEFAULT_ON_PREF_STRING, false)) {
             return false;
         }

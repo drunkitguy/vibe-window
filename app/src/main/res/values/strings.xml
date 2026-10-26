@@ -830,7 +830,7 @@
     <string name="stats_overlay_full">Full (every counter)</string>
     <!-- One row for the two gamepad motion switches -->
     <string name="title_quick_motion">Motion</string>
-    <string name="summary_quick_motion">Sends this device\'s gyroscope and accelerometer to the PC when your controller has no motion sensors of its own. While this is on, the PC sees that controller as a PlayStation controller, so button prompts in games may change. To use this device\'s sensors even when the controller has its own, turn on \"Always use device\'s motion sensors\" in All settings, Gamepad Settings.</string>
+    <string name="summary_quick_motion">Sends this device\'s gyroscope and accelerometer to the PC when your controller has no motion sensors of its own. While this is on, the PC sees that controller as a PlayStation controller, so button prompts in games may change; a short notice about the controller type appears when a stream starts, and Select+LB works as the PlayStation touchpad click. To use this device\'s sensors even when the controller has its own, turn on \"Always use device\'s motion sensors\" in All settings, Gamepad Settings.</string>
     <string name="motion_off">Off</string>
     <string name="motion_on">On (this device\'s sensors when the controller has none)</string>
     <!-- After the bitrate value while it follows the resolution -->

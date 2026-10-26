@@ -2,6 +2,7 @@ package com.limelight.preferences;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.os.Build;
 
 import androidx.preference.PreferenceManager;
@@ -15,6 +16,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
+import org.robolectric.Shadows;
 import org.robolectric.annotation.Config;
 
 import java.lang.reflect.Field;
@@ -50,6 +52,13 @@ public class MotionMigrationTest {
         context = ApplicationProvider.getApplicationContext();
         prefs = PreferenceManager.getDefaultSharedPreferences(context);
         prefs.edit().clear().commit();
+        setDeviceSensors(true);
+    }
+
+    private void setDeviceSensors(boolean present) {
+        PackageManager pm = context.getPackageManager();
+        Shadows.shadowOf(pm).setSystemFeature(PackageManager.FEATURE_SENSOR_ACCELEROMETER, present);
+        Shadows.shadowOf(pm).setSystemFeature(PackageManager.FEATURE_SENSOR_GYROSCOPE, present);
     }
 
     @After
@@ -123,8 +132,44 @@ public class MotionMigrationTest {
     public void android12KeepsControllerSensorsOff() {
         prefs.edit().putBoolean(SENSORS, false).putBoolean(FALLBACK, false).commit();
         assertTrue(PreferenceConfiguration.migrateMotionDefaultOn(prefs, ProfilesManager.getInstance(), context,
-                Build.VERSION_CODES.S));
+                Build.VERSION_CODES.S, true));
         assertTrue(prefs.getBoolean(FALLBACK, false));
         assertFalse(prefs.getBoolean(SENSORS, true));
+    }
+
+    @Test
+    public void aDeviceWithoutSensorsKeepsTheFallbackOff() {
+        setDeviceSensors(false);
+        // A clean install: the PC list writes the XML defaults first, then migrates
+        PreferenceManager.setDefaultValues(context, com.limelight.R.xml.preferences, true);
+        assertTrue(prefs.getBoolean(FALLBACK, false));
+        Map<String, Object> options = new HashMap<>();
+        options.put(FALLBACK, true);
+        SettingsProfile profile = new SettingsProfile(UUID.randomUUID(), "Profile", 0, 0, options);
+        ProfilesManager.getInstance().add(profile);
+
+        PreferenceConfiguration.runOneTimeMigrations(context);
+        assertFalse(prefs.getBoolean(FALLBACK, true));
+        assertFalse(PreferenceConfiguration.readPreferences(context).gamepadMotionSensorsFallbackToDevice);
+        assertEquals("Profiles are left alone", true, profile.getOptions().get(FALLBACK));
+    }
+
+    @Test
+    public void aDeviceWithoutSensorsThatRan143IsTurnedOffToo() {
+        setDeviceSensors(false);
+        // 1.4.3 already migrated this install and turned the fallback on
+        prefs.edit().putBoolean(FLAG, true).putBoolean(FALLBACK, true).putBoolean(SENSORS, true).commit();
+        PreferenceConfiguration.runOneTimeMigrations(context);
+        assertFalse(prefs.getBoolean(FALLBACK, true));
+        assertTrue("Controller sensors are left as they are", prefs.getBoolean(SENSORS, false));
+    }
+
+    @Test
+    public void aDeviceWithOnlyAnAccelerometerCountsAsHavingSensors() {
+        PackageManager pm = context.getPackageManager();
+        Shadows.shadowOf(pm).setSystemFeature(PackageManager.FEATURE_SENSOR_GYROSCOPE, false);
+        Shadows.shadowOf(pm).setSystemFeature(PackageManager.FEATURE_SENSOR_ACCELEROMETER, true);
+        PreferenceConfiguration.runOneTimeMigrations(context);
+        assertTrue(prefs.getBoolean(FALLBACK, false));
     }
 }
