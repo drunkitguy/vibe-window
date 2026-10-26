@@ -91,6 +91,7 @@ jobs:
             --tests 'com.limelight.preferences.*' \
             --tests 'com.limelight.PcViewUiTest' \
             --tests 'com.limelight.binding.video.*' \
+            --tests 'com.limelight.binding.input.*' \
             --tests 'com.limelight.utils.*'
 
       - name: Build release APK
@@ -175,6 +176,10 @@ jobs:
             Install: download the APK below, open it on the device and allow installs from your browser or file manager. Verify with the `.sha256` file if you like.
 
             Defaults: Auto resolution and frame rate (match the display), virtual display on, "Show only the app window" on, frame pacing Balanced, Motion on.
+
+            **New in 1.4.8**
+
+            - Back button: a new setting in Touch and controls (and All settings, Gamepad Settings) for what a controller's Back button does while streaming. Android back keeps today's behaviour (the default). Select makes it the controller's Select on the PC, with Start+Select (Guide) and Select+LB (touchpad) working as with a real Select. Touchpad click sends the PlayStation touchpad click (the PC must see a PlayStation controller, for example with Motion on), Guide sends Guide, and Keyboard key sends F13 on the PC with any controller. Any choice except Android back replaces "Back button as Guide". Controllers whose Back is their only Start keep it; a Back from the phone itself still goes to Android. Profiles can set it too.
 
             **Fixes in 1.4.7**
 

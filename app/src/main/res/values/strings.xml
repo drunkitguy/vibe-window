@@ -836,6 +836,14 @@
     <string name="summary_quick_motion">Sends this device\'s gyroscope and accelerometer to the PC when your controller has no motion sensors of its own. While this is on, the PC sees that controller as a PlayStation controller, so button prompts in games may change; a short notice about the controller type appears when a stream starts, and Select+LB works as the PlayStation touchpad click. To use this device\'s sensors even when the controller has its own, turn on \"Always use device\'s motion sensors\" in All settings, Gamepad Settings.</string>
     <string name="motion_off">Off</string>
     <string name="motion_on">On (this device\'s sensors when the controller has none)</string>
+    <!-- What a controller's Back button does while streaming (list_back_button_mode) -->
+    <string name="title_back_button_mode">Back button</string>
+    <string name="summary_back_button_mode">What your controller\'s Back button does while streaming.\n\nAndroid back: as before. On handhelds whose built-in controls have their own Select, and for Back presses Android cannot tie to a controller, Back stays with Android (with Back Menu on, it opens the game menu). Most other controllers already send it as Select.\n\nSelect: Back becomes the controller\'s Select (View) button on the PC. Start+Select still presses Guide, and Select+LB still clicks the touchpad when Motion is on.\n\nTouchpad click: Back clicks the PlayStation touchpad. This only works when the PC sees a PlayStation controller: a PlayStation controller, or any controller while Motion is on.\n\nGuide: Back presses Guide (the Xbox, PS or Home button).\n\nKeyboard key: Back presses F13 on the PC\'s keyboard, with any controller. Bind F13 to anything in a game or tool.\n\nAny choice except Android back replaces \"Back button as Guide\" when both are on. Controllers whose Back is their only Start keep it as Start. With Back Menu on, the controller still opens the game menu: tap Start, then press and hold it.</string>
+    <string name="back_button_android">Android back (as before)</string>
+    <string name="back_button_select">Select on the PC</string>
+    <string name="back_button_touchpad">Touchpad click (PlayStation)</string>
+    <string name="back_button_guide">Guide</string>
+    <string name="back_button_key">Keyboard key (F13)</string>
     <!-- After the bitrate value while it follows the resolution -->
     <string name="pref_value_auto">Auto</string>
 

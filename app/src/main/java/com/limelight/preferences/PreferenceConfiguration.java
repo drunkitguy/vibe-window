@@ -241,6 +241,15 @@ public class PreferenceConfiguration {
     private static final boolean DEFAULT_IGNORE_SYNTH_EVENTS = false;
     private static final boolean DEFAULT_ENABLE_FLOATING_BUTTON = false;
     private static final boolean DEFAULT_BACK_AS_GUIDE = false;
+    public static final String LIST_BACK_BUTTON_MODE = "list_back_button_mode";
+    public static final String DEFAULT_BACK_BUTTON_MODE = "android";
+
+    // What a controller's Back button does while streaming (list_back_button_mode)
+    public static final int BACK_BUTTON_ANDROID = 0;
+    public static final int BACK_BUTTON_SELECT = 1;
+    public static final int BACK_BUTTON_TOUCHPAD = 2;
+    public static final int BACK_BUTTON_GUIDE = 3;
+    public static final int BACK_BUTTON_KEY = 4;
     private static final boolean DEFAULT_SMART_CLIPBOARD_SYNC = false;
     private static final boolean DEFAULT_SMART_CLIPBOARD_SYNC_TOAST = true;
     private static final boolean DEFAULT_HIDE_CLIPBOARD_CONTENT = true;
@@ -309,6 +318,7 @@ public class PreferenceConfiguration {
     public boolean rightAltAsMeta;
     public boolean ignoreSynthEvents;
     public boolean backAsGuide;
+    public int backButtonMode;
     public boolean smartClipboardSync;
     public boolean smartClipboardSyncToast;
     public boolean hideClipboardContent;
@@ -1077,6 +1087,26 @@ private static int getFramePacingValue(Context context) {
         return config;
     }
 
+
+    /** The Back button mode for a stored list_back_button_mode value; anything unknown is "android". */
+    public static int backButtonModeFor(String value) {
+        if (value == null) {
+            return BACK_BUTTON_ANDROID;
+        }
+        switch (value) {
+            case "select":
+                return BACK_BUTTON_SELECT;
+            case "touchpad":
+                return BACK_BUTTON_TOUCHPAD;
+            case "guide":
+                return BACK_BUTTON_GUIDE;
+            case "key":
+                return BACK_BUTTON_KEY;
+            default:
+                return BACK_BUTTON_ANDROID;
+        }
+    }
+
     public static PreferenceConfiguration readPreferences(Context context) {
         return readPreferences(context, null);
     }
@@ -1398,6 +1428,7 @@ private static int getFramePacingValue(Context context) {
         config.rightAltAsMeta = prefs.getBoolean(CHECKBOX_RIGHT_ALT_AS_META, DEFAULT_RIGHT_ALT_AS_META);
         config.ignoreSynthEvents = prefs.getBoolean(CHECKBOX_IGNORE_SYNTH_EVENTS, DEFAULT_IGNORE_SYNTH_EVENTS);
         config.backAsGuide = prefs.getBoolean(CHECKBOX_BACK_AS_GUIDE, DEFAULT_BACK_AS_GUIDE);
+        config.backButtonMode = backButtonModeFor(prefs.getString(LIST_BACK_BUTTON_MODE, DEFAULT_BACK_BUTTON_MODE));
         config.smartClipboardSync = prefs.getBoolean(CHECKBOX_SMART_CLIPBOARD_SYNC, DEFAULT_SMART_CLIPBOARD_SYNC);
         config.smartClipboardSyncToast = prefs.getBoolean(CHECKBOX_SMART_CLIPBOARD_SYNC_TOAST, DEFAULT_SMART_CLIPBOARD_SYNC_TOAST);
         config.hideClipboardContent = prefs.getBoolean(CHECKBOX_HIDE_CLIPBOARD_CONTENT, DEFAULT_HIDE_CLIPBOARD_CONTENT);

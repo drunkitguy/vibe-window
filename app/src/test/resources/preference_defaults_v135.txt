@@ -1,5 +1,6 @@
 # key	type	value written by PreferenceManager.setDefaultValues on a clean install, 1.3.5 (de0b1ec). Do not edit.
 # 1.4.3: checkbox_gamepad_motion_fallback defaults to true on purpose (motion on by default); nothing else changed.
+# 1.4.8: list_back_button_mode (Back button, default android) is added on purpose; nothing else changed.
 analog_scrolling	String	right
 checkbox_absolute_mouse_mode	Boolean	false
 checkbox_auto_invert_video_resolution	Boolean	true
@@ -86,6 +87,7 @@ edit_diy_w_h	String	1920x1080
 frame_pacing	String	balanced
 keyboard_axi_list	String	OSC_Keyboard
 list_audio_config	String	2
+list_back_button_mode	String	android
 list_fps	String	auto
 list_languages	String	default
 list_onscreen_keyboard_align_mode	String	center

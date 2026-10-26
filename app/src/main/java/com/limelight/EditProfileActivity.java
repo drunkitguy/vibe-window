@@ -358,6 +358,9 @@ public class EditProfileActivity extends AppCompatActivity {
                 compositeChanged |= com.limelight.preferences.MotionPreference.KEY.equals(key) &&
                         (changedKeys.contains("checkbox_gamepad_motion_sensors") ||
                                 changedKeys.contains("checkbox_gamepad_motion_fallback"));
+                // The Back button row stands for the Back button setting
+                compositeChanged |= com.limelight.preferences.BackButtonPreference.KEY.equals(key) &&
+                        changedKeys.contains(com.limelight.preferences.PreferenceConfiguration.LIST_BACK_BUTTON_MODE);
                 if (key != null && (changedKeys.contains(key) || compositeChanged)) {
                     pref.setTitle("*" + pref.getTitle());
                 }

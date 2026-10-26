@@ -1,6 +1,7 @@
 # key	family	defaultValue	entryValues	dependency	seekbar(min;max;step;divisor;keyStep)
 # Generated from res/xml/preferences.xml at de0b1ec (1.3.5). Do not edit.
 # 1.4.3: checkbox_gamepad_motion_fallback defaults to true on purpose (motion on by default); nothing else changed.
+# 1.4.8: list_back_button_mode (Back button, default android) is added on purpose; nothing else changed.
 analog_scrolling	List	right	@array/analog_scrolling_values	checkbox_mouse_emulation	-
 balance_shift	SeekBar	50	-	-	min=-0;max=100;step=1;divisor=;keyStep=
 category_advanced_settings	Category	-	-	-	-
@@ -106,6 +107,7 @@ import_keyboard_file	Plain	-	-	-	-
 import_special_button_file	Plain	-	-	-	-
 keyboard_axi_list	List	OSC_Keyboard	@array/keyboard_axi_values	checkbox_enable_keyboard	-
 list_audio_config	List	2	@array/audio_config_values	-	-
+list_back_button_mode	List	android	@array/back_button_mode_values	-	-
 list_fps	List	auto	@array/fps_values	-	-
 list_languages	List	default	@array/language_values	-	-
 list_onscreen_keyboard_align_mode	List	center	@array/onscreen_keyboard_align_values	-	-

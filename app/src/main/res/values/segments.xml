@@ -176,4 +176,31 @@
         <item>@string/stats_overlay_lite</item>
         <item>@string/stats_overlay_full</item>
     </string-array>
+    <!-- Back button (list_back_button_mode) -->
+    <string name="seg_back_android">Android</string>
+    <string name="seg_back_select">Select</string>
+    <string name="seg_back_touchpad">Touchpad</string>
+    <string name="seg_back_guide">Guide</string>
+    <string name="seg_back_key">F13</string>
+    <string-array name="back_button_mode_values" translatable="false">
+        <item>android</item>
+        <item>select</item>
+        <item>touchpad</item>
+        <item>guide</item>
+        <item>key</item>
+    </string-array>
+    <string-array name="back_button_mode_labels">
+        <item>@string/seg_back_android</item>
+        <item>@string/seg_back_select</item>
+        <item>@string/seg_back_touchpad</item>
+        <item>@string/seg_back_guide</item>
+        <item>@string/seg_back_key</item>
+    </string-array>
+    <string-array name="back_button_mode_names">
+        <item>@string/back_button_android</item>
+        <item>@string/back_button_select</item>
+        <item>@string/back_button_touchpad</item>
+        <item>@string/back_button_guide</item>
+        <item>@string/back_button_key</item>
+    </string-array>
 </resources>

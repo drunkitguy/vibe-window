@@ -163,6 +163,17 @@
             app:iconSpaceReserved="false"
             app:vwSegmentValues="@array/motion_values"
             app:vwSegmentLabels="@array/motion_labels" />
+        <com.limelight.preferences.BackButtonPreference
+            android:entries="@array/back_button_mode_names"
+            android:entryValues="@array/back_button_mode_values"
+            android:key="quick_back_button"
+            android:persistent="false"
+            android:summary="@string/summary_back_button_mode"
+            android:title="@string/title_back_button_mode"
+            app:iconSpaceReserved="false"
+            app:vwSegmentValues="@array/back_button_mode_values"
+            app:vwSegmentLabels="@array/back_button_mode_labels"
+            app:vwAlwaysShowValue="true" />
     </PreferenceCategory>
 
     <PreferenceCategory
@@ -451,6 +462,17 @@
             android:summary="@string/summary_checkbox_usb_bind_all"
             android:title="@string/title_checkbox_usb_bind_all"
             app:iconSpaceReserved="false" />
+        <com.limelight.preferences.SegmentedListPreference
+            android:defaultValue="android"
+            android:entries="@array/back_button_mode_names"
+            android:entryValues="@array/back_button_mode_values"
+            android:key="list_back_button_mode"
+            android:summary="@string/summary_back_button_mode"
+            android:title="@string/title_back_button_mode"
+            app:iconSpaceReserved="false"
+            app:vwSegmentValues="@array/back_button_mode_values"
+            app:vwSegmentLabels="@array/back_button_mode_labels"
+            app:vwAlwaysShowValue="true" />
 
         <com.limelight.preferences.SegmentedListPreference
             android:defaultValue="right"

@@ -55,6 +55,7 @@ public class PreferenceKeyInventoryTest {
         FAMILIES.put("com.limelight.preferences.WebLauncherPreference", "Plain");
         FAMILIES.put("com.limelight.preferences.StatsOverlayPreference", "Composite");
         FAMILIES.put("com.limelight.preferences.MotionPreference", "Composite");
+        FAMILIES.put("com.limelight.preferences.BackButtonPreference", "Composite");
         FAMILIES.put("PreferenceCategory", "Category");
         FAMILIES.put("com.limelight.preferences.CaptionCategory", "Category");
     }
@@ -62,7 +63,8 @@ public class PreferenceKeyInventoryTest {
     /** The only keys 1.4.0 may add. None of them stores a value. */
     static final Set<String> ALLOWED_NEW_KEYS = new HashSet<>(Arrays.asList(
             "category_quick_stream", "category_quick_controls", "category_quick_audio",
-            "category_quick_app", "category_all_settings", "quick_stats_overlay", "quick_motion"));
+            "category_quick_app", "category_all_settings", "quick_stats_overlay", "quick_motion",
+            "quick_back_button"));
 
     static File preferencesXml() {
         for (String path : new String[] {"src/main/res/xml/preferences.xml", "app/src/main/res/xml/preferences.xml"}) {

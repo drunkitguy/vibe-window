@@ -41,6 +41,7 @@ import com.limelight.binding.input.driver.UsbDriverListener;
 import com.limelight.binding.input.driver.UsbDriverService;
 import com.limelight.nvstream.NvConnection;
 import com.limelight.nvstream.input.ControllerPacket;
+import com.limelight.nvstream.input.KeyboardPacket;
 import com.limelight.nvstream.input.MouseButtonPacket;
 import com.limelight.nvstream.jni.MoonBridge;
 import com.limelight.preferences.PreferenceConfiguration;
@@ -283,6 +284,7 @@ public class ControllerHandler implements InputManager.InputDeviceListener, UsbD
             InputDeviceContext deviceContext = inputDeviceContexts.valueAt(i);
             deviceContext.destroy();
         }
+        releaseBackButtonKey(defaultContext);
 
         for (int i = 0; i < usbDeviceContexts.size(); i++) {
             UsbDeviceContext deviceContext = usbDeviceContexts.valueAt(i);
@@ -949,6 +951,7 @@ public class ControllerHandler implements InputManager.InputDeviceListener, UsbD
         }
 
         context.ignoreBack = shouldIgnoreBack(dev);
+        context.gamepadSource = (dev.getSources() & InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD;
 
         if (devName != null) {
             // For the Nexus Player (and probably other ATV devices), we should
@@ -1359,13 +1362,56 @@ public class ControllerHandler implements InputManager.InputDeviceListener, UsbD
     private final int REMAP_IGNORE = -1;
     private final int REMAP_CONSUME = -2;
 
+    // The Back button setting (list_back_button_mode) sends a controller's Back through the
+    // button switches as one of these. They are above every Android keycode.
+    private static final int KEYCODE_BACK_AS_TOUCHPAD = 0x10001;
+    private static final int KEYCODE_BACK_AS_GUIDE = 0x10002;
+    private static final int KEYCODE_BACK_AS_KEY = 0x10003;
+    // F13, a key no game binds by default
+    static final short BACK_BUTTON_KEY_VK = 0x7C;
+
+    // What a controller's Back sends under the Back button setting, or 0 for today's handling
+    // (passed to Android, or Select / "Back button as Guide"). Down and up get the same answer.
+    private int remapBackButton(InputDeviceContext context, KeyEvent event) {
+        int mode = prefConfig.backButtonMode;
+        if (mode == PreferenceConfiguration.BACK_BUTTON_ANDROID ||
+                context.backIsStart ||
+                (event.getFlags() & KeyEvent.FLAG_SOFT_KEYBOARD) != 0 ||
+                !(context.gamepadSource ||
+                        (event.getSource() & InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD)) {
+            return 0;
+        }
+        switch (mode) {
+            case PreferenceConfiguration.BACK_BUTTON_SELECT:
+                // The real Select path, so Start+Select and Select+LB work as they do for it
+                return KeyEvent.KEYCODE_BUTTON_SELECT;
+            case PreferenceConfiguration.BACK_BUTTON_TOUCHPAD:
+                return KEYCODE_BACK_AS_TOUCHPAD;
+            case PreferenceConfiguration.BACK_BUTTON_GUIDE:
+                return KEYCODE_BACK_AS_GUIDE;
+            case PreferenceConfiguration.BACK_BUTTON_KEY:
+                return KEYCODE_BACK_AS_KEY;
+            default:
+                return 0;
+        }
+    }
+
+    private void releaseBackButtonKey(InputDeviceContext context) {
+        if (context.backButtonKeyHeld) {
+            context.backButtonKeyHeld = false;
+            conn.sendKeyboardInput(BACK_BUTTON_KEY_VK, KeyboardPacket.KEY_UP, (byte) 0, (byte) 0);
+        }
+    }
+
     // Return a valid keycode, -2 to consume, or -1 to not consume the event
     // Device MAY BE NULL
     private int handleRemapping(InputDeviceContext context, KeyEvent event) {
         // Don't capture the back button if configured
         if (context.ignoreBack) {
             if (event.getKeyCode() == KeyEvent.KEYCODE_BACK) {
-                return REMAP_IGNORE;
+                // ...unless the Back button setting sends it to the PC
+                int backButton = remapBackButton(context, event);
+                return backButton != 0 ? backButton : REMAP_IGNORE;
             }
         }
 
@@ -1636,6 +1682,14 @@ public class ControllerHandler implements InputManager.InputDeviceListener, UsbD
         else if (context.backIsStart && keyCode == KeyEvent.KEYCODE_BACK) {
             // Emulate the start button with back
             return KeyEvent.KEYCODE_BUTTON_START;
+        }
+        else if (keyCode == KeyEvent.KEYCODE_BACK &&
+                prefConfig.backButtonMode != PreferenceConfiguration.BACK_BUTTON_ANDROID) {
+            // The Back button setting wins over "Back button as Guide"
+            int backButton = remapBackButton(context, event);
+            if (backButton != 0) {
+                return backButton;
+            }
         }
         else if (context.modeIsSelect && keyCode == KeyEvent.KEYCODE_BUTTON_MODE) {
             // Emulate the select button with mode
@@ -2523,6 +2577,15 @@ public class ControllerHandler implements InputManager.InputDeviceListener, UsbD
         case KeyEvent.KEYCODE_BUTTON_SELECT:
             context.inputMap &= ~ControllerPacket.BACK_FLAG;
             break;
+        case KEYCODE_BACK_AS_TOUCHPAD:
+        case KEYCODE_BACK_AS_GUIDE:
+            // Release exactly what the press set
+            context.inputMap &= ~context.backButtonFlag;
+            context.backButtonFlag = 0;
+            break;
+        case KEYCODE_BACK_AS_KEY:
+            releaseBackButtonKey(context);
+            return true;
         case KeyEvent.KEYCODE_DPAD_LEFT:
             if (context.hatXAxisUsed) {
                 // Suppress this duplicate event if we have a hat
@@ -2747,6 +2810,19 @@ public class ControllerHandler implements InputManager.InputDeviceListener, UsbD
             context.hasSelect = true;
             context.inputMap |= ControllerPacket.BACK_FLAG;
             break;
+        case KEYCODE_BACK_AS_TOUCHPAD:
+        case KEYCODE_BACK_AS_GUIDE:
+            context.backButtonFlag = keyCode == KEYCODE_BACK_AS_TOUCHPAD ?
+                    ControllerPacket.TOUCHPAD_FLAG : ControllerPacket.SPECIAL_BUTTON_FLAG;
+            context.inputMap |= context.backButtonFlag;
+            break;
+        case KEYCODE_BACK_AS_KEY:
+            // One press per hold: repeats send nothing, the release sends the key up
+            if (!context.backButtonKeyHeld) {
+                context.backButtonKeyHeld = true;
+                conn.sendKeyboardInput(BACK_BUTTON_KEY_VK, KeyboardPacket.KEY_DOWN, (byte) 0, (byte) 0);
+            }
+            return true;
         case KeyEvent.KEYCODE_DPAD_LEFT:
             if (context.hatXAxisUsed) {
                 // Suppress this duplicate event if we have a hat
@@ -3165,6 +3241,10 @@ public class ControllerHandler implements InputManager.InputDeviceListener, UsbD
         public boolean modeIsSelect;
         public boolean searchIsMode;
         public boolean ignoreBack;
+        public boolean gamepadSource;
+        // What a held Back sends under the Back button setting
+        public int backButtonFlag;
+        public boolean backButtonKeyHeld;
         public boolean hasJoystickAxes;
         public boolean pendingExit;
         public boolean isDualShockStandaloneTouchpad;
@@ -3214,6 +3294,9 @@ public class ControllerHandler implements InputManager.InputDeviceListener, UsbD
         @Override
         public void destroy() {
             super.destroy();
+
+            // Never leave the Back button's key held on the PC
+            releaseBackButtonKey(this);
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && vibratorManager != null) {
                 vibratorManager.cancel();
