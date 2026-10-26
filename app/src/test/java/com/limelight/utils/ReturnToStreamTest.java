@@ -72,9 +72,20 @@ public class ReturnToStreamTest {
 
     // --- When a stream is remembered ---
 
+    private ReturnToStream.StreamTracker stop(boolean connected, boolean endedByUser, boolean error) {
+        ReturnToStream.StreamTracker tracker = new ReturnToStream.StreamTracker();
+        if (endedByUser) {
+            tracker.markEndedByUser();
+        }
+        tracker.onStop(context, connected, error, PC, APP, "Game");
+        return tracker;
+    }
+
     @Test
-    public void aBackgroundStopIsRemembered() {
-        ReturnToStream.onStreamStopped(context, true, false, false, PC, APP, "Game");
+    public void leavingTheAppIsRemembered() {
+        // Game is noHistory: leaving the app (or the screen going off, or closing the mini
+        // player) stops it while it is already finishing, still connected and not ended by the user
+        stop(true, false, false);
         ReturnToStream.Record record = ReturnToStream.pending(context);
         assertNotNull(record);
         assertEquals(PC, record.pcUuid);
@@ -87,36 +98,51 @@ public class ReturnToStreamTest {
     }
 
     @Test
-    public void closingTheMiniPlayerIsABackgroundStopToo() {
-        ReturnToStream.onStreamStopped(context, true, true, true, PC, APP, "Game");
-        assertNotNull(ReturnToStream.pending(context));
-    }
-
-    @Test
     public void quitDisconnectAndBackForgetTheStream() {
         remember(System.currentTimeMillis());
-        // Quit Session, Disconnect and Back all finish the stream
-        ReturnToStream.onStreamStopped(context, true, true, false, PC, APP, "Game");
+        // Quit Session, Disconnect and Back mark the stream as ended by the user first
+        stop(true, true, false);
         assertNull(ReturnToStream.pending(context));
     }
 
     @Test
     public void anErrorOrTheHostEndingTheStreamForgetsIt() {
         remember(System.currentTimeMillis());
-        // An error or a termination by the host leaves the stream disconnected
-        ReturnToStream.onStreamStopped(context, false, false, false, PC, APP, "Game");
+        // An error or a termination by the host leaves the stream disconnected with a dialog
+        stop(false, false, true);
         assertNull(ReturnToStream.pending(context));
-        ReturnToStream.onStreamStopped(context, false, true, false, PC, APP, "Game");
+        remember(System.currentTimeMillis());
+        // A graceful end by the host finishes the activity
+        stop(false, true, false);
         assertNull(ReturnToStream.pending(context));
     }
 
     @Test
-    public void wentToBackgroundTable() {
-        assertTrue(ReturnToStream.wentToBackground(true, false, false));
-        assertTrue(ReturnToStream.wentToBackground(true, true, true));
-        assertFalse(ReturnToStream.wentToBackground(true, true, false));
-        assertFalse(ReturnToStream.wentToBackground(false, false, false));
-        assertFalse(ReturnToStream.wentToBackground(false, true, true));
+    public void aSecondStopAfterTheScreenComesBackOnKeepsTheRecord() {
+        ReturnToStream.StreamTracker tracker = new ReturnToStream.StreamTracker();
+        // Screen off: the stream stops connected and is remembered...
+        tracker.onStop(context, true, false, PC, APP, "Game");
+        assertNotNull(ReturnToStream.pending(context));
+        // ...then the stop's own finish() and a later stop with nothing running change nothing
+        tracker.markEndedByUser();
+        tracker.onStop(context, false, true, PC, APP, "Game");
+        assertNotNull(ReturnToStream.pending(context));
+    }
+
+    @Test
+    public void aStopWhileStillConnectingKeepsAnEarlierRecord() {
+        remember(System.currentTimeMillis());
+        stop(false, false, false);
+        assertNotNull(ReturnToStream.pending(context));
+    }
+
+    @Test
+    public void stopTable() {
+        assertEquals(ReturnToStream.StopAction.REMEMBER, ReturnToStream.actionForStop(true, false, false));
+        assertEquals(ReturnToStream.StopAction.FORGET, ReturnToStream.actionForStop(true, true, false));
+        assertEquals(ReturnToStream.StopAction.FORGET, ReturnToStream.actionForStop(false, true, false));
+        assertEquals(ReturnToStream.StopAction.FORGET, ReturnToStream.actionForStop(false, false, true));
+        assertEquals(ReturnToStream.StopAction.KEEP, ReturnToStream.actionForStop(false, false, false));
     }
 
     // --- What a host poll decides ---

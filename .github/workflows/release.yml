@@ -178,6 +178,12 @@ jobs:
 
             Defaults: Auto resolution and frame rate (match the display), virtual display on, "Show only the app window" on, frame pacing Balanced, Motion on.
 
+            **Fixes in 1.4.10**
+
+            - Return to stream now works when you leave the app without the mini player: 1.4.9 forgot the stream instead of remembering it. Turning the screen off during a stream is remembered too, and the record is kept when the screen comes back on. Quit Session, Disconnect, Back and errors still forget it.
+            - The mini player can no longer stop a stream from starting on Android 12 and later with an ultrawide or very tall stream, or before the stream view has a size: the window ratio is kept within what Android allows.
+            - The Mini player row lines up with the other rows again.
+
             **New in 1.4.9**
 
             - Mini player: leaving the app during a stream now keeps it playing in a small picture-in-picture window. Tap it to go back to full screen with your controls; closing it ends the stream on this device while the session keeps running on the PC. It never opens while the in-stream menu or a dialog is up. On by default (also for saved profiles, once); turn it off with Mini player in Settings, App.

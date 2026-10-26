@@ -59,27 +59,66 @@ public final class ReturnToStream {
         return UiState.prefs(context);
     }
 
+    /** What a stopping stream means for the record. */
+    enum StopAction { REMEMBER, FORGET, KEEP }
+
     /**
-     * Whether a stream that stops went to the background: it was still connected (not ended
-     * by an error or the host) and the activity was not finishing (a quit, disconnect or back
-     * finishes it), or its mini player was closed.
+     * A stream still connected that the user did not end went to the background: the user
+     * left the app, the screen went off or the mini player was closed (Game is noHistory, so
+     * it is finishing in all of these). The user ending it (Quit Session, Disconnect, Back)
+     * or an error or the host ending it forgets the record. A stop with no stream running
+     * and nothing ended (still connecting) leaves any record as it is.
      */
-    static boolean wentToBackground(boolean connected, boolean finishing, boolean inPip) {
-        return connected && (!finishing || inPip);
+    static StopAction actionForStop(boolean connected, boolean endedByUser, boolean endedByError) {
+        if (connected && !endedByUser) {
+            return StopAction.REMEMBER;
+        }
+        if (connected || endedByUser || endedByError) {
+            return StopAction.FORGET;
+        }
+        return StopAction.KEEP;
     }
 
     /**
-     * Called by the stream when it stops: remembers it when the app only went to the
-     * background, forgets any record otherwise (quit, disconnect, back, an error, the host
-     * ending the stream).
+     * One per stream activity: remembers how the stream ends and handles the record at the
+     * first stop only, so a later stop of the same (already ended) activity, for example when
+     * the screen comes back on, never clears a record that stop wrote.
      */
-    public static void onStreamStopped(Context context, boolean connected, boolean finishing, boolean inPip,
-                                       @Nullable String pcUuid, int appId, @Nullable String appName) {
-        if (wentToBackground(connected, finishing, inPip) && pcUuid != null && appId > 0) {
-            remember(context, pcUuid, appId, appName, System.currentTimeMillis());
+    public static final class StreamTracker {
+        private boolean endedByUser;
+        private boolean handled;
+
+        /** The user ended the stream (Quit Session, Disconnect, Back or any finish() of ours). */
+        public void markEndedByUser() {
+            endedByUser = true;
         }
-        else {
-            forget(context);
+
+        public boolean isEndedByUser() {
+            return endedByUser;
+        }
+
+        public void onStop(Context context, boolean connected, boolean endedByError,
+                           @Nullable String pcUuid, int appId, @Nullable String appName) {
+            if (handled) {
+                return;
+            }
+            switch (actionForStop(connected, endedByUser, endedByError)) {
+                case REMEMBER:
+                    handled = true;
+                    if (pcUuid != null && appId > 0) {
+                        remember(context, pcUuid, appId, appName, System.currentTimeMillis());
+                    }
+                    else {
+                        forget(context);
+                    }
+                    break;
+                case FORGET:
+                    handled = true;
+                    forget(context);
+                    break;
+                default:
+                    break;
+            }
         }
     }
 

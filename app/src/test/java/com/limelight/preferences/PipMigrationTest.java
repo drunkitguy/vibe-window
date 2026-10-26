@@ -155,6 +155,8 @@ public class PipMigrationTest {
         assertEquals("Return to stream", ret.getTitle().toString());
         assertTrue(pip.isChecked());
         assertTrue(ret.isChecked());
+        assertFalse("No icon space, like every other row", pip.isIconSpaceReserved());
+        assertFalse(ret.isIconSpaceReserved());
         String info = fragment.getString(R.string.summary_checkbox_enable_pip);
         assertTrue(info.contains("small window"));
         assertTrue(info.contains("session keeps running on the PC"));

@@ -50,6 +50,7 @@ import com.limelight.utils.MouseModeOption;
 import com.limelight.utils.NetHelper;
 import com.limelight.utils.PanZoomHandler;
 import com.limelight.utils.PerformanceDataTracker;
+import com.limelight.utils.PipParams;
 import com.limelight.utils.ReturnToStream;
 import com.limelight.utils.ServerHelper;
 import com.limelight.utils.ShortcutHelper;
@@ -196,6 +197,8 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
     private boolean surfaceCreated = false;
     private boolean attemptedConnection = false;
     private int suppressPipRefCount = 0;
+    // How the stream ends, for Return to stream
+    private final ReturnToStream.StreamTracker returnTracker = new ReturnToStream.StreamTracker();
     private String pcName;
     private String appName;
     private NvApp app;
@@ -1298,13 +1301,18 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
         int top = viewLocation[1];
         int width = view.getWidth();
         int height = view.getHeight();
-        Rational aspectRatio = new Rational(width, height);
-        hint = new Rect(left, top, left + width, top + height);
+        PictureInPictureParams.Builder builder = new PictureInPictureParams.Builder();
 
-        PictureInPictureParams.Builder builder =
-                new PictureInPictureParams.Builder()
-                        .setAspectRatio(aspectRatio)
-                        .setSourceRectHint(hint);
+        // Android refuses a ratio outside 1:2.39 to 2.39:1 (an ultrawide or tall stream) or
+        // 0/0 (not laid out yet): clamp it, and give the view as the source only if it fits
+        Rational aspectRatio = PipParams.aspectRatio(width, height);
+        if (aspectRatio != null) {
+            builder.setAspectRatio(aspectRatio);
+            if (PipParams.isExact(width, height)) {
+                hint = new Rect(left, top, left + width, top + height);
+                builder.setSourceRectHint(hint);
+            }
+        }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             builder.setAutoEnterEnabled(autoEnter);
@@ -1324,10 +1332,6 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
         }
 
         return builder.build();
-    }
-
-    private boolean isInPipMode() {
-        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && isInPictureInPictureMode();
     }
 
     /** No mini player while the game menu or a dialog is up; it comes back once it closes. */
@@ -1353,7 +1357,12 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
         boolean autoEnter = connected && suppressPipRefCount == 0;
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            setPictureInPictureParams(getPictureInPictureParams(autoEnter));
+            try {
+                setPictureInPictureParams(getPictureInPictureParams(autoEnter));
+            } catch (IllegalArgumentException | IllegalStateException e) {
+                // Never let the mini player stop a stream
+                e.printStackTrace();
+            }
         }
         else {
             autoEnterPip = autoEnter;
@@ -1409,7 +1418,11 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
     public boolean onPictureInPictureRequested() {
         // Enter PiP when requested unless we're on Android 12 which supports auto-enter.
         if (autoEnterPip && Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
-            enterPictureInPictureMode(getPictureInPictureParams(false));
+            try {
+                enterPictureInPictureMode(getPictureInPictureParams(false));
+            } catch (IllegalArgumentException | IllegalStateException e) {
+                e.printStackTrace();
+            }
         }
         return true;
     }
@@ -1792,9 +1805,10 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
         }
 
         if (conn != null) {
-            // Return to stream: remember a stream that only went to the background (or whose
-            // mini player was closed); a quit, disconnect, back or error forgets it
-            ReturnToStream.onStreamStopped(this, connected, isFinishing(), isInPipMode(),
+            // Return to stream: remember a stream that only went to the background (the user
+            // left, the screen went off or the mini player was closed); a quit, disconnect,
+            // back or error forgets it. Game is noHistory, so it is finishing here either way.
+            returnTracker.onStop(this, connected, displayedFailureDialog,
                     getIntent().getStringExtra(EXTRA_PC_UUID), appId, appName);
 
             int videoFormat = decoderRenderer.getActiveVideoFormat();
@@ -1977,6 +1991,7 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
 
                     // Quit
                     case KeyEvent.KEYCODE_Q:
+                        returnTracker.markEndedByUser();
                         finish();
                         break;
 
@@ -4008,12 +4023,23 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
         }
     }
 
+    /**
+     * Every finish() of ours ends the stream on purpose (menu, keys, the controller quit combo,
+     * errors). Leaving the app finishes Game too (noHistory) but not through here.
+     */
+    @Override
+    public void finish() {
+        returnTracker.markEndedByUser();
+        super.finish();
+    }
+
     @Override
     public void onBackPressed() {
         if(prefConfig.enableBackMenu){
             showGameMenu(null);
             return;
         }
+        returnTracker.markEndedByUser();
         super.onBackPressed();
     }
 
@@ -4254,6 +4280,7 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
         if (prefConfig.smartClipboardSync) {
             getClipboard(-1);
         }
+        returnTracker.markEndedByUser();
         finish();
     }
 
@@ -4270,6 +4297,7 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
 
         builder.setPositiveButton(getString(R.string.yes), (dialog, which) -> {
             quitOnStop = true;
+            returnTracker.markEndedByUser();
             dialog.dismiss();
             finish();
         });
