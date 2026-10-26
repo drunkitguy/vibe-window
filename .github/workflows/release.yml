@@ -90,6 +90,7 @@ jobs:
             --tests 'com.limelight.ui.*' \
             --tests 'com.limelight.preferences.*' \
             --tests 'com.limelight.PcViewUiTest' \
+            --tests 'com.limelight.ReturnToStreamUiTest' \
             --tests 'com.limelight.binding.video.*' \
             --tests 'com.limelight.binding.input.*' \
             --tests 'com.limelight.utils.*'
@@ -176,6 +177,12 @@ jobs:
             Install: download the APK below, open it on the device and allow installs from your browser or file manager. Verify with the `.sha256` file if you like.
 
             Defaults: Auto resolution and frame rate (match the display), virtual display on, "Show only the app window" on, frame pacing Balanced, Motion on.
+
+            **New in 1.4.9**
+
+            - Mini player: leaving the app during a stream now keeps it playing in a small picture-in-picture window. Tap it to go back to full screen with your controls; closing it ends the stream on this device while the session keeps running on the PC. It never opens while the in-stream menu or a dialog is up. On by default (also for saved profiles, once); turn it off with Mini player in Settings, App.
+            - Return to stream: coming back to the app after leaving a stream (or closing the mini player) goes straight back into that stream instead of the app list, when the PC is online and the game is still running there, within 30 minutes. Quit Session, Disconnect, Back and connection errors never bring you back. On by default; turn it off with Return to stream in Settings, App.
+            - Leaving the mini player (or rotating the screen) no longer shows an on-screen controller you had hidden.
 
             **New in 1.4.8**
 

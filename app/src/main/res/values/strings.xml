@@ -305,8 +305,11 @@
     <string name="suffix_osc_opacity">%</string>
 
     <string name="category_ui_settings">UI Settings</string>
-    <string name="title_checkbox_enable_pip">Enable Picture-in-Picture observer mode</string>
-    <string name="summary_checkbox_enable_pip">Allows the stream to be viewed (but not controlled) while multitasking</string>
+    <string name="title_checkbox_enable_pip">Mini player</string>
+    <string name="summary_checkbox_enable_pip">When you leave the app during a stream, the stream keeps playing in a small window. Tap the window to go back to full screen, where your controls work again; while it is small, controls and touch input are not sent to the PC. Closing the small window ends the stream on this device, but the session keeps running on the PC.</string>
+    <string name="title_checkbox_return_to_stream">Return to stream</string>
+    <string name="summary_checkbox_return_to_stream">When you leave the app during a stream (or close the mini player) and come back within 30 minutes, you go straight back into that stream instead of the app list. This happens only when the PC is online and the game is still running there. Quitting or disconnecting from the menu, or a connection error, never brings you back.</string>
+    <string name="return_to_stream_toast">Returning to %1$s</string>
     <string name="title_language_list">Language</string>
     <string name="summary_language_list">Language to use for Artemis</string>
     <string name="title_checkbox_small_icon_mode">Use small box art</string>

@@ -50,6 +50,7 @@ import com.limelight.utils.MouseModeOption;
 import com.limelight.utils.NetHelper;
 import com.limelight.utils.PanZoomHandler;
 import com.limelight.utils.PerformanceDataTracker;
+import com.limelight.utils.ReturnToStream;
 import com.limelight.utils.ServerHelper;
 import com.limelight.utils.ShortcutHelper;
 import com.limelight.utils.SpinnerDialog;
@@ -1245,8 +1246,15 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
 
                 // Restore overlays to previous state when leaving PiP
 
+                // refreshLayout() above recreated the on-screen controller visible: keep it
+                // hidden if the user hid it
                 if (virtualController != null) {
-                    virtualController.show();
+                    if (prefConfig.onscreenController) {
+                        virtualController.show();
+                    }
+                    else {
+                        virtualController.hide();
+                    }
                 }
 
                 if (keyBoardController != null && keyBoardController.shown) {
@@ -1316,6 +1324,25 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
         }
 
         return builder.build();
+    }
+
+    private boolean isInPipMode() {
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && isInPictureInPictureMode();
+    }
+
+    /** No mini player while the game menu or a dialog is up; it comes back once it closes. */
+    public void suppressPipWhileShown(android.app.Dialog dialog) {
+        if (dialog == null) {
+            return;
+        }
+        suppressPipRefCount++;
+        updatePipAutoEnter();
+        dialog.setOnDismissListener(d -> {
+            suppressPipRefCount--;
+            if (!isFinishing()) {
+                updatePipAutoEnter();
+            }
+        });
     }
 
     public void updatePipAutoEnter() {
@@ -1765,6 +1792,11 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
         }
 
         if (conn != null) {
+            // Return to stream: remember a stream that only went to the background (or whose
+            // mini player was closed); a quit, disconnect, back or error forgets it
+            ReturnToStream.onStreamStopped(this, connected, isFinishing(), isInPipMode(),
+                    getIntent().getStringExtra(EXTRA_PC_UUID), appId, appName);
+
             int videoFormat = decoderRenderer.getActiveVideoFormat();
 
             displayedFailureDialog = true;
@@ -4246,6 +4278,7 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
 
         AlertDialog dialog = builder.create();
         dialog.show();
+        suppressPipWhileShown(dialog);
     }
 
     @Override

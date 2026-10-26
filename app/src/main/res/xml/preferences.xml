@@ -205,10 +205,16 @@
         android:title="@string/category_quick_app"
         app:iconSpaceReserved="false">
         <CheckBoxPreference
-            android:defaultValue="false"
+            android:defaultValue="true"
             android:key="checkbox_enable_pip"
             android:summary="@string/summary_checkbox_enable_pip"
             android:title="@string/title_checkbox_enable_pip"
+            app:iconSpaceReserved="true" />
+        <CheckBoxPreference
+            android:defaultValue="true"
+            android:key="checkbox_return_to_stream"
+            android:summary="@string/summary_checkbox_return_to_stream"
+            android:title="@string/title_checkbox_return_to_stream"
             app:iconSpaceReserved="false" />
         <CheckBoxPreference
             android:defaultValue="false"

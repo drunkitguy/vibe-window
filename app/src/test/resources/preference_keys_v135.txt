@@ -2,6 +2,7 @@
 # Generated from res/xml/preferences.xml at de0b1ec (1.3.5). Do not edit.
 # 1.4.3: checkbox_gamepad_motion_fallback defaults to true on purpose (motion on by default); nothing else changed.
 # 1.4.8: list_back_button_mode (Back button, default android) is added on purpose; nothing else changed.
+# 1.4.9: checkbox_enable_pip (Mini player) defaults to true on purpose, and checkbox_return_to_stream (default true) is added on purpose; nothing else changed.
 analog_scrolling	List	right	@array/analog_scrolling_values	checkbox_mouse_emulation	-
 balance_shift	SeekBar	50	-	-	min=-0;max=100;step=1;divisor=;keyStep=
 category_advanced_settings	Category	-	-	-	-
@@ -41,7 +42,7 @@ checkbox_enable_perf_overlay	CheckBox	false	-	-	-
 checkbox_enable_perf_overlay_bottom	CheckBox	false	-	checkbox_enable_perf_overlay	-
 checkbox_enable_perf_overlay_lite	CheckBox	false	-	checkbox_enable_perf_overlay	-
 checkbox_enable_perf_overlay_lite_dialog	CheckBox	false	-	checkbox_enable_perf_overlay_lite	-
-checkbox_enable_pip	CheckBox	false	-	-	-
+checkbox_enable_pip	CheckBox	true	-	-	-
 checkbox_enable_post_stream_toast	CheckBox	false	-	-	-
 checkbox_enable_quit_dialog	CheckBox	true	-	-	-
 checkbox_enable_rumble	CheckBox	true	-	-	-
@@ -78,6 +79,7 @@ checkbox_reduce_refresh_rate	CheckBox	false	-	-	-
 checkbox_remember_mouse_mode	CheckBox	false	-	checkbox_mouse_emulation	-
 checkbox_remember_zoom_pan	CheckBox	false	-	-	-
 checkbox_resume_without_confirm	CheckBox	false	-	-	-
+checkbox_return_to_stream	CheckBox	true	-	-	-
 checkbox_right_alt_as_meta	CheckBox	false	-	-	-
 checkbox_show_guide_button	CheckBox	true	-	checkbox_show_onscreen_controls	-
 checkbox_show_onscreen_controls	CheckBox	false	-	-	-

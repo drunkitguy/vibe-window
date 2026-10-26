@@ -87,7 +87,12 @@ public class PreferenceConfiguration {
     private static final String SHOW_GUIDE_BUTTON_PREF_STRING = "checkbox_show_guide_button";
     private static final String LEGACY_DISABLE_FRAME_DROP_PREF_STRING = "checkbox_disable_frame_drop";
     private static final String ENABLE_HDR_PREF_STRING = "checkbox_enable_hdr";
-    private static final String ENABLE_PIP_PREF_STRING = "checkbox_enable_pip";
+    static final String ENABLE_PIP_PREF_STRING = "checkbox_enable_pip";
+    // 1.4.9: the mini player (picture-in-picture) is on by default, set once for existing installs
+    static final String PIP_DEFAULT_ON_PREF_STRING = "pip_default_on_v149";
+    // 1.4.9: coming back to the app after leaving a stream goes straight back into it
+    public static final String RETURN_TO_STREAM_PREF_STRING = "checkbox_return_to_stream";
+    public static final boolean DEFAULT_RETURN_TO_STREAM = true;
     private static final String ENABLE_PERF_OVERLAY_STRING = "checkbox_enable_perf_overlay";
     private static final String ENABLE_PERF_LOGGING = "checkbox_enable_perf_logging";
     private static final String BIND_ALL_USB_STRING = "checkbox_usb_bind_all";
@@ -204,7 +209,7 @@ public class PreferenceConfiguration {
     private static final boolean ONLY_L3_R3_DEFAULT = false;
     private static final boolean SHOW_GUIDE_BUTTON_DEFAULT = true;
     private static final boolean DEFAULT_ENABLE_HDR = false;
-    private static final boolean DEFAULT_ENABLE_PIP = false;
+    private static final boolean DEFAULT_ENABLE_PIP = true;
     private static final boolean DEFAULT_ENABLE_PERF_OVERLAY = false;
     private static final boolean DEFAULT_PERF_OVERLAY_BOTTOM = false;
     private static final boolean DEFAULT_ENABLE_PERF_LOGGING = false;
@@ -350,6 +355,7 @@ public class PreferenceConfiguration {
     public boolean autoInvertVideoResolution;
     public int resolutionScaleFactor;
     public boolean resumeWithoutConfirm;
+    public boolean returnToStream;
     //竖屏模式
     public boolean autoOrientation;
     //虚拟屏幕键盘按键
@@ -803,6 +809,55 @@ private static int getFramePacingValue(Context context) {
         restoreStreamingDefaultsOf122(context);
         restoreProfilesOf122(context);
         migrateMotionDefaultOn(context);
+        migratePipDefaultOn(context);
+    }
+
+    /**
+     * Whether this device can show a stream in picture-in-picture (the same check as the
+     * settings screen, which hides the Mini player row otherwise). Fire OS is left out because
+     * of its store guidelines.
+     */
+    public static boolean isPipSupported(Context context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            return false;
+        }
+        PackageManager pm = context.getPackageManager();
+        return pm.hasSystemFeature("android.software.picture_in_picture") &&
+                !pm.hasSystemFeature("com.amazon.software.fireos");
+    }
+
+    /**
+     * Turns the mini player (checkbox_enable_pip) on, once, for the base settings and every
+     * saved profile. Later choices are kept. The flag is only set once the profiles were saved.
+     *
+     * @return true if the migration ran
+     */
+    public static boolean migratePipDefaultOn(Context context) {
+        return migratePipDefaultOn(PreferenceManager.getDefaultSharedPreferences(context),
+                ProfilesManager.getInstance(), context);
+    }
+
+    static boolean migratePipDefaultOn(SharedPreferences prefs, ProfilesManager manager, Context context) {
+        if (prefs.getBoolean(PIP_DEFAULT_ON_PREF_STRING, false)) {
+            return false;
+        }
+        boolean profilesChanged = false;
+        for (com.limelight.profiles.SettingsProfile profile : manager.getProfiles()) {
+            java.util.Map<String, Object> options = profile.getOptions();
+            if (options != null && !Boolean.TRUE.equals(options.get(ENABLE_PIP_PREF_STRING))) {
+                options.put(ENABLE_PIP_PREF_STRING, true);
+                profilesChanged = true;
+            }
+        }
+        if (profilesChanged && !manager.save(context)) {
+            // Try again at the next start
+            return true;
+        }
+        prefs.edit()
+                .putBoolean(PIP_DEFAULT_ON_PREF_STRING, true)
+                .putBoolean(ENABLE_PIP_PREF_STRING, true)
+                .apply();
+        return true;
     }
 
     /**
@@ -1338,7 +1393,8 @@ private static int getFramePacingValue(Context context) {
         config.onlyL3R3 = prefs.getBoolean(ONLY_L3_R3_PREF_STRING, ONLY_L3_R3_DEFAULT);
         config.showGuideButton = prefs.getBoolean(SHOW_GUIDE_BUTTON_PREF_STRING, SHOW_GUIDE_BUTTON_DEFAULT);
         config.enableHdr = prefs.getBoolean(ENABLE_HDR_PREF_STRING, DEFAULT_ENABLE_HDR) && !isShieldAtvFirmwareWithBrokenHdr();
-        config.enablePip = prefs.getBoolean(ENABLE_PIP_PREF_STRING, DEFAULT_ENABLE_PIP);
+        // On by default since 1.4.9, so only where the device has picture-in-picture at all
+        config.enablePip = prefs.getBoolean(ENABLE_PIP_PREF_STRING, DEFAULT_ENABLE_PIP) && isPipSupported(context);
         config.enablePerfOverlay = prefs.getBoolean(ENABLE_PERF_OVERLAY_STRING, DEFAULT_ENABLE_PERF_OVERLAY);
         config.enablePerfLogging = prefs.getBoolean(ENABLE_PERF_LOGGING, DEFAULT_ENABLE_PERF_LOGGING);
         config.enablePerfOverlayLite = prefs.getBoolean("checkbox_enable_perf_overlay_lite",DEFAULT_ENABLE_PERF_OVERLAY);
@@ -1362,6 +1418,7 @@ private static int getFramePacingValue(Context context) {
         config.resolutionScaleFactor = prefs.getInt(RESOLUTION_SCALE_FACTOR_PREF_STRING, DEFAULT_RESOLUTION_SCALE_FACTOR);
 
         config.resumeWithoutConfirm = prefs.getBoolean(RESUME_WITHOUT_CONFIRM_PREF_STRING, DEFAULT_RESUME_WITHOUT_CONFIRM);
+        config.returnToStream = prefs.getBoolean(RETURN_TO_STREAM_PREF_STRING, DEFAULT_RETURN_TO_STREAM);
 
         config.enableKeyboard = prefs.getBoolean(CHECKBOX_ENABLE_KEYBOARD,false);
 

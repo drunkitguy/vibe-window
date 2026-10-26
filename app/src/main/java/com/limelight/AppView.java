@@ -30,6 +30,7 @@ import com.limelight.preferences.PreferenceConfiguration;
 import com.limelight.profiles.ProfilesManager;
 import com.limelight.utils.CacheHelper;
 import com.limelight.utils.Dialog;
+import com.limelight.utils.ReturnToStream;
 import com.limelight.utils.ServerHelper;
 import com.limelight.utils.ShortcutHelper;
 import com.limelight.utils.SpinnerDialog;
@@ -95,6 +96,8 @@ public class AppView extends AppCompatActivity implements LibraryLayoutControlle
     private int lastRunningAppId;
     private boolean suspendGridUpdates;
     private boolean inForeground;
+    // When this screen last came to the front (Return to stream)
+    private long resumedAt;
     private boolean showHiddenApps;
     private HashSet<Integer> hiddenAppIds = new HashSet<>();
     // Apps hidden during this visit stay listed (dimmed) until the list is reopened,
@@ -264,6 +267,18 @@ public class AppView extends AppCompatActivity implements LibraryLayoutControlle
 
                 // Don't care about other computers
                 if (!details.uuid.equalsIgnoreCase(uuidString)) {
+                    return;
+                }
+
+                // Return to stream: go back into a stream that only went to the background
+                final NvApp returnApp = ReturnToStream.take(AppView.this, details, resumedAt);
+                if (returnApp != null) {
+                    AppView.this.runOnUiThread(() -> {
+                        if (inForeground && managerBinder != null) {
+                            ReturnToStream.launch(AppView.this, returnApp, details, managerBinder,
+                                    prefConfig.useVirtualDisplay);
+                        }
+                    });
                     return;
                 }
 
@@ -1121,6 +1136,7 @@ public class AppView extends AppCompatActivity implements LibraryLayoutControlle
         UiHelper.showDecoderCrashDialog(this);
 
         inForeground = true;
+        resumedAt = System.currentTimeMillis();
         startComputerUpdates();
 
         ExtendedFloatingActionButton profilesButton = findViewById(R.id.profilesButton);

@@ -1,6 +1,7 @@
 # key	type	value written by PreferenceManager.setDefaultValues on a clean install, 1.3.5 (de0b1ec). Do not edit.
 # 1.4.3: checkbox_gamepad_motion_fallback defaults to true on purpose (motion on by default); nothing else changed.
 # 1.4.8: list_back_button_mode (Back button, default android) is added on purpose; nothing else changed.
+# 1.4.9: checkbox_enable_pip (Mini player) defaults to true on purpose, and checkbox_return_to_stream (default true) is added on purpose; nothing else changed.
 analog_scrolling	String	right
 checkbox_absolute_mouse_mode	Boolean	false
 checkbox_auto_invert_video_resolution	Boolean	true
@@ -26,7 +27,7 @@ checkbox_enable_perf_overlay	Boolean	false
 checkbox_enable_perf_overlay_bottom	Boolean	false
 checkbox_enable_perf_overlay_lite	Boolean	false
 checkbox_enable_perf_overlay_lite_dialog	Boolean	false
-checkbox_enable_pip	Boolean	false
+checkbox_enable_pip	Boolean	true
 checkbox_enable_post_stream_toast	Boolean	false
 checkbox_enable_quit_dialog	Boolean	true
 checkbox_enable_rumble	Boolean	true
@@ -63,6 +64,7 @@ checkbox_reduce_refresh_rate	Boolean	false
 checkbox_remember_mouse_mode	Boolean	false
 checkbox_remember_zoom_pan	Boolean	false
 checkbox_resume_without_confirm	Boolean	false
+checkbox_return_to_stream	Boolean	true
 checkbox_right_alt_as_meta	Boolean	false
 checkbox_show_guide_button	Boolean	true
 checkbox_show_onscreen_controls	Boolean	false

@@ -142,6 +142,8 @@ public class GameMenu implements Game.GameMenuCallbacks {
             currentDialog.dismiss();
         }
         currentDialog = builder.show();
+        // No mini player while a menu is open
+        game.suppressPipWhileShown(currentDialog);
 
         Window window = currentDialog.getWindow();
 
@@ -313,10 +315,10 @@ public class GameMenu implements Game.GameMenuCallbacks {
                     if (serverCmds.isEmpty()) {
                         int themeResId = game.getApplicationInfo().theme;
                         Context themedContext = new ContextThemeWrapper(dialogScreenContext, themeResId);
-                        new AlertDialog.Builder(themedContext)
+                        game.suppressPipWhileShown(new AlertDialog.Builder(themedContext)
                                 .setTitle(R.string.game_dialog_title_server_cmd_empty)
                                 .setMessage(R.string.game_dialog_message_server_cmd_empty)
-                                .show();
+                                .show());
                     } else {
                         hideMenu();
                         this.showServerCmd(serverCmds);

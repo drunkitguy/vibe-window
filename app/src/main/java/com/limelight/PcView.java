@@ -32,6 +32,7 @@ import com.limelight.ui.HostGridLayout;
 import com.limelight.ui.SplitLayout;
 import com.limelight.utils.Dialog;
 import com.limelight.utils.HelpLauncher;
+import com.limelight.utils.ReturnToStream;
 import com.limelight.utils.ServerHelper;
 import com.limelight.utils.ShortcutHelper;
 import com.limelight.utils.UiHelper;
@@ -131,6 +132,8 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
     private ShortcutHelper shortcutHelper;
     private ComputerManagerService.ComputerManagerBinder managerBinder;
     private boolean freezeUpdates, runningPolling, inForeground, completeOnCreateCalled;
+    // When this screen last came to the front (Return to stream)
+    private long resumedAt;
     private ComputerDetails.AddressTuple pendingPairingAddress;
     private String pendingPairingPin, pendingPairingPassphrase;
     private final ServiceConnection serviceConnection = new ServiceConnection() {
@@ -993,6 +996,17 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
                 @Override
                 public void notifyComputerUpdated(final ComputerDetails details) {
                     if (!freezeUpdates) {
+                        // Return to stream: go back into a stream that only went to the background
+                        final NvApp returnApp = ReturnToStream.take(PcView.this, details, resumedAt);
+                        if (returnApp != null) {
+                            PcView.this.runOnUiThread(() -> {
+                                if (inForeground && managerBinder != null) {
+                                    ReturnToStream.launch(PcView.this, returnApp, details, managerBinder,
+                                            PreferenceConfiguration.readPreferences(PcView.this).useVirtualDisplay);
+                                }
+                            });
+                        }
+
                         PcView.this.runOnUiThread(new Runnable() {
                             @Override
                             public void run() {
@@ -1082,6 +1096,7 @@ public class PcView extends AppCompatActivity implements AdapterFragmentCallback
         userNavigated = false;
 
         inForeground = true;
+        resumedAt = System.currentTimeMillis();
         startComputerUpdates();
 
         // A stream may have changed settings behind the panel: rebuild only if they differ
