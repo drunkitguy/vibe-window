@@ -176,6 +176,14 @@ jobs:
 
             Defaults: Auto resolution and frame rate (match the display), virtual display on, "Show only the app window" on, frame pacing Balanced, Motion on.
 
+            **New in 1.4.4**
+
+            - Send special keys is now in the in-stream quick menu itself, right after "Toggle keyboard" (it also stays under Advanced). Open the quick menu from a controller by tapping Start and then holding Start.
+            - The special keys list has "Ctrl + ,", the usual shortcut for an app's settings window.
+            - Key sequences: an entry of a custom key file can list "steps" that are sent one after another, such as "VK_LCONTROL+VK_OEM_COMMA", "wait:1000", "VK_LSHIFT+VK_TAB" (150 ms apart plus the waits; up to 32 steps, 5 s per wait, 10 s in all). Files with only "keys" work as before. To use one, copy the file to the device and pick it in Settings, All settings, MISC, Import Custom Keys (importing replaces the current custom keys); the entries then appear under Send special keys. An example with "Open settings, Controls page" and "Close dialog (Esc)" is docs/key-sequence-example.json in the source repository; the number of Shift+Tab steps may need adjusting for your app.
+            - Motion: on devices without a gyroscope and accelerometer, motion emulation stays off (1.4.3 turned it on there with no way to turn it off, which showed a controller type notice and remapped Select+LB in every stream).
+            - Motion, accurately: while Motion is on, the PC asks for motion during the whole stream, so this device sends its sensor readings (about 200 small packets a second) in every stream. Turn Motion off to stream exactly as in 1.4.2.
+
             **New in 1.4.3**
 
             - Motion: a new Off/On row in Settings, Touch and controls, Motion. On sends this device's gyroscope and accelerometer to the PC when your controller has no motion sensors of its own, and lets a controller with its own sensors use them. It is now on by default, also for existing installs and saved profiles (once; if you turn it off afterwards, it stays off).
