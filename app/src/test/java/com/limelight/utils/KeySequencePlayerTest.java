@@ -142,4 +142,28 @@ public class KeySequencePlayerTest {
         assertEquals(1 + 4, sendTimes.size());
         assertEveryKeyReleased();
     }
+
+    @Test
+    public void readinessFollowsWhereTheMenuIsShown() {
+        // Menu on the stream's own screen: wait for the stream window's focus
+        assertTrue(KeySequencePlayer.streamReady(true, true, false));
+        assertFalse(KeySequencePlayer.streamReady(true, false, false));
+        // Menu on another screen (external display control): the stream window never gets
+        // the focus back from it, so wait for the menu dialog to close
+        assertTrue(KeySequencePlayer.streamReady(false, false, false));
+        assertFalse(KeySequencePlayer.streamReady(false, false, true));
+    }
+
+    @Test
+    public void onAnExternalDisplayTheSequenceStartsOnceTheMenuCloses() {
+        final boolean[] menuShowing = {true};
+        player = new KeySequencePlayer(handler, chord -> sendTimes.add(SystemClock.uptimeMillis() - start),
+                () -> alive, () -> KeySequencePlayer.streamReady(false, false, menuShowing[0]));
+        player.play(sample());
+        advance(300);
+        assertTrue(sendTimes.isEmpty());
+        menuShowing[0] = false;
+        advance(2000);
+        assertEquals(4, sendTimes.size());
+    }
 }

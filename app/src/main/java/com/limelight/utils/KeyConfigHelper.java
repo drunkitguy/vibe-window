@@ -215,4 +215,97 @@ public class KeyConfigHelper {
         long[] times = sendTimesMs(steps);
         return times.length == 0 ? 0 : times[times.length - 1];
     }
+
+    /** One menu entry of a custom key file. */
+    public static final class Entry {
+        public final String name;
+        public final List<Step> steps;
+
+        Entry(String name, List<Step> steps) {
+            this.name = name;
+            this.steps = steps;
+        }
+    }
+
+    /** The usable entries of a file, in order, and how many were skipped as invalid. */
+    public static final class Entries {
+        public final List<Entry> entries;
+        public final int rejected;
+
+        Entries(List<Entry> entries, int rejected) {
+            this.entries = entries;
+            this.rejected = rejected;
+        }
+    }
+
+    private static boolean isEmpty(List<String> list) {
+        return list == null || list.isEmpty();
+    }
+
+    /**
+     * Every entry of a file on its own: an invalid entry is skipped and counted, the others
+     * stay. An entry without keys and without steps is kept and sends nothing, as up to 1.4.3.
+     */
+    public static Entries parseEntries(ShortcutFile file) {
+        List<Entry> entries = new ArrayList<>();
+        int rejected = 0;
+        if (file == null || file.data == null) {
+            return new Entries(entries, 0);
+        }
+        for (Shortcut sc : file.data) {
+            if (sc == null) {
+                rejected++;
+                continue;
+            }
+            if (isEmpty(sc.steps) && isEmpty(sc.keys)) {
+                entries.add(new Entry(sc.name, Collections.singletonList(Step.chord(new short[0]))));
+                continue;
+            }
+            try {
+                entries.add(new Entry(sc.name, parseSteps(sc)));
+            } catch (IllegalArgumentException e) {
+                rejected++;
+            }
+        }
+        return new Entries(entries, rejected);
+    }
+
+    /**
+     * Checks a file before it is imported. Returns null when it can be imported, otherwise
+     * why not. An entry with steps must also have keys: the on-screen keyboard only reads keys.
+     */
+    public static String validateForImport(String json) {
+        ShortcutFile file;
+        try {
+            file = parseShortcutFile(json);
+        } catch (RuntimeException e) {
+            return "not a custom key file (" + e.getMessage() + ")";
+        }
+        if (file == null || file.data == null) {
+            return "no \"data\" list";
+        }
+        for (int i = 0; i < file.data.size(); i++) {
+            Shortcut sc = file.data.get(i);
+            String label = sc == null || sc.name == null ? "entry " + (i + 1) : "\"" + sc.name + "\"";
+            if (sc == null) {
+                return label + " is empty";
+            }
+            if (!isEmpty(sc.steps) && isEmpty(sc.keys)) {
+                return label + " has steps but no keys; add keys with its first key combination for the on-screen keyboard";
+            }
+            if (isEmpty(sc.steps) && isEmpty(sc.keys)) {
+                continue;
+            }
+            try {
+                parseSteps(sc);
+                if (!isEmpty(sc.steps)) {
+                    // The on-screen keyboard sends keys; they must be valid keys too
+                    parseChord(sc.keys);
+                }
+            } catch (IllegalArgumentException e) {
+                return label + ": " + e.getMessage();
+            }
+        }
+        return null;
+    }
 }

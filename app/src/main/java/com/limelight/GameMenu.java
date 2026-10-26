@@ -65,18 +65,21 @@ public class GameMenu implements Game.GameMenuCallbacks {
     public GameMenu(Game game, Context dialogScreenContext) {
         this.game = game;
         this.dialogScreenContext = dialogScreenContext;
-        this.keySequencePlayer = createKeySequencePlayer(game);
+        this.keySequencePlayer = createKeySequencePlayer();
     }
 
     public GameMenu(Game game) {
         this(game, game);
     }
 
-    private static KeySequencePlayer createKeySequencePlayer(final Game game) {
+    private KeySequencePlayer createKeySequencePlayer() {
         return new KeySequencePlayer(new Handler(Looper.getMainLooper()),
                 keys -> game.sendKeys(keys),
                 () -> !game.isFinishing() && !game.isDestroyed(),
-                game::hasWindowFocus);
+                // On an external display the stream window never gets the focus back from
+                // the menu: wait for the menu dialog to close instead, as runWithGameFocus does
+                () -> KeySequencePlayer.streamReady(dialogScreenContext instanceof Game,
+                        game.hasWindowFocus(), currentDialog != null && currentDialog.isShowing()));
     }
 
     private String getString(int id) {
@@ -218,21 +221,22 @@ public class GameMenu implements Game.GameMenuCallbacks {
 
         if(!TextUtils.isEmpty(value)){
             try {
-                KeyConfigHelper.ShortcutFile shortcutFile = KeyConfigHelper.parseShortcutFile(value);
-                if (shortcutFile != null && shortcutFile.data != null && !shortcutFile.data.isEmpty()) {
-                    List<KeyConfigHelper.Shortcut> data = shortcutFile.data;
-                    for (KeyConfigHelper.Shortcut sc : data) {
-                        final List<KeyConfigHelper.Step> steps = KeyConfigHelper.parseSteps(sc);
-                        MenuOption option;
-                        if (KeyConfigHelper.isSequence(steps)) {
-                            // Played after the menu has closed and the stream has the focus again
-                            option = new MenuOption(sc.name, () -> keySequencePlayer.play(steps));
-                        } else {
-                            final short[] keyCodes = steps.get(0).chord;
-                            option = new MenuOption(sc.name, () -> sendKeys(keyCodes));
-                        }
-                        options.add(option);
+                // Each entry on its own: an invalid one is skipped, the rest stay usable
+                KeyConfigHelper.Entries parsed = KeyConfigHelper.parseEntries(KeyConfigHelper.parseShortcutFile(value));
+                for (KeyConfigHelper.Entry entry : parsed.entries) {
+                    final List<KeyConfigHelper.Step> steps = entry.steps;
+                    MenuOption option;
+                    if (KeyConfigHelper.isSequence(steps)) {
+                        // Played after the menu has closed and the stream has the focus again
+                        option = new MenuOption(entry.name, () -> keySequencePlayer.play(steps));
+                    } else {
+                        final short[] keyCodes = steps.get(0).chord;
+                        option = new MenuOption(entry.name, () -> sendKeys(keyCodes));
                     }
+                    options.add(option);
+                }
+                if (parsed.rejected > 0) {
+                    Toast.makeText(game, getString(R.string.wrong_import_format), Toast.LENGTH_SHORT).show();
                 }
             } catch (Exception e) {
                 e.printStackTrace();

@@ -48,6 +48,15 @@ public final class KeySequencePlayer {
         this.focused = focused;
     }
 
+    /**
+     * Whether a sequence may start: with the menu on the stream's own screen, once the stream
+     * window has the focus again; with the menu on another screen (external display control),
+     * once the menu dialog is no longer showing. Mirrors GameMenu.runWithGameFocus.
+     */
+    public static boolean streamReady(boolean menuOnStreamScreen, boolean streamWindowFocused, boolean menuShowing) {
+        return menuOnStreamScreen ? streamWindowFocused : !menuShowing;
+    }
+
     public boolean isPlaying() {
         return token != null;
     }

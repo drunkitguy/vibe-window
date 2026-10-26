@@ -118,4 +118,53 @@ public class KeyConfigHelperTest {
         assertTrue(KeyConfigHelper.isSequence(KeyConfigHelper.parseSteps(parsed.data.get(0))));
         assertFalse(KeyConfigHelper.isSequence(KeyConfigHelper.parseSteps(parsed.data.get(1))));
     }
+
+    @Test
+    public void anInvalidEntrySkipsOnlyItself() {
+        KeyConfigHelper.ShortcutFile file = KeyConfigHelper.parseShortcutFile("{\"data\":[" +
+                "{\"name\":\"Esc\",\"keys\":[\"VK_ESCAPE\"]}," +
+                "{\"name\":\"Broken\",\"keys\":[\"VK_NOT_A_KEY\"]}," +
+                "{\"name\":\"Nothing\",\"keys\":[]}," +
+                "{\"name\":\"Seq\",\"keys\":[\"VK_ESCAPE\"],\"steps\":[\"VK_ESCAPE\",\"VK_RETURN\"]}]}");
+        KeyConfigHelper.Entries parsed = KeyConfigHelper.parseEntries(file);
+        assertEquals(1, parsed.rejected);
+        assertEquals(3, parsed.entries.size());
+        assertEquals("Esc", parsed.entries.get(0).name);
+        assertEquals("Nothing", parsed.entries.get(1).name);
+        assertEquals("Seq", parsed.entries.get(2).name);
+        // Empty keys without steps stays a do-nothing entry, as up to 1.4.3
+        List<KeyConfigHelper.Step> nothing = parsed.entries.get(1).steps;
+        assertFalse(KeyConfigHelper.isSequence(nothing));
+        assertEquals(0, nothing.get(0).chord.length);
+        assertTrue(KeyConfigHelper.isSequence(parsed.entries.get(2).steps));
+    }
+
+    @Test
+    public void importValidation() {
+        assertNull(KeyConfigHelper.validateForImport(
+                "{\"data\":[{\"name\":\"Esc\",\"keys\":[\"VK_ESCAPE\"]},{\"name\":\"Nothing\",\"keys\":[]}]}"));
+        String stepsOnly = KeyConfigHelper.validateForImport(
+                "{\"data\":[{\"name\":\"Seq\",\"steps\":[\"VK_ESCAPE\",\"VK_RETURN\"]}]}");
+        assertTrue(stepsOnly, stepsOnly != null && stepsOnly.contains("\"Seq\"") && stepsOnly.contains("no keys"));
+        String badKey = KeyConfigHelper.validateForImport("{\"data\":[{\"name\":\"B\",\"keys\":[\"VK_NOPE\"]}]}");
+        assertTrue(badKey, badKey != null && badKey.contains("VK_NOPE"));
+        String badWait = KeyConfigHelper.validateForImport(
+                "{\"data\":[{\"name\":\"W\",\"keys\":[\"VK_ESCAPE\"],\"steps\":[\"VK_ESCAPE\",\"wait:9000\"]}]}");
+        assertTrue(badWait != null);
+        assertTrue(KeyConfigHelper.validateForImport("not json at all {") != null);
+        assertTrue(KeyConfigHelper.validateForImport("{}") != null);
+    }
+
+    @Test
+    public void theExampleFileCanBeImported() throws Exception {
+        for (String path : new String[] {"../docs/key-sequence-example.json", "docs/key-sequence-example.json"}) {
+            File file = new File(path);
+            if (file.isFile()) {
+                assertNull(KeyConfigHelper.validateForImport(
+                        new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8)));
+                return;
+            }
+        }
+        fail("docs/key-sequence-example.json not found");
+    }
 }
