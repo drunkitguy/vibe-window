@@ -176,12 +176,16 @@ jobs:
 
             Defaults: Auto resolution and frame rate (match the display), virtual display on, "Show only the app window" on, frame pacing Balanced, Motion on.
 
+            **Fixes in 1.4.6**
+
+            - Importing a custom key file with an empty "data" list clears the custom keys again (1.4.5 refused it); the import then says "Custom keys cleared". Only a file without a "data" list is refused.
+
             **Fixes in 1.4.5**
 
             - Motion: on devices without a gyroscope and accelerometer, saved profiles get motion emulation off too (once), so no profile brings back the controller type notice or the Select+LB remap there.
             - Key sequences also play when the in-stream menu is shown on the external display control screen; they start once the menu closes.
             - An invalid entry in a custom key file no longer hides the entries after it: only that entry is left out, with one notice. An entry with empty "keys" and no "steps" stays in the list and sends nothing, as before 1.4.4.
-            - Import Custom Keys checks the file first and refuses it, naming the entry and the reason, when an entry has "steps" but no "keys" (the on-screen keyboard only reads "keys"), uses an unknown key or a wait outside the limits, or when the file has no entries.
+            - Import Custom Keys checks the file first and refuses it, naming the entry and the reason, when an entry has "steps" but no "keys" (the on-screen keyboard only reads "keys"), uses an unknown key or a wait outside the limits, or when the file has no "data" list (an empty list clears the custom keys).
 
             **New in 1.4.4**
 
