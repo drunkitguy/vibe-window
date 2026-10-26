@@ -176,6 +176,10 @@ jobs:
 
             Defaults: Auto resolution and frame rate (match the display), virtual display on, "Show only the app window" on, frame pacing Balanced, Motion on.
 
+            **Fixes in 1.4.7**
+
+            - Import Custom Keys only accepts a JSON object with a "data" list. Other files, such as {} or an on-screen keyboard layout export picked by mistake, are refused and leave the custom keys as they were (1.4.6 imported them and cleared the keys). An empty "data" list still clears them.
+
             **Fixes in 1.4.6**
 
             - Importing a custom key file with an empty "data" list clears the custom keys again (1.4.5 refused it); the import then says "Custom keys cleared". Only a file without a "data" list is refused.
