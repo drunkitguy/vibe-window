@@ -400,6 +400,23 @@ H1a check 4 succeeded, else compile-checked in H1c. Fallback if the patch is ref
 script that finds the windows by title (`Eden - Screen 2 (DSMod aux)`) and sets style and
 position.
 
+### H1c (user on Windows, after H1a, H1b, T1)
+
+Some H1a checks only mean something on real Windows (wine does not enforce them): the owner-only
+staging DACL (`host/eden-duo/test/stage_test.cpp:165`) and cleanup of the staging dir after a
+failed load. On the user's Windows build of the patched fork:
+1. Build `host/eden-duo/test` with the Windows toolchain (MSYS2 `MINGW64` g++ with the Windows
+   lines of `run.sh`: `fake.dll`, `stage_test.exe`, `planted.dll`, `importer.dll`, all in one
+   folder) and run `stage_test.exe fake.dll importer.dll` with `planted.dll` next to it. Must pass.
+2. Run `tests.exe "[dsmod][module]"` from the MSVC build (`-DYUZU_TESTS=ON`). Must pass.
+3. Smoke run as in the H1c row: TotK package installed, notice page in the aux window, `.shot`
+   screenshots, a tap on the aux window keeps controller input.
+Send logs and screenshots back.
+
+Decision point: if a failed load leaves its `module-*` staging dir behind on real Windows,
+desktop eden-cli needs a `SweepStale` call at startup (today only Android calls
+`SetModuleCacheDirectory`). That becomes its own follow-up packet; H1c does not fix it.
+
 ### H2 (user on Windows, after H1c)
 
 apollo2-vibe needs no code if these hold (fact 5):
