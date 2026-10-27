@@ -1,4 +1,4 @@
-From c632508b6d41a491a9ec314b86a9b794903eec6c Mon Sep 17 00:00:00 2001
+From 7cc4197150bb3ff0e2226239988227c15342be90 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Tue, 27 Oct 2026 20:28:46 +0000
 Subject: [PATCH] yuzu_cmd: --window-rect and --aux-rect for a fixed two-window
@@ -23,9 +23,10 @@ before.
 The value parser is std-only (src/yuzu_cmd/window_rect.{h,cpp}) so it
 can be tested without SDL or the emulator. It keeps x+w and y+h within
 32767 (Win32's 16-bit window coordinates, and clear of SDL's
-SDL_WINDOWPOS_UNDEFINED/CENTERED encodings). --window-rect also needs
-at least the 640x360 minimum client size eden-cli sets afterwards. A
-bad value prints its reason and eden-cli exits with failure.
+SDL_WINDOWPOS_UNDEFINED/CENTERED encodings) and takes a minimum size:
+--window-rect passes the 640x360 minimum client size eden-cli sets
+afterwards, --aux-rect 1x1. A bad value prints its reason and eden-cli
+exits with failure.
 
 The aux window's creation log now reports its pixel size. The ledger
 lists emu_window_sdl3_gl.cpp and emu_window_sdl3_null.cpp as upstream
@@ -35,16 +36,16 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01XgyuSR8o8AbzxuWHYqLwsv
 ---
  .upstream/duo-touched.tsv                     |  2 +
- src/yuzu_cmd/dsmod_harness.cpp                | 58 +++++++++++++++++-
+ src/yuzu_cmd/dsmod_harness.cpp                | 54 +++++++++++++++-
  src/yuzu_cmd/dsmod_harness.h                  | 12 ++++
  src/yuzu_cmd/duo_cmd.cmake                    |  2 +
  .../emu_window/emu_window_sdl3_aux.cpp        | 15 ++++-
  .../emu_window/emu_window_sdl3_gl.cpp         |  8 ++-
  .../emu_window/emu_window_sdl3_null.cpp       |  7 ++-
  .../emu_window/emu_window_sdl3_vk.cpp         |  7 ++-
- src/yuzu_cmd/window_rect.cpp                  | 60 +++++++++++++++++++
- src/yuzu_cmd/window_rect.h                    | 30 ++++++++++
- 10 files changed, 195 insertions(+), 6 deletions(-)
+ src/yuzu_cmd/window_rect.cpp                  | 61 +++++++++++++++++++
+ src/yuzu_cmd/window_rect.h                    | 31 ++++++++++
+ 10 files changed, 193 insertions(+), 6 deletions(-)
  create mode 100644 src/yuzu_cmd/window_rect.cpp
  create mode 100644 src/yuzu_cmd/window_rect.h
 
@@ -69,7 +70,7 @@ index 44efb72..29b6343 100644
  upstream-hook	M	2	10	0	src/core/perf_stats.cpp
  upstream-hook	M	2	10	0	src/video_core/renderer_base.h
 diff --git a/src/yuzu_cmd/dsmod_harness.cpp b/src/yuzu_cmd/dsmod_harness.cpp
-index 5bc0f74..3099cb0 100644
+index 5bc0f74..5961102 100644
 --- a/src/yuzu_cmd/dsmod_harness.cpp
 +++ b/src/yuzu_cmd/dsmod_harness.cpp
 @@ -78,7 +78,9 @@ static void PrintHelp(const char* argv0) {
@@ -129,7 +130,7 @@ index 5bc0f74..3099cb0 100644
          {0, 0, 0, 0},
          // clang-format on
      };
-@@ -901,6 +935,28 @@ std::optional<SDL_AppResult> ParseCommandLine(Session& session, int argc, char**
+@@ -901,6 +935,24 @@ std::optional<SDL_AppResult> ParseCommandLine(Session& session, int argc, char**
              case 'S':
                  g_screenshot_prefix = optarg;
                  break;
@@ -137,17 +138,13 @@ index 5bc0f74..3099cb0 100644
 +            case 'A': {
 +                // Long-only: 'w' and 'A' are not in the short option string.
 +                std::string error;
-+                auto& rect = arg == 'w' ? g_window_rect : g_aux_rect;
-+                rect = ParseWindowRect(optarg, error);
++                const bool main_window = arg == 'w';
++                auto& rect = main_window ? g_window_rect : g_aux_rect;
 +                // eden-cli sets the main window's minimum size after placing it, which would
 +                // silently enlarge a smaller rect.
-+                if (rect && arg == 'w' &&
-+                    (rect->w < static_cast<int>(Layout::MinimumSize::Width) ||
-+                     rect->h < static_cast<int>(Layout::MinimumSize::Height))) {
-+                    rect.reset();
-+                    error = fmt::format("w and h must be at least {}x{}",
-+                                        Layout::MinimumSize::Width, Layout::MinimumSize::Height);
-+                }
++                rect = ParseWindowRect(
++                    optarg, main_window ? static_cast<int>(Layout::MinimumSize::Width) : 1,
++                    main_window ? static_cast<int>(Layout::MinimumSize::Height) : 1, error);
 +                if (!rect) {
 +                    std::cout << "Wrong format for option --" << long_options[option_index].name
 +                              << ": " << error << "\n";
@@ -345,10 +342,10 @@ index 7c3e2b2..9a91544 100644
      SetWindowIcon();
 diff --git a/src/yuzu_cmd/window_rect.cpp b/src/yuzu_cmd/window_rect.cpp
 new file mode 100644
-index 0000000..f3c8a2b
+index 0000000..02a54e2
 --- /dev/null
 +++ b/src/yuzu_cmd/window_rect.cpp
-@@ -0,0 +1,60 @@
+@@ -0,0 +1,61 @@
 +// SPDX-FileCopyrightText: Copyright 2026 Eden DSMod fork
 +// SPDX-License-Identifier: GPL-3.0-or-later
 +
@@ -360,7 +357,8 @@ index 0000000..f3c8a2b
 +
 +namespace DSModHarness {
 +
-+std::optional<WindowRect> ParseWindowRect(std::string_view text, std::string& error) {
++std::optional<WindowRect> ParseWindowRect(std::string_view text, int min_w, int min_h,
++                                          std::string& error) {
 +    std::array<int, 4> values{};
 +    std::size_t count = 0;
 +    for (std::size_t start = 0;;) {
@@ -395,8 +393,8 @@ index 0000000..f3c8a2b
 +        error = "x and y must be 0 or more";
 +        return std::nullopt;
 +    }
-+    if (w <= 0 || h <= 0) {
-+        error = "w and h must be more than 0";
++    if (w < min_w || h < min_h) {
++        error = "w and h must be at least " + std::to_string(min_w) + "x" + std::to_string(min_h);
 +        return std::nullopt;
 +    }
 +    // Win32 window coordinates are 16-bit, and larger values reach SDL's SDL_WINDOWPOS_UNDEFINED
@@ -411,10 +409,10 @@ index 0000000..f3c8a2b
 +} // namespace DSModHarness
 diff --git a/src/yuzu_cmd/window_rect.h b/src/yuzu_cmd/window_rect.h
 new file mode 100644
-index 0000000..e10518c
+index 0000000..e9e23fe
 --- /dev/null
 +++ b/src/yuzu_cmd/window_rect.h
-@@ -0,0 +1,30 @@
+@@ -0,0 +1,31 @@
 +// SPDX-FileCopyrightText: Copyright 2026 Eden DSMod fork
 +// SPDX-License-Identifier: GPL-3.0-or-later
 +
@@ -440,9 +438,10 @@ index 0000000..e10518c
 +    int h;
 +};
 +
-+/// Parses `x,y,w,h`: four decimal ints, x and y >= 0, w and h > 0, x+w and y+h at most
-+/// MaxCoordinate. Returns the rect, or nothing with the reason in `error`.
-+std::optional<WindowRect> ParseWindowRect(std::string_view text, std::string& error);
++/// Parses `x,y,w,h`: four decimal ints, x and y >= 0, w >= min_w and h >= min_h (both mins >= 1),
++/// x+w and y+h at most MaxCoordinate. Returns the rect, or nothing with the reason in `error`.
++std::optional<WindowRect> ParseWindowRect(std::string_view text, int min_w, int min_h,
++                                          std::string& error);
 +
 +} // namespace DSModHarness
 -- 

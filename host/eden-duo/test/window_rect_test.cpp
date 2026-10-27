@@ -15,16 +15,17 @@ using DSModHarness::ParseWindowRect;
 
 namespace {
 
-void Valid(const char* text, int x, int y, int w, int h) {
+// The aux window's minimum size (--aux-rect); --window-rect passes eden-cli's 640x360.
+void Valid(const char* text, int x, int y, int w, int h, int min_w = 1, int min_h = 1) {
     std::string error;
-    const auto rect = ParseWindowRect(text, error);
+    const auto rect = ParseWindowRect(text, min_w, min_h, error);
     assert(rect && error.empty());
     assert(rect->x == x && rect->y == y && rect->w == w && rect->h == h);
 }
 
-void Invalid(const char* text, const char* expected) {
+void Invalid(const char* text, const char* expected, int min_w = 1, int min_h = 1) {
     std::string error;
-    assert(!ParseWindowRect(text, error));
+    assert(!ParseWindowRect(text, min_w, min_h, error));
     std::printf("  %-26s -> %s\n", (std::string("'") + text + "'").c_str(), error.c_str());
     assert(error.find(expected) != std::string::npos);
 }
@@ -37,6 +38,8 @@ int main() {
     Valid("7,8,1,1", 7, 8, 1, 1);
     Valid("0,0,32767,32767", 0, 0, 32767, 32767);
     Valid("32766,32766,1,1", 32766, 32766, 1, 1);
+    Valid("0,0,640,360", 0, 0, 640, 360, 640, 360);
+    Valid("0,0,1920,1080", 0, 0, 1920, 1080, 640, 360);
 
     std::printf("rejected:\n");
     Invalid("", "not a number");                                // missing fields
@@ -57,6 +60,8 @@ int main() {
     Invalid("0,0,1920,0", "w and h");                           // zero h
     Invalid("0,0,-1920,1080", "w and h");                       // negative w
     Invalid("0,0,1920,-1", "w and h");                          // negative h
+    Invalid("0,0,639,360", "at least 640x360", 640, 360);       // main window too narrow
+    Invalid("0,0,640,359", "at least 640x360", 640, 360);       // main window too short
     Invalid("2147483648,0,1920,1080", "out of range");          // beyond int
     Invalid("0,0,1920,99999999999", "out of range");            // beyond int
     Invalid("0,-2147483649,1,1", "out of range");               // below int
