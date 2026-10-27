@@ -1,18 +1,36 @@
-From 6a0ff30fca83d05fc73f0986f672a4c37d1a0ef5 Mon Sep 17 00:00:00 2001
+From 433cedfb11431cac96059daa94b01386de3cc3b2 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Tue, 27 Oct 2026 18:19:10 +0000
 Subject: [PATCH] builder: accept windows-x86_64 modules
 
 A Windows module is a PE DLL packed under the same
 modules/<platform>/<TITLEID>.so path; LoadLibraryExW uses the given
-extension as is.
+extension as is. PACKAGE_FORMAT.md lists the new platform.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01XgyuSR8o8AbzxuWHYqLwsv
 ---
+ docs/PACKAGE_FORMAT.md            | 6 ++++--
  tools/build_dualscreen_package.py | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ 2 files changed, 5 insertions(+), 3 deletions(-)
 
+diff --git a/docs/PACKAGE_FORMAT.md b/docs/PACKAGE_FORMAT.md
+index 1d19fab..a96f4be 100644
+--- a/docs/PACKAGE_FORMAT.md
++++ b/docs/PACKAGE_FORMAT.md
+@@ -152,8 +152,10 @@ This block is read from `manifest.json`, not from `package.json`.
+ | `libraries.<platform>.path` | Must be exactly `modules/<platform>/<TITLEID>.so` |
+ | `libraries.<platform>.sha256` | 64 hex characters, matching the file. The Android installer additionally requires lower case |
+ 
+-- **Platform names:** `linux-x86_64`, `linux-aarch64`, `android-arm64-v8a`, `android-x86_64`. The
+-  package builder currently accepts only `linux-x86_64` and `android-arm64-v8a`.
++- **Platform names:** `linux-x86_64`, `linux-aarch64`, `android-arm64-v8a`, `android-x86_64`,
++  `windows-x86_64`. The package builder currently accepts only `linux-x86_64`,
++  `android-arm64-v8a` and `windows-x86_64`. A Windows module is a PE DLL, stored under the same
++  `<TITLEID>.so` name.
+ - **Missing module.** If `requires_module` is true and `module` is absent, loading fails.
+ - **Failures do not stop the page.** A module that fails to load still lets the pages render. The
+   host publishes `module_ready`, `module_error`, `module_error_message` and `build_match`, so a
 diff --git a/tools/build_dualscreen_package.py b/tools/build_dualscreen_package.py
 index 86cabe9..ee20705 100755
 --- a/tools/build_dualscreen_package.py

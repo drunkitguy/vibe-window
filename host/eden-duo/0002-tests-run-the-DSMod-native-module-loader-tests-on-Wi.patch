@@ -1,4 +1,4 @@
-From 05ce25ca51261d5ce79ef8a02ab0391f23f395f8 Mon Sep 17 00:00:00 2001
+From 57155d86ce531cb7f895a063bffb47a2542ff702 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Tue, 27 Oct 2026 18:19:09 +0000
 Subject: [PATCH 2/3] tests: run the DSMod native module loader tests on

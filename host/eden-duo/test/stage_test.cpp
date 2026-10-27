@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Standalone check of src/core/mods/mod_module_stage.cpp (patched eden-duo), built without the
-// emulator. Usage: stage_test <fake module built from src/tests/core/mods/fake_module.cpp>.
+// emulator. Usage: stage_test <fake module built from src/tests/core/mods/fake_module.cpp>
+// [Windows: <module importing planted.dll, which sits next to stage_test.exe>].
 // Runs natively on Linux and as a MinGW exe under wine; see run.sh.
 
 #undef NDEBUG
@@ -12,11 +13,15 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 #ifdef _WIN32
 #include <windows.h>
+
+#include <aclapi.h>
 #else
 #include <dlfcn.h>
 #endif
@@ -57,7 +62,8 @@ bool ReadOnly(const fs::path& file) {
 #ifdef _WIN32
     return (GetFileAttributesW(file.c_str()) & FILE_ATTRIBUTE_READONLY) != 0;
 #else
-    constexpr auto write = fs::perms::owner_write | fs::perms::group_write | fs::perms::others_write;
+    constexpr auto write =
+        fs::perms::owner_write | fs::perms::group_write | fs::perms::others_write;
     return (fs::status(file).permissions() & write) == fs::perms::none;
 #endif
 }
@@ -81,15 +87,84 @@ void Age(const fs::path& path, std::chrono::minutes age) {
 #endif
 }
 
+#ifdef _WIN32
+bool Wine() {
+    return GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "wine_get_version") != nullptr;
+}
+
+/// The DACL's ACE count, and whether it ignores the parent's ACL (protected).
+std::pair<int, bool> Dacl(const fs::path& path) {
+    PACL dacl{};
+    PSECURITY_DESCRIPTOR descriptor{};
+    assert(GetNamedSecurityInfoW(path.c_str(), SE_FILE_OBJECT, DACL_SECURITY_INFORMATION, nullptr,
+                                 nullptr, &dacl, nullptr, &descriptor) == ERROR_SUCCESS);
+    SECURITY_DESCRIPTOR_CONTROL control{};
+    DWORD revision{};
+    assert(GetSecurityDescriptorControl(descriptor, &control, &revision));
+    const std::pair<int, bool> result{dacl ? dacl->AceCount : -1,
+                                      (control & SE_DACL_PROTECTED) != 0};
+    LocalFree(descriptor);
+    return result;
+}
+#endif
+
+/// A module-* symlink planted in the cache must not lead SweepStale or RemoveStaged to a file
+/// outside it. Returns false where the OS refuses to make the link (Windows without privilege).
+bool CheckSymlinks(const fs::path& root, const std::vector<std::uint8_t>& module) {
+    const auto victim = root.parent_path() / "victim";
+    fs::create_directories(victim);
+    std::ofstream{victim / "keep.txt"} << "outside the cache";
+    fs::permissions(victim / "keep.txt", fs::perms::owner_read);
+    std::error_code error;
+    fs::create_directory_symlink(victim, root / "module-link", error);
+    if (error) {
+        std::printf("  symlink case skipped: %s\n", error.message().c_str());
+        fs::permissions(victim / "keep.txt", fs::perms::owner_write, fs::perm_options::add);
+        fs::remove_all(victim);
+        return false;
+    }
+    Age(victim, std::chrono::minutes{60});
+    Core::Mods::SweepStale(root);
+    assert(fs::exists(fs::symlink_status(root / "module-link")));
+    assert(fs::exists(victim / "keep.txt") && ReadOnly(victim / "keep.txt"));
+    fs::remove(root / "module-link");
+
+    const auto staged = StageModule(module, Title, root);
+    fs::create_symlink(victim / "keep.txt", staged / "link.txt");
+    RemoveStaged(staged);
+    assert(!fs::exists(fs::symlink_status(staged)));
+    assert(fs::exists(victim / "keep.txt") && ReadOnly(victim / "keep.txt"));
+    fs::permissions(victim / "keep.txt", fs::perms::owner_write, fs::perm_options::add);
+    fs::remove_all(victim);
+    return true;
+}
+
 void CheckRoot(const fs::path& root, const std::vector<std::uint8_t>& module) {
+    // A failed stage (here: a title whose parent directory does not exist) leaves nothing behind.
+    bool threw = false;
+    try {
+        StageModule(module, "missing/0100000000000001", root);
+    } catch (const std::exception&) {
+        threw = true;
+    }
+    assert(threw && fs::is_empty(root));
+
     const auto first = StageModule(module, Title, root);
     const auto file = first / (std::string{Title} + ".so");
     assert(first.parent_path() == root);
     assert(first.filename().string().starts_with("module-"));
     assert(ReadFile(file) == module);
     assert(ReadOnly(file));
-#ifndef _WIN32
-    // mkdtemp: owner-only. Windows inherits the cache directory's per-user ACL instead.
+#ifdef _WIN32
+    // Owner and SYSTEM only, not inherited; the module inherits the same two entries. Wine does
+    // not keep a file's security descriptor (it derives one from the Unix mode), so this is only
+    // asserted on real Windows.
+    const auto [aces, protected_dacl] = Dacl(first);
+    std::printf("  staging dir DACL: %d entries, protected %d; module: %d entries%s\n", aces,
+                protected_dacl, Dacl(file).first, Wine() ? " (wine: not checked)" : "");
+    assert(Wine() || (aces == 2 && protected_dacl && Dacl(file).first == 2));
+#else
+    // mkdtemp: owner-only.
     assert(fs::status(first).permissions() == fs::perms::owner_all);
 #endif
     const auto second = StageModule(module, Title, root);
@@ -98,7 +173,8 @@ void CheckRoot(const fs::path& root, const std::vector<std::uint8_t>& module) {
     std::string error;
     void* handle = OpenStaged(file, error);
     assert(handle && error.empty());
-    const auto get = reinterpret_cast<EdenDsmodGetModuleFn>(Symbol(handle, "eden_dsmod_get_module"));
+    const auto get =
+        reinterpret_cast<EdenDsmodGetModuleFn>(Symbol(handle, "eden_dsmod_get_module"));
     assert(get);
     const auto* api = get(EDEN_DSMOD_MODULE_ABI_VERSION, EDEN_DSMOD_MODULE_ABI_HASH);
     assert(api && api->struct_size == sizeof(EdenDsmodModuleApi));
@@ -108,6 +184,8 @@ void CheckRoot(const fs::path& root, const std::vector<std::uint8_t>& module) {
     assert(!OpenStaged(root / "missing" / "0100000000000001.so", error));
     assert(!error.empty());
     std::printf("  bad path error: %s\n", error.c_str());
+    // A relative name would be searched for, so it is refused before the loader sees it.
+    assert(!OpenStaged("0100000000000001.so", error) && !error.empty());
 
     // Facts check (PLAN fact 2): does a plain remove_all cope with the read-only module?
     std::error_code plain;
@@ -139,11 +217,45 @@ void CheckRoot(const fs::path& root, const std::vector<std::uint8_t>& module) {
     Core::Mods::SweepStale(root / "missing");
     Core::Mods::SweepStale({});
     RemoveStaged(recent);
+    fs::remove_all(other);
+    fs::remove_all(named);
+    fs::remove(root / "module-file");
+#ifndef _WIN32
+    assert(CheckSymlinks(root, module));
+#else
+    CheckSymlinks(root, module);
+#endif
 }
+
+#ifdef _WIN32
+/// A module importing a DLL found only next to the exe must not load: staged modules resolve
+/// imports from System32 alone.
+void CheckPlantedImport(const fs::path& root, const std::vector<std::uint8_t>& importer) {
+    const auto directory = StageModule(importer, Title, root);
+    const auto file = directory / (std::string{Title} + ".so");
+    // Control: the default search order would pick up planted.dll from the exe directory.
+    const HMODULE control = LoadLibraryExW(file.c_str(), nullptr, 0);
+    assert(control);
+    FreeLibrary(control);
+    std::string error;
+    assert(!OpenStaged(file, error) && !error.empty());
+    std::printf("  planted import refused: %s\n", error.c_str());
+    // Wine keeps an image whose imports failed open, so its staging dir outlives RemoveStaged
+    // there (SweepStale takes it later). Reported, not asserted, until H1c sees real Windows.
+    RemoveStaged(directory);
+    std::printf("  failed-load staging dir removed: %d\n", !fs::exists(directory));
+}
+#endif
 } // namespace
 
 int main(int argc, char** argv) {
+#ifdef _WIN32
+    assert(argc == 3);
+    const auto importer = ReadFile(argv[2]);
+    assert(!importer.empty());
+#else
     assert(argc == 2);
+#endif
     const auto module = ReadFile(argv[1]);
     assert(!module.empty());
 #ifdef _WIN32
@@ -159,8 +271,12 @@ int main(int argc, char** argv) {
         const auto root = base / name / "dualscreen";
         std::printf("%s\n", reinterpret_cast<const char*>(root.u8string().c_str()));
         CheckRoot(root, module);
+#ifdef _WIN32
+        CheckPlantedImport(root, importer);
+#endif
     }
-    fs::remove_all(base);
+    std::error_code leftover;
+    fs::remove_all(base, leftover);
     std::printf("stage_test: all checks passed (%s)\n", Core::Mods::Platform().data());
     return 0;
 }
