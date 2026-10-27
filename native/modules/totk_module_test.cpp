@@ -4,8 +4,33 @@
 #include "totk_test_host.h"
 
 #include <cstdio>
+#include <cstdlib>
 
 using totk::test::Host;
+
+// Create allocates with nothrow new; track that one block so the test sees Destroy free it.
+namespace {
+int g_nothrow_news = 0;
+void* g_nothrow_live = nullptr;
+} // namespace
+// Plain new is replaced too, so every block delete frees came from malloc.
+void* operator new(std::size_t n) {
+    if (void* p = std::malloc(n ? n : 1))
+        return p;
+    throw std::bad_alloc();
+}
+void* operator new(std::size_t n, const std::nothrow_t&) noexcept {
+    ++g_nothrow_news;
+    return g_nothrow_live = std::malloc(n ? n : 1);
+}
+void operator delete(void* p) noexcept {
+    if (p && p == g_nothrow_live)
+        g_nothrow_live = nullptr;
+    std::free(p);
+}
+void operator delete(void* p, std::size_t) noexcept {
+    operator delete(p);
+}
 
 int main() {
     // eden_dsmod_get_module: version and hash gate.
@@ -45,9 +70,10 @@ int main() {
     assert(refused([](EdenDsmodHostApi& a) { a.build_id[31] ^= 1; }));
     assert(refused([](EdenDsmodHostApi& a) { a.build_id[0] ^= 0x80; }));
 
+    assert(g_nothrow_news == 0); // refused creates allocate nothing
     Host h;
     void* instance = m->create(&h.api, nullptr);
-    assert(instance);
+    assert(instance && g_nothrow_news == 1 && g_nothrow_live == instance);
 
     // sample/tick with the default (all UNKNOWN) offsets: no memory access, ready + invalid only.
     m->sample(instance, &h.api);
@@ -70,7 +96,26 @@ int main() {
     m->sample(instance, &h.api);
     h.throw_on_publish = false;
 
+    { // A valid status publishes every value (test-only synthetic offsets over fake memory).
+        Host v;
+        static_cast<Instance*>(instance)->offsets = {0x1000, 0x10, 0x14, 0x18, 0x1C, 0x20};
+        constexpr std::uint64_t root = 0x90000000;
+        v.Put<std::uint64_t>(Host::kMainBase + 0x1000, root);
+        const std::int32_t values[] = {12, 40, 900, 1000, 4321};
+        for (int i = 0; i < 5; ++i)
+            v.Put<std::int32_t>(root + 0x10 + 4 * i, values[i]);
+        m->sample(instance, &v.api);
+        const std::map<std::string, std::int64_t> expected{
+            {"totk.ready", 1},          {"totk.status.valid", 1},
+            {"totk.status.hearts", 12}, {"totk.status.max_hearts", 40},
+            {"totk.status.stamina", 900}, {"totk.status.max_stamina", 1000},
+            {"totk.status.rupees", 4321}};
+        assert(v.ints == expected);
+        assert(v.write_calls == 0);
+    }
+
     m->destroy(instance);
+    assert(g_nothrow_live == nullptr); // destroy freed the instance
 
     std::puts("totk_module_test: ok");
     return 0;

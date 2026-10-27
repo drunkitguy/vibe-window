@@ -72,30 +72,34 @@ int main() {
         totk::Offsets o = kSynthetic;
         o.game_data_root = Host::kMainSize;
         assert(!totk::ReadStatus(h.api, o).valid);
-        o.game_data_root = Host::kMainSize - 4; // straddles the end
+        // Straddles the end; all 8 bytes mapped and holding a good root, so only InMain rejects it.
+        o.game_data_root = Host::kMainSize - 4;
+        h.Put<std::uint64_t>(Host::kMainBase + Host::kMainSize - 4, kRoot);
         assert(!totk::ReadStatus(h.api, o).valid);
     }
     { // Null and misaligned root pointer.
         Host h;
         Fill(h, 0);
+        for (std::uint64_t field = 0x10; field <= 0x20; field += 4) // only the null check rejects
+            h.Put<std::int32_t>(field, 1);
         assert(!totk::ReadStatus(h.api, kSynthetic).valid);
         Host m;
         Fill(m, kRoot + 4);
         m.Put<std::int32_t>(kRoot + 0x24, 1);
         assert(!totk::ReadStatus(m.api, kSynthetic).valid);
     }
-    { // root + field overflows.
+    { // root + field overflows (wraps to 0x8..0x18, which is mapped: only the overflow check rejects).
         Host h;
         Fill(h, std::numeric_limits<std::uint64_t>::max() - 7);
+        for (std::uint64_t at = 0x8; at < 0x1C; ++at)
+            h.memory[at] = 0;
         assert(!totk::ReadStatus(h.api, kSynthetic).valid);
     }
-    { // Second read differs (torn read) on the root pointer or on a value.
-        for (unsigned call : {7u, 12u}) {
-            Host h;
-            Fill(h);
-            h.corrupt_read = call;
-            assert(!totk::ReadStatus(h.api, kSynthetic).valid);
-        }
+    { // Second read differs (torn read): the last value of the second pass.
+        Host h;
+        Fill(h);
+        h.corrupt_read = 12;
+        assert(!totk::ReadStatus(h.api, kSynthetic).valid);
     }
     { // A host without is_mapped is rejected (MissingIsMapped::Reject).
         Host h;

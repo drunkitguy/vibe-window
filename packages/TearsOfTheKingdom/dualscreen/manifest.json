@@ -12,7 +12,7 @@
    "id": "main",
    "widgets": [
     {"type": "rect", "rect": [0, 0, 1240, 1080], "bg": "#FF101418", "color": "#00000000", "hide_bind": "totk.ready", "hide_eq": 1},
-    {"type": "label", "rect": [100, 350, 1040, 150], "text": "Unsupported game version", "text_scale": 5, "color": "#FFE6ECF2", "wrap_width": 1040, "hide_bind": "totk.ready", "hide_eq": 1},
+    {"type": "label", "rect": [100, 350, 1040, 150], "text": "Companion unavailable", "text_scale": 5, "color": "#FFE6ECF2", "wrap_width": 1040, "hide_bind": "totk.ready", "hide_eq": 1},
     {"type": "label", "rect": [100, 550, 1040, 220], "bind_text": "module_error_message", "text_scale": 3, "color": "#FFA8B2BC", "wrap_width": 1040, "max_lines": 4, "hide_bind": "totk.ready", "hide_eq": 1},
     {"type": "label", "rect": [100, 450, 1040, 150], "text": "Ready", "text_scale": 5, "color": "#FFE6ECF2", "need_bind": "totk.ready"}
    ]

@@ -28,8 +28,7 @@ using dsmod_sdk::MissingIsMapped;
 inline bool ReadStatusOnce(const EdenDsmodHostApi& h, const Offsets& o,
                            std::array<std::int32_t, 5>& out) {
     constexpr auto kMax = std::numeric_limits<std::uint64_t>::max();
-    if (h.main_base > kMax - o.game_data_root)
-        return false;
+    // A wrapped slot lands below main_base, so InMain rejects it.
     const std::uint64_t slot = h.main_base + o.game_data_root;
     std::uint64_t root = 0;
     if (!dsmod_sdk::InMain(h.main_base, h.main_size, slot, sizeof root) ||

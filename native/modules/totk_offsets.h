@@ -2,6 +2,8 @@
 // Named offsets for the status domain. Every value is UNKNOWN until T3 confirms it on the target
 // build from code and a live read; 0 means "not found" and ReadStatus then reads nothing.
 // Read model (T3 may change it): root = *(main_base + game_data_root), value = *(s32*)(root + field).
+// The leads below are multi-hop chains (GameDataMgr double deref, rupees [[main+X]+0xD8]+0x28EA4,
+// hearts 3 hops): T3 must change this one-hop read model before using any of them.
 #pragma once
 
 #include <cstdint>
