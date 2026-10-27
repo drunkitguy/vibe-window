@@ -187,7 +187,7 @@ Source: [S2] BotW README and `native/modules/botw_*.h`.
 
 | BotW feature (files) | TotK | Notes |
 |---|---|---|
-| Build gate, guarded reads, torn-read rejection (`botw_pouch.h`) | Reuse pattern | Use `dsmod_sdk::ReadGuest<Reject>` and `InMain` |
+| Build gate, guarded reads, torn-read rejection (`botw_pouch.h`) | Reuse pattern | Use `dsmod_sdk::ReadGuest<MissingIsMapped::Reject>` and `InMain` |
 | Fake host fixture (`botw_test_fixture.h`) | Reuse pattern | `totk_test_host.h` |
 | UI context, title/loading/pause pages (`botw_context`, `botw_states`, `page_binds`) | Adapt | TotK scene names UNKNOWN |
 | HUD hidden detection (`botw_hud`) | Adapt | |
@@ -220,8 +220,8 @@ Doable in this Linux container now (no game, no Windows, no Thor):
 | # | Packet | Depends | Status |
 |---|---|---|---|
 | 0 | Decisions: D1 host path = **C** (user, done); D2 target version | - | D1 done; D2 blocked: user |
-| H1a | Eden Duo: native modules on Windows (loader, harness compile fix, tests), as patches | - | doing |
-| T1 | TotK package skeleton: build gate, fail-closed reader, tests; Linux `.so` and Windows DLL; `.dsmod.zip` | H1a (builder patch) | todo |
+| H1a | Eden Duo: native modules on Windows (loader, harness compile fix, tests), as patches | - | done: `host/eden-duo/0001-0003` + `host/eden-duo-companions/0001`; loader Catch2 tests pass standalone; full eden-duo build blocked (proxy 403 on CPM fmt download), real-Windows checks in H1c; critic SATISFIED round 3 |
+| T1 | TotK package skeleton: build gate, fail-closed reader, tests; Linux `.so` and Windows DLL; `.dsmod.zip` | H1a (builder patch) | doing |
 | H1b | eden-cli composite layout: `--window-rect`, `--aux-rect`, borderless, aux not focusable | H1a | todo |
 
 Needs the user, a Windows PC, the Thor or another repo:
@@ -312,10 +312,16 @@ Acceptance:
 
 Scope: builds and tests in this container with no game dump. All game offsets `UNKNOWN` (0).
 
+Learned in H1a: downloads from github.com (CPM, FetchContent) get 403 from the proxy, so T1 uses
+only std and the three header-only SDK headers in `$E/src/core/mods` (`dsmod_module_abi.h`,
+`dsmod_module_extensions.h`, `modules/dsmod_module_sdk.h`): no CPM, no FetchContent, no Catch2,
+no network; tests are plain `assert` programs. wine needs `LC_ALL=C.UTF-8` (and
+`WINEDEBUG=-all`) wherever it runs, including the CTest emulator and the acceptance 7 probe.
+
 Files:
 - `.gitignore`: `build/`, `dist/`.
 - `native/CMakeLists.txt`: cmake >= 3.22; fail clearly if `EDEN_SOURCE_ROOT` is not absolute or
-  the three SDK headers are missing (same check as [S2] CMakeLists lines 26-34). Target
+  the three SDK headers are missing (same check as [S2] `native/modules/CMakeLists.txt` lines 28-35). Target
   `dsmod-totk`: SHARED, C++20, `PREFIX ""`, `OUTPUT_NAME 0100F2C0115B6000`, hidden visibility,
   `-Wall -Wextra -Werror`. ELF: version script exporting only `eden_dsmod_get_module`,
   `-Wl,--no-undefined`. Windows (MinGW): `native/modules/0100F2C0115B6000.def` with the same
@@ -323,7 +329,8 @@ Files:
   + CTest test per `modules/totk_*_test.cpp`, asserts kept (`-UNDEBUG`); when cross-compiling,
   tests run through `CMAKE_CROSSCOMPILING_EMULATOR` (wine). No fmt, json or zstd.
 - `native/mingw-w64.cmake`: toolchain file (`CMAKE_SYSTEM_NAME Windows`,
-  `x86_64-w64-mingw32-gcc-posix`/`g++-posix`, emulator `/usr/lib/wine/wine64`).
+  `x86_64-w64-mingw32-gcc-posix`/`g++-posix`, emulator
+  `/usr/bin/env;LC_ALL=C.UTF-8;WINEDEBUG=-all;/usr/lib/wine/wine64`).
 - `native/modules/totk_build.h`: `kTitleId = 0x0100F2C0115B6000`; `kTargetBuild` = 64 upper-case
   hex, set to 1.2.1 `9B4E43650501A4D4489B4BBFDB740F26AF3CF850` + 24 zeros (`UNVERIFIED`, T2
   confirms); exact-match helpers for the hex string and the 32 raw bytes.
@@ -331,7 +338,7 @@ Files:
   root, hearts, max hearts, stamina, max stamina, rupees), every default `0` with
   `// UNKNOWN: <how to find>` naming the lead from this plan.
 - `native/modules/totk_status.h`: `ReadStatus(const EdenDsmodHostApi&, const Offsets&)`. Invalid
-  without any host call when a needed offset is 0; otherwise `dsmod_sdk::ReadGuest<Reject>` with
+  without any host call when a needed offset is 0; otherwise `dsmod_sdk::ReadGuest<MissingIsMapped::Reject>` with
   `InMain` and overflow checks, two reads, mismatch rejected.
 - `native/modules/0100F2C0115B6000.cpp`: module table (ABI version/hash, exact `struct_size`, title
   id, capabilities `0`). `supports_build` exact match. `create` checks
