@@ -351,7 +351,7 @@ Files:
 - `native/modules/totk_build_test.cpp`, `totk_status_test.cpp`, `totk_module_test.cpp`.
 - `packages/TearsOfTheKingdom/dualscreen/manifest.json`: `format 1`, `title_id`, `name`,
   `min_runtime 22`, `requires_module true`, canvas 1240x1080, page `main`: notice (rect + label
-  "Unsupported game version" + label `bind: module_error_message`) hidden when `totk.ready` is 1
+  "Companion unavailable" + label `bind: module_error_message` giving the reason: wrong build, module error, checksum or platform) hidden when `totk.ready` is 1
   (`hide_bind`/`hide_eq` [S3 PACKAGE_FORMAT §3.5; Dread manifest]); placeholder Ready label with
   `need_bind: totk.ready`. No game art, no `module` block.
 - `packages/TearsOfTheKingdom/dualscreen/9B4E43650501A4D4.json`: `{}`.
@@ -360,7 +360,7 @@ Acceptance (critic reruns all; `$E`, `$C` as in H1a, `$CP` = a copy of `$C` with
 patch applied):
 1. `cmake -S native -B build/gcc -G Ninja -DEDEN_SOURCE_ROOT=$E -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build/gcc` exits 0.
 2. Same with `-DCMAKE_CXX_COMPILER=clang++ -B build/clang`, and with
-   `-DCMAKE_TOOLCHAIN_FILE=native/mingw-w64.cmake -B build/win`: each exits 0.
+   `-DCMAKE_TOOLCHAIN_FILE=$PWD/native/mingw-w64.cmake -B build/win`: each exits 0.
 3. `ctest --output-on-failure` in all three build dirs: 100% pass, at least 3 tests each (the
    `build/win` tests run under wine).
 4. `nm -D --defined-only build/gcc/0100F2C0115B6000.so` prints exactly `eden_dsmod_get_module`;
