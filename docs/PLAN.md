@@ -87,8 +87,8 @@ run, then the game-dependent companion pages, smallest first.
    companion canvas is 1240x1080 [S2 BotW `manifest.json`].
 8. **Artemis already drives a second Android display**: its `Game.java` uses `DisplayManager`,
    `isOnExternalDisplay()` and an `ExternalDisplayControlActivity` [S25]. The user's client is
-   their own Vibe Window APK (Moonlight-Android fork, `/home/user/vibe-window` branch
-   `claude/clever-clarke-k7hhhj`, tag `v1.4.10`), which keeps that code (see H3).
+   their own Vibe Window APK (Moonlight-Android fork, tag `v1.4.10`), merged into this repo's
+   plan branch `claude/practical-mccarthy-f7wf2f` by `4128b20`; it keeps that code (see H3).
 9. **Module ABI is headers only** [S1 `src/core/mods/`]: the BotW module builds with
    `g++ ... -I$EDEN_SOURCE_ROOT/src` and nothing else [S2 `tools/botw/build_modules.sh`]. The
    companions' shared CMake needs fmt/nlohmann_json/zstd from `$EDEN_SOURCE_ROOT/.cache/cpm`,
@@ -231,7 +231,7 @@ Needs the user, a Windows PC, the Thor or another repo:
 |---|---|---|---|
 | H1c | Windows build of the patched fork (MSVC Ninja per [S1 docs/Build.md], `EDEN_DSMOD_BUILD_DEV_TOOLS=ON`), smoke run: TotK package installed, notice page in the aux window, `.shot` screenshots, a tap on the aux window keeps controller input | H1a, H1b, T1 | blocked: user |
 | H2 | apollo2-vibe window-host (`claude/clever-clarke-k7hhhj`): verify the 1920x2160 window-only composite with no host code; H2b (`dualScreen=1` pin) only if a check fails | H1c, H3 | blocked: user |
-| H3 | Vibe Window client (`/home/user/vibe-window` branch `claude/clever-clarke-k7hhhj`): "Dual screen" setting, split renderer, bottom-screen touch | H1b | todo |
+| H3 | Vibe Window client (`/home/user/vibe-window` `app/`, plan branch): "Dual screen" setting, split renderer, bottom-screen touch | H1b | todo |
 | T2 | Pin the build: user's `xxd` output replaces `kTargetBuild`; data file renamed; T1 tests rerun | T1, D2, dump | blocked: user |
 | T3 | State discovery on the user's build (Windows dev-tools eden-cli, gdbstub): position + layer, hearts, stamina, rupees, time, weather, temperature, equipped gear with durability; sentinel test, second boot [S3 PORTING_A_GAME §2-3] | T2, H1c | blocked: user |
 | T4 | Ready page v1 = smallest working companion: status + position + equipped gear, read-only | T3 | todo |
@@ -475,7 +475,11 @@ a helper process and paints everything else black. Findings from that code:
    `SDL_WINDOW_RESIZABLE` (`emu_window_sdl3_vk.cpp:81-83`), which would stretch the game to
    1920x2160. With H1b's non-resizable main window at `0,0,1920,1080` it is inside the display and
    left alone. The dialog mover (`place_secondary_windows`) moves only captioned windows that are
-   owned or foreground, so the never-foreground aux window is not moved.
+   owned or foreground, so the never-foreground aux window is not moved. H1b found that SDL
+   3.4.8 gives borderless windows `WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX`, so both
+   windows are captioned but not resizable: the main window is fixed-size and inside the display
+   (left alone), the aux window is unowned and never foreground (not moved). `UNVERIFIED` until
+   the critic's H1b check against the tracker closes; if it fails, H2b's pin covers it.
 
 So no host code is needed if H1b holds. Setup on the PC:
 1. Install the window-host MSI built from that branch.
@@ -505,9 +509,10 @@ argument only once H2b exists.
 
 ### H3 (client: Vibe Window APK)
 
-Repo: `/home/user/vibe-window`, branch `claude/clever-clarke-k7hhhj` (tag `v1.4.10`;
-Moonlight-Android fork, app id `app.vibewindow.client`, package `com.limelight`). Work on a new
-branch from that ref, never on the plan branch. What exists there [S27]:
+Repo: `/home/user/vibe-window` `app/` (Moonlight-Android fork, tag `v1.4.10`, app id
+`app.vibewindow.client`, package `com.limelight`), merged into the plan branch
+`claude/practical-mccarthy-f7wf2f` by `4128b20` (user decision). H3 code is committed on the plan
+branch, no new branch. What exists there [S27]:
 - `windowOnly` and `virtualDisplay` are sent on `/launch` and `/resume` with
   `mode=<W>x<H>x<FPS>` from the negotiated size (`NvHTTP.java:885-897`); default 1920x1080@120.
 - Second-display support: `ServerHelper.getSecondaryDisplay` (first non-default display) and
@@ -531,13 +536,31 @@ Changes:
    `y = (1080 + ty) / 2160` (normalized over the whole video [S23]); top-display touches keep the
    user's touch mode with `y` scaled into the top half. Pointer ids from the two displays never
    collide.
-4. The pure parts (mode override, crop rects, coordinate mapping) live in one class with unit
-   tests (the repo already uses Robolectric).
+4. The pure parts (mode override, crop rects, coordinate mapping, pointer ids) live in one class
+   `com.limelight.utils.DualScreenLayout` with no `android.*` import, Java 11, and every size in
+   one place, so the side-by-side fallback (3160x1080, bottom crop at `1920,0`) is a constant
+   change. Its test `app/src/test/java/com/limelight/utils/DualScreenLayoutTest.java` is plain
+   JUnit 4 (no Robolectric).
 
-Acceptance: unit tests for the mapping (corners of both displays, pointer-id separation, mode
-string `1920x2160x60`); `./gradlew assembleDebug` and the unit tests pass if an Android SDK can be
-installed here, else the user builds; with the setting off, launch arguments and rendering are
-unchanged. On the Thor (user): both screens at native size, tap error under 2 px on the
+What this container can do (checked): no Android SDK or NDK (dl.google.com is refused by the
+proxy, so no `sdkmanager` and no `android.jar`), so `./gradlew` cannot build the app here; JDK 21,
+`/opt/gradle-8.14.3/lib/junit-4.13.2.jar` and `hamcrest-core-1.3.jar` exist; the
+moonlight-common-c submodule is not checked out (reachable with git, not needed for H3).
+
+Acceptance (coder, here):
+1. `javac --release 11 -cp <junit>:<hamcrest> -d build/h3` of `DualScreenLayout.java` and its test,
+   then `java -cp build/h3:<junit>:<hamcrest> org.junit.runner.JUnitCore
+   com.limelight.utils.DualScreenLayoutTest`: OK. Tests cover: the four corners and centre of each
+   display map to the expected normalized x/y; top/bottom pointer ids never collide; the mode is
+   `1920x2160x60` when on and the negotiated values unchanged when off; the crop rects are
+   `0,0,1920,1080` and `0,1080,1240,1080`.
+2. The Android changes (setting, `Game`/`NvHTTP` wiring, renderer, `Presentation`) are reviewed by
+   reading only; with the setting off every touched code path is skipped by one `if`. `git diff`
+   touches nothing outside `app/` and `docs/PLAN.md` status.
+3. Not runnable here, say so: `./gradlew assembleDebug testDebugUnitTest`, Robolectric, the Thor.
+
+Acceptance (user): `./gradlew assembleDebug testDebugUnitTest` passes on their machine (or CI);
+with the setting off, launch arguments and rendering are unchanged. On the Thor (user): both screens at native size, tap error under 2 px on the
 companion, no added frame drops at 60 fps.
 
 ## What needs the user
@@ -606,7 +629,7 @@ Path A stays the fallback: the same package works there with an `android-arm64-v
 | S24 | https://www.androidauthority.com/ayn-thor-screen-size-3589297 ; https://droix.net/product/ayn-thor/ | Thor screens 1920x1080 and 1240x1080 |
 | S21b | /home/user/apollo2-vibe branch `claude/clever-clarke-k7hhhj` (`43408b8`) | Window-only tracker, target choice, placement, secondary-window layers |
 | S26 | https://github.com/libsdl-org/SDL `src/video/windows/SDL_windowswindow.c` (release-3.4.8) | `SDL_WINDOW_NOT_FOCUSABLE` -> `WS_EX_NOACTIVATE`; resizable -> `WS_THICKFRAME`, `WS_MAXIMIZEBOX` |
-| S27 | /home/user/vibe-window branch `claude/clever-clarke-k7hhhj` (tag `v1.4.10`) | Vibe Window client: launch args, secondary display, GL renderer, touch |
+| S27 | /home/user/vibe-window `app/` (tag `v1.4.10`, merged by `4128b20`) | Vibe Window client: launch args, secondary display, GL renderer, touch |
 | S25 | https://github.com/ClassicOldSong/moonlight-android (branch `moonlight-noir`, GPL-3.0) `app/src/main/java/com/limelight/Game.java` | Artemis external-display handling |
 
 The MinGW and wine results come from spikes in the planner's scratch dir
