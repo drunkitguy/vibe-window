@@ -1,0 +1,110 @@
+From 05ce25ca51261d5ce79ef8a02ab0391f23f395f8 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 27 Oct 2026 18:19:09 +0000
+Subject: [PATCH 2/3] tests: run the DSMod native module loader tests on
+ Windows x64
+
+Build the fake modules on Windows too, take the platform key from
+Platform() instead of hard-coding linux-x86_64, and dllexport the fake
+module's entry points (MSVC exports nothing by default).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01XgyuSR8o8AbzxuWHYqLwsv
+---
+ src/tests/core/mods/duo_tests.cmake |  3 ++-
+ src/tests/core/mods/fake_module.cpp | 15 +++++++++++----
+ src/tests/core/mods/module.cpp      | 13 ++++++++-----
+ 3 files changed, 21 insertions(+), 10 deletions(-)
+
+diff --git a/src/tests/core/mods/duo_tests.cmake b/src/tests/core/mods/duo_tests.cmake
+index d5ac30c..2c48a03 100644
+--- a/src/tests/core/mods/duo_tests.cmake
++++ b/src/tests/core/mods/duo_tests.cmake
+@@ -34,7 +34,8 @@ target_sources(tests PRIVATE
+     video_core/aux_routing.cpp
+ )
+ 
+-if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND ARCHITECTURE_x86_64)
++# Windows stages the DLL under the same <title>.so name, so the loader tests run there too.
++if ((CMAKE_SYSTEM_NAME STREQUAL "Linux" OR WIN32) AND ARCHITECTURE_x86_64)
+     add_library(dsmod_test_module SHARED core/mods/fake_module.cpp)
+     target_include_directories(dsmod_test_module PRIVATE ${PROJECT_SOURCE_DIR}/src)
+     set_target_properties(dsmod_test_module PROPERTIES PREFIX "" OUTPUT_NAME "dsmod-test-module")
+diff --git a/src/tests/core/mods/fake_module.cpp b/src/tests/core/mods/fake_module.cpp
+index 8936fe7..d90fbf2 100644
+--- a/src/tests/core/mods/fake_module.cpp
++++ b/src/tests/core/mods/fake_module.cpp
+@@ -6,6 +6,13 @@
+ #include "core/mods/dsmod_module_abi.h"
+ #include "core/mods/dsmod_module_extensions.h"
+ 
++// MSVC exports nothing from a DLL by default.
++#ifdef _WIN32
++#define DSMOD_TEST_EXPORT __declspec(dllexport)
++#else
++#define DSMOD_TEST_EXPORT
++#endif
++
+ namespace {
+ constexpr uint64_t kTitleId = UINT64_C(0x0100000000000001);
+ 
+@@ -59,14 +66,14 @@ const EdenDsmodModuleDataExtensions kData{
+ } // namespace
+ 
+ // Runtime 12's optional data extension (the loader negotiates it like font/save/write).
+-extern "C" const EdenDsmodModuleDataExtensions* eden_dsmod_get_data_extensions(uint32_t version,
+-                                                                              uint64_t hash) {
++extern "C" DSMOD_TEST_EXPORT const EdenDsmodModuleDataExtensions* eden_dsmod_get_data_extensions(
++    uint32_t version, uint64_t hash) {
+     return version == EDEN_DSMOD_DATA_EXT_VERSION && hash == EDEN_DSMOD_DATA_EXT_HASH ? &kData
+                                                                                        : nullptr;
+ }
+ 
+-extern "C" const EdenDsmodModuleApi* eden_dsmod_get_module(uint32_t host_abi_version,
+-                                                           uint64_t host_abi_hash) {
++extern "C" DSMOD_TEST_EXPORT const EdenDsmodModuleApi* eden_dsmod_get_module(
++    uint32_t host_abi_version, uint64_t host_abi_hash) {
+     if (host_abi_version != EDEN_DSMOD_MODULE_ABI_VERSION ||
+         host_abi_hash != EDEN_DSMOD_MODULE_ABI_HASH) {
+         return nullptr;
+diff --git a/src/tests/core/mods/module.cpp b/src/tests/core/mods/module.cpp
+index caa3f1e..ef7713e 100644
+--- a/src/tests/core/mods/module.cpp
++++ b/src/tests/core/mods/module.cpp
+@@ -18,6 +18,7 @@
+ #include "core/file_sys/vfs/vfs_vector.h"
+ #include "core/mods/dsmod_module_extensions.h"
+ #include "core/mods/mod_module.h"
++#include "core/mods/mod_module_stage.h"
+ 
+ namespace {
+ constexpr u64 TitleId = 0x0100000000000001ULL;
+@@ -45,9 +46,9 @@ FileSys::VirtualDir MakeAssets(std::string manifest, const std::vector<u8>& modu
+     using FileSys::VectorVfsDirectory;
+     using FileSys::VectorVfsFile;
+     const auto module_file = std::make_shared<VectorVfsFile>(module, "0100000000000001.so");
+-    const auto platform =
+-        std::make_shared<VectorVfsDirectory>(std::vector<FileSys::VirtualFile>{module_file},
+-                                             std::vector<FileSys::VirtualDir>{}, "linux-x86_64");
++    const auto platform = std::make_shared<VectorVfsDirectory>(
++        std::vector<FileSys::VirtualFile>{module_file}, std::vector<FileSys::VirtualDir>{},
++        std::string{Core::Mods::Platform()});
+     const auto modules = std::make_shared<VectorVfsDirectory>(
+         std::vector<FileSys::VirtualFile>{}, std::vector<FileSys::VirtualDir>{platform}, "modules");
+     const auto manifest_file = std::make_shared<VectorVfsFile>(
+@@ -63,8 +64,10 @@ std::string Manifest(std::string_view module_json) {
+ }
+ 
+ std::string GoodModuleJson(const std::string& digest) {
+-    return R"({"abi":1,"build_ids":["AAAAAAAAAAAAAAAA"],"libraries":{"linux-x86_64":{"path":"modules/linux-x86_64/0100000000000001.so","sha256":")" +
+-           digest + R"("}}})";
++    const std::string platform{Core::Mods::Platform()};
++    return R"({"abi":1,"build_ids":["AAAAAAAAAAAAAAAA"],"libraries":{")" + platform +
++           R"(":{"path":"modules/)" + platform + R"(/0100000000000001.so","sha256":")" + digest +
++           R"("}}})";
+ }
+ 
+ std::filesystem::path TestCache() {
+-- 
+2.43.0
+

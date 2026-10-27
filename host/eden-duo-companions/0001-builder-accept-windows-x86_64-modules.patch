@@ -1,0 +1,31 @@
+From 6a0ff30fca83d05fc73f0986f672a4c37d1a0ef5 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 27 Oct 2026 18:19:10 +0000
+Subject: [PATCH] builder: accept windows-x86_64 modules
+
+A Windows module is a PE DLL packed under the same
+modules/<platform>/<TITLEID>.so path; LoadLibraryExW uses the given
+extension as is.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01XgyuSR8o8AbzxuWHYqLwsv
+---
+ tools/build_dualscreen_package.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/tools/build_dualscreen_package.py b/tools/build_dualscreen_package.py
+index 86cabe9..ee20705 100755
+--- a/tools/build_dualscreen_package.py
++++ b/tools/build_dualscreen_package.py
+@@ -29,7 +29,7 @@ from pathlib import Path, PurePosixPath
+ TITLE_ID_RE = re.compile(r"^[0-9A-Fa-f]{16}$")
+ BUILD_ID_RE = re.compile(r"^(?:[0-9A-F]{16}|[0-9A-F]{64})$")
+ VERSION_RE = re.compile(r"^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$")
+-PLATFORMS = {"android-arm64-v8a", "linux-x86_64"}
++PLATFORMS = {"android-arm64-v8a", "linux-x86_64", "windows-x86_64"}
+ 
+ # Investigation artefacts must stay out of a portable package.  Referenced map, icon, HUD, and
+ # texture assets are package content and are retained; the manifest reference check below catches
+-- 
+2.43.0
+

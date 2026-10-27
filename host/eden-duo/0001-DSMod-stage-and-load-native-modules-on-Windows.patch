@@ -1,0 +1,439 @@
+From 8e6e0175d6393d106a8aee388b09ff5f37a2b28c Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 27 Oct 2026 18:19:09 +0000
+Subject: [PATCH 1/3] DSMod: stage and load native modules on Windows
+
+Move module staging out of mod_module.cpp into mod_module_stage.{h,cpp}
+(std + POSIX/Win32 only) and add a Windows branch:
+
+- Platform() reports windows-x86_64 on x64 Windows (_M_X64 or __x86_64__).
+- StageModule() returns a new module-<random hex> directory made with
+  CreateDirectoryW and writes <TITLE>.so with CreateFileW(CREATE_NEW,
+  FILE_ATTRIBUTE_READONLY). POSIX keeps mkdtemp + O_EXCL. A failed stage
+  removes its directory.
+- OpenStaged() loads with LoadLibraryExW on the wide path (LoadLibraryA
+  broke non-ASCII cache paths) or dlopen, and returns the loader's error
+  text; the loader wraps the handle in Common::DynamicLibrary.
+- RemoveStaged() clears the read-only attribute before remove_all, which
+  Windows otherwise refuses; used by ~GameModule and SweepStale().
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01XgyuSR8o8AbzxuWHYqLwsv
+---
+ src/core/mods/duo_core.cmake       |   2 +
+ src/core/mods/mod_module.cpp       |  95 ++------------
+ src/core/mods/mod_module_stage.cpp | 194 +++++++++++++++++++++++++++++
+ src/core/mods/mod_module_stage.h   |  36 ++++++
+ 4 files changed, 241 insertions(+), 86 deletions(-)
+ create mode 100644 src/core/mods/mod_module_stage.cpp
+ create mode 100644 src/core/mods/mod_module_stage.h
+
+diff --git a/src/core/mods/duo_core.cmake b/src/core/mods/duo_core.cmake
+index b010147..c433ce2 100644
+--- a/src/core/mods/duo_core.cmake
++++ b/src/core/mods/duo_core.cmake
+@@ -46,6 +46,8 @@ target_sources(core PRIVATE
+     mods/mod_console.cpp
+     mods/dsmod_module_abi.h
+     mods/mod_module.cpp
++    mods/mod_module_stage.cpp
++    mods/mod_module_stage.h
+     mods/mod_msbt.cpp
+     mods/mod_msbt.h
+     mods/mod_module_host.cpp
+diff --git a/src/core/mods/mod_module.cpp b/src/core/mods/mod_module.cpp
+index 6176e1c..b2e58f9 100644
+--- a/src/core/mods/mod_module.cpp
++++ b/src/core/mods/mod_module.cpp
+@@ -4,8 +4,6 @@
+ #include <algorithm>
+ #include <array>
+ #include <cctype>
+-#include <cerrno>
+-#include <chrono>
+ #include <cstring>
+ #include <mutex>
+ #include <stdexcept>
+@@ -15,19 +13,13 @@
+ #include <nlohmann/json.hpp>
+ #include <openssl/sha.h>
+ 
+-#ifndef _WIN32
+-#include <dlfcn.h>
+-#include <fcntl.h>
+-#include <sys/stat.h>
+-#include <unistd.h>
+-#endif
+-
+ #include "common/fs/path_util.h"
+ #include "common/logging.h"
+ #include "core/file_sys/vfs/vfs.h"
+ #include "core/mods/dsmod_module_abi.h"
+ #include "core/mods/dsmod_module_extensions.h"
+ #include "core/mods/mod_module.h"
++#include "core/mods/mod_module_stage.h"
+ #include "core/mods/mod_package_io.h"
+ 
+ namespace Core::Mods {
+@@ -35,20 +27,6 @@ namespace {
+ std::mutex cache_mutex;
+ std::filesystem::path module_cache;
+ 
+-std::string_view Platform() {
+-#if defined(__ANDROID__) && defined(__aarch64__)
+-    return "android-arm64-v8a";
+-#elif defined(__ANDROID__) && defined(__x86_64__)
+-    return "android-x86_64";
+-#elif defined(__linux__) && defined(__x86_64__)
+-    return "linux-x86_64";
+-#elif defined(__linux__) && defined(__aarch64__)
+-    return "linux-aarch64";
+-#else
+-    return {};
+-#endif
+-}
+-
+ bool IsHex(std::string_view value, size_t length) {
+     return value.size() == length &&
+            std::ranges::all_of(value, [](unsigned char c) { return std::isxdigit(c) != 0; });
+@@ -119,73 +97,19 @@ std::string Digest(const std::vector<u8>& bytes) {
+     return result;
+ }
+ 
+-void StageModule(const std::vector<u8>& bytes, const std::string& title,
+-                 std::filesystem::path& directory) {
+-#ifndef _WIN32
+-    const auto root = CacheDirectory();
+-    std::filesystem::create_directories(root);
+-    std::string temporary = (root / "module-XXXXXX").string();
+-    if (mkdtemp(temporary.data()) == nullptr) {
+-        throw std::runtime_error("cannot create private module staging directory");
+-    }
+-    directory = temporary;
+-    const auto filename = directory / (title + ".so");
+-    // The directory is private (0700), and the module is read-only from creation. The open
+-    // descriptor can finish writing it; no writable path is ever passed to the dynamic loader.
+-    const int fd =
+-        open(filename.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW, S_IRUSR);
+-    if (fd < 0) {
+-        throw std::runtime_error("cannot stage dual-screen module");
+-    }
+-    size_t offset = 0;
+-    while (offset < bytes.size()) {
+-        const ssize_t written = write(fd, bytes.data() + offset, bytes.size() - offset);
+-        if (written < 0 && errno == EINTR) {
+-            continue;
+-        }
+-        if (written <= 0) {
+-            close(fd);
+-            throw std::runtime_error("incomplete dual-screen module staging write");
+-        }
+-        offset += static_cast<size_t>(written);
+-    }
+-    if (close(fd) != 0) {
+-        throw std::runtime_error("cannot finish dual-screen module staging");
+-    }
+-#else
+-    throw std::runtime_error("native dual-screen modules are unsupported on this platform");
+-#endif
+-}
+ } // namespace
+ 
+ void SetModuleCacheDirectory(const std::filesystem::path& directory) {
+     std::scoped_lock lock{cache_mutex};
+     module_cache = directory;
+-    // A staging directory is removed when its module is unloaded, so any left here belong to a
+-    // process that crashed or was killed. Sweep those; a recent one may still be between staging
+-    // and dlopen in another process, so only directories older than a few minutes go.
+-    std::error_code error;
+-    if (directory.empty() || !std::filesystem::is_directory(directory, error)) {
+-        return;
+-    }
+-    const auto cutoff = std::filesystem::file_time_type::clock::now() - std::chrono::minutes{10};
+-    for (const auto& entry : std::filesystem::directory_iterator(directory, error)) {
+-        const auto name = entry.path().filename().string();
+-        std::error_code entry_error;
+-        if (!name.starts_with("module-") || !entry.is_directory(entry_error) ||
+-            entry.last_write_time(entry_error) > cutoff || entry_error) {
+-            continue;
+-        }
+-        std::filesystem::remove_all(entry.path(), entry_error);
+-    }
++    SweepStale(directory);
+ }
+ 
+ GameModule::~GameModule() {
+     // The runtime destroys the module instance before releasing this library handle.
+     library.Close();
+     if (!staging_directory.empty()) {
+-        std::error_code ignored;
+-        std::filesystem::remove_all(staging_directory, ignored);
++        RemoveStaged(staging_directory);
+     }
+ }
+ 
+@@ -248,13 +172,12 @@ std::unique_ptr<GameModule> GameModule::Load(FileSys::VirtualDir assets, u64 tit
+             throw std::runtime_error("dual-screen module checksum mismatch; reinstall the package");
+         }
+         auto loaded = std::unique_ptr<GameModule>{new GameModule};
+-        StageModule(bytes, title, loaded->staging_directory);
+-        const auto filename = loaded->staging_directory / (title + ".so");
+-        if (!loaded->library.Open(filename.string().c_str())) {
+-#ifndef _WIN32
+-            const char* detail = dlerror();
+-            LOG_ERROR(Core, "DSMod module loader: {}", detail ? detail : "unknown loader error");
+-#endif
++        loaded->staging_directory = StageModule(bytes, title, CacheDirectory());
++        std::string loader_error;
++        loaded->library = Common::DynamicLibrary{
++            OpenStaged(loaded->staging_directory / (title + ".so"), loader_error)};
++        if (!loaded->library.IsOpen()) {
++            LOG_ERROR(Core, "DSMod module loader: {}", loader_error);
+             throw std::runtime_error("cannot load dual-screen module for this device");
+         }
+         EdenDsmodGetModuleFn entrypoint{};
+diff --git a/src/core/mods/mod_module_stage.cpp b/src/core/mods/mod_module_stage.cpp
+new file mode 100644
+index 0000000..5757d8c
+--- /dev/null
++++ b/src/core/mods/mod_module_stage.cpp
+@@ -0,0 +1,194 @@
++// SPDX-FileCopyrightText: Copyright 2026 Eden DSMod fork
++// SPDX-License-Identifier: GPL-3.0-or-later
++
++#include <algorithm>
++#include <chrono>
++#include <stdexcept>
++#include <system_error>
++
++#ifdef _WIN32
++#include <random>
++#include <windows.h>
++#else
++#include <cerrno>
++#include <dlfcn.h>
++#include <fcntl.h>
++#include <sys/stat.h>
++#include <unistd.h>
++#endif
++
++#include "core/mods/mod_module_stage.h"
++
++namespace Core::Mods {
++namespace {
++
++#ifdef _WIN32
++std::filesystem::path MakeStagingDirectory(const std::filesystem::path& root) {
++    // Windows has no mkdtemp: pick a random name and let CreateDirectoryW refuse an existing one.
++    // The directory inherits the cache directory's per-user ACL.
++    static constexpr char Hex[] = "0123456789abcdef";
++    std::random_device random;
++    for (int attempt = 0; attempt < 16; ++attempt) {
++        const auto value = (std::uint64_t{random()} << 32) | random();
++        std::string name = "module-";
++        for (int shift = 60; shift >= 0; shift -= 4) {
++            name.push_back(Hex[(value >> shift) & 0xF]);
++        }
++        auto directory = root / name;
++        if (CreateDirectoryW(directory.c_str(), nullptr)) {
++            return directory;
++        }
++        if (GetLastError() != ERROR_ALREADY_EXISTS) {
++            break;
++        }
++    }
++    throw std::runtime_error("cannot create private module staging directory");
++}
++
++void WriteReadOnly(const std::filesystem::path& filename, const std::vector<std::uint8_t>& bytes) {
++    // CREATE_NEW with FILE_ATTRIBUTE_READONLY makes the file read-only from creation while this
++    // handle can still write it, like the POSIX branch's S_IRUSR open.
++    const HANDLE file = CreateFileW(filename.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW,
++                                    FILE_ATTRIBUTE_READONLY, nullptr);
++    if (file == INVALID_HANDLE_VALUE) {
++        throw std::runtime_error("cannot stage dual-screen module");
++    }
++    size_t offset = 0;
++    while (offset < bytes.size()) {
++        const auto chunk = static_cast<DWORD>(std::min<size_t>(bytes.size() - offset, 1u << 30));
++        DWORD written = 0;
++        if (!WriteFile(file, bytes.data() + offset, chunk, &written, nullptr) || written == 0) {
++            CloseHandle(file);
++            throw std::runtime_error("incomplete dual-screen module staging write");
++        }
++        offset += written;
++    }
++    if (!CloseHandle(file)) {
++        throw std::runtime_error("cannot finish dual-screen module staging");
++    }
++}
++#else
++std::filesystem::path MakeStagingDirectory(const std::filesystem::path& root) {
++    std::string temporary = (root / "module-XXXXXX").string();
++    if (mkdtemp(temporary.data()) == nullptr) {
++        throw std::runtime_error("cannot create private module staging directory");
++    }
++    return temporary;
++}
++
++void WriteReadOnly(const std::filesystem::path& filename, const std::vector<std::uint8_t>& bytes) {
++    // The directory is private (0700), and the module is read-only from creation. The open
++    // descriptor can finish writing it; no writable path is ever passed to the dynamic loader.
++    const int fd =
++        open(filename.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW, S_IRUSR);
++    if (fd < 0) {
++        throw std::runtime_error("cannot stage dual-screen module");
++    }
++    size_t offset = 0;
++    while (offset < bytes.size()) {
++        const ssize_t written = write(fd, bytes.data() + offset, bytes.size() - offset);
++        if (written < 0 && errno == EINTR) {
++            continue;
++        }
++        if (written <= 0) {
++            close(fd);
++            throw std::runtime_error("incomplete dual-screen module staging write");
++        }
++        offset += static_cast<size_t>(written);
++    }
++    if (close(fd) != 0) {
++        throw std::runtime_error("cannot finish dual-screen module staging");
++    }
++}
++#endif
++
++} // namespace
++
++std::string_view Platform() {
++#if defined(__ANDROID__) && defined(__aarch64__)
++    return "android-arm64-v8a";
++#elif defined(__ANDROID__) && defined(__x86_64__)
++    return "android-x86_64";
++#elif defined(__linux__) && defined(__x86_64__)
++    return "linux-x86_64";
++#elif defined(__linux__) && defined(__aarch64__)
++    return "linux-aarch64";
++#elif defined(_WIN32) && (defined(_M_X64) || defined(__x86_64__))
++    // MSVC defines _M_X64 only; MinGW and clang define __x86_64__.
++    return "windows-x86_64";
++#else
++    return {};
++#endif
++}
++
++std::filesystem::path StageModule(const std::vector<std::uint8_t>& bytes, const std::string& title,
++                                  const std::filesystem::path& root) {
++    std::filesystem::create_directories(root);
++    const auto directory = MakeStagingDirectory(root);
++    try {
++        WriteReadOnly(directory / (title + ".so"), bytes);
++    } catch (...) {
++        RemoveStaged(directory);
++        throw;
++    }
++    return directory;
++}
++
++void* OpenStaged(const std::filesystem::path& file, std::string& error) {
++    error.clear();
++#ifdef _WIN32
++    // The wide call keeps non-ASCII cache paths loadable (LoadLibraryA goes through the ANSI
++    // code page). Windows uses the given .so extension as is.
++    void* handle = LoadLibraryExW(file.c_str(), nullptr, 0);
++    if (!handle) {
++        error = std::system_category().message(static_cast<int>(GetLastError()));
++    }
++#else
++    void* handle = dlopen(file.c_str(), RTLD_NOW);
++    if (!handle) {
++        const char* detail = dlerror();
++        error = detail ? detail : "";
++    }
++#endif
++    if (!handle && error.empty()) {
++        error = "unknown loader error";
++    }
++    return handle;
++}
++
++void RemoveStaged(const std::filesystem::path& directory) {
++    std::error_code error;
++    // Windows will not delete a read-only file, so drop the attribute set at staging first.
++    for (std::filesystem::directory_iterator it{directory, error}, end; !error && it != end;
++         it.increment(error)) {
++        if (std::filesystem::is_regular_file(it->symlink_status(error))) {
++            std::filesystem::permissions(it->path(), std::filesystem::perms::owner_write,
++                                         std::filesystem::perm_options::add, error);
++        }
++    }
++    std::filesystem::remove_all(directory, error);
++}
++
++void SweepStale(const std::filesystem::path& root) {
++    // A staging directory is removed when its module is unloaded, so any left here belong to a
++    // process that crashed or was killed. Sweep those; a recent one may still be between staging
++    // and dlopen in another process, so only directories older than a few minutes go.
++    std::error_code error;
++    if (root.empty() || !std::filesystem::is_directory(root, error)) {
++        return;
++    }
++    // Compared natively: a converted string() can throw on a non-ASCII sibling on Windows.
++    static const auto prefix = std::filesystem::path{"module-"}.native();
++    const auto cutoff = std::filesystem::file_time_type::clock::now() - std::chrono::minutes{10};
++    for (std::filesystem::directory_iterator it{root, error}, end; !error && it != end;
++         it.increment(error)) {
++        std::error_code entry_error;
++        if (!it->path().filename().native().starts_with(prefix) || !it->is_directory(entry_error) ||
++            it->last_write_time(entry_error) > cutoff || entry_error) {
++            continue;
++        }
++        RemoveStaged(it->path());
++    }
++}
++
++} // namespace Core::Mods
+diff --git a/src/core/mods/mod_module_stage.h b/src/core/mods/mod_module_stage.h
+new file mode 100644
+index 0000000..6847a55
+--- /dev/null
++++ b/src/core/mods/mod_module_stage.h
+@@ -0,0 +1,36 @@
++// SPDX-FileCopyrightText: Copyright 2026 Eden DSMod fork
++// SPDX-License-Identifier: GPL-3.0-or-later
++
++#pragma once
++
++#include <cstdint>
++#include <filesystem>
++#include <string>
++#include <string_view>
++#include <vector>
++
++// Native module staging, kept to std + POSIX/Win32 so it builds and tests without the emulator.
++
++namespace Core::Mods {
++
++/// The package `module.libraries` key for this host, or empty when native modules are unsupported.
++std::string_view Platform();
++
++/// Copies a verified module into a new private `module-*` directory under `root` (created if
++/// needed) as a read-only `<title>.so`, and returns that directory. Throws on any failure, leaving
++/// nothing staged.
++std::filesystem::path StageModule(const std::vector<std::uint8_t>& bytes, const std::string& title,
++                                  const std::filesystem::path& root);
++
++/// Loads a staged module by its full (wide on Windows) path. Returns the native handle, or null
++/// with the loader's reason in `error`.
++void* OpenStaged(const std::filesystem::path& file, std::string& error);
++
++/// Deletes a staging directory, read-only module included. Best effort, never throws.
++void RemoveStaged(const std::filesystem::path& directory);
++
++/// Deletes `module-*` directories under `root` older than 10 minutes, left by a process that
++/// crashed or was killed. Best effort, never throws.
++void SweepStale(const std::filesystem::path& root);
++
++} // namespace Core::Mods
+-- 
+2.43.0
+

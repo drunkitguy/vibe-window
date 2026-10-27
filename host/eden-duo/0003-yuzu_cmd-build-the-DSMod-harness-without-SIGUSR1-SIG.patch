@@ -1,0 +1,54 @@
+From 91696a4f1450956000e009a1183ff80b592dc06a Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 27 Oct 2026 18:19:09 +0000
+Subject: [PATCH 3/3] yuzu_cmd: build the DSMod harness without SIGUSR1/SIGUSR2
+
+Windows (MSVC and MinGW) has no SIGUSR1/SIGUSR2, so register the
+screenshot/button signal handlers and log the pid only #ifdef SIGUSR1.
+The .shot and .btn trigger files keep working everywhere.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01XgyuSR8o8AbzxuWHYqLwsv
+---
+ src/yuzu_cmd/dsmod_harness.cpp | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/src/yuzu_cmd/dsmod_harness.cpp b/src/yuzu_cmd/dsmod_harness.cpp
+index 149e6d6..2c2b19c 100644
+--- a/src/yuzu_cmd/dsmod_harness.cpp
++++ b/src/yuzu_cmd/dsmod_harness.cpp
+@@ -271,7 +271,7 @@ static std::string g_screenshot_prefix{"eden-shot"};
+ /// (--aux-virtual) nothing ever draws a GPU-composited page, see TakeScreenshots.
+ static std::atomic<bool> g_aux_window_presents{false};
+ 
+-static void ScreenshotSignalHandler(int) {
++[[maybe_unused]] static void ScreenshotSignalHandler(int) {
+     g_screenshot_requested.store(true);
+ }
+ 
+@@ -359,7 +359,7 @@ static std::chrono::steady_clock::time_point g_tap_until{};
+ static std::vector<int> g_button_keys;
+ static std::vector<InputCommon::VirtualGamepad::VirtualButton> g_button_all;
+ 
+-static void ButtonSignalHandler(int) {
++[[maybe_unused]] static void ButtonSignalHandler(int) {
+     g_button_requested.store(true);
+ }
+ 
+@@ -1003,10 +1003,13 @@ void OnGameLoaded(Session& session, Core::System& system) {
+         }
+     }
+ 
++    // Windows has no SIGUSR1/SIGUSR2; the .shot and .btn trigger files work everywhere.
++#ifdef SIGUSR1
+     std::signal(SIGUSR1, ScreenshotSignalHandler);
+     std::signal(SIGUSR2, ButtonSignalHandler);
+     LOG_INFO(Frontend, "screenshots: kill -USR1 {} writes {}-screen1.png / -screen2.png", getpid(),
+              g_screenshot_prefix);
++#endif
+ }
+ 
+ void Iterate(Core::System& system, InputCommon::InputSubsystem& input_subsystem) {
+-- 
+2.43.0
+
