@@ -222,8 +222,8 @@ Doable in this Linux container now (no game, no Windows, no Thor):
 |---|---|---|---|
 | 0 | Decisions: D1 host path = **C** (user, done); D2 target version | - | D1 done; D2 blocked: user |
 | H1a | Eden Duo: native modules on Windows (loader, harness compile fix, tests), as patches | - | done: `host/eden-duo/0001-0003` + `host/eden-duo-companions/0001`; loader Catch2 tests pass standalone; full eden-duo build blocked (proxy 403 on CPM fmt download), real-Windows checks in H1c; critic SATISFIED round 3 |
-| T1 | TotK package skeleton: build gate, fail-closed reader, tests; Linux `.so` and Windows DLL; `.dsmod.zip` | H1a (builder patch) | doing |
-| H1b | eden-cli composite layout: `--window-rect`, `--aux-rect`, borderless, aux not focusable | H1a | todo |
+| T1 | TotK package skeleton: build gate, fail-closed reader, tests; Linux `.so` and Windows DLL; `.dsmod.zip` | H1a (builder patch) | done: `2c482b6` (+ plan `911aed8`); gcc/clang/MinGW builds and ctest pass (MinGW under wine), single export, package + wine probe pass; critic SATISFIED round 3 |
+| H1b | eden-cli composite layout: `--window-rect`, `--aux-rect`, borderless, aux not focusable | H1a | doing |
 
 Needs the user, a Windows PC, the Thor or another repo:
 
@@ -405,10 +405,25 @@ Patch `src/yuzu_cmd` so one 1920x2160 virtual display can hold both windows:
 - With `--aux-rect`, create the aux window with `SDL_WINDOW_NOT_FOCUSABLE`, so taps never move
   keyboard focus away from the game window.
 - Help text lists both flags.
-Acceptance: patch applies after H1a; argument parser unit-tested standalone (valid rects, missing
-or negative values, non-numbers rejected with a message); builds in the Linux eden-duo build if
-H1a check 4 succeeded, else compile-checked in H1c. Fallback if the patch is refused: a PowerShell
-script that finds the windows by title (`Eden - Screen 2 (DSMod aux)`) and sets style and
+Where and how (learned in H1a/T1): `host/eden-duo/0004-*.patch` (more if needed, numbered on),
+`git am` on top of 0001-0003 in a fresh copy of `$E` at `5fa93ed`. There is no full eden-duo build
+here (the proxy 403s CPM's fmt) and no SDL3 headers (Ubuntu noble has none), so:
+- the rect parser lives in its own std-only file `src/yuzu_cmd/window_rect.{h,cpp}` (added to
+  `duo_cmd.cmake`), called from the existing `getopt_long` table in `dsmod_harness.cpp`;
+- SDL changes stay minimal: the flags passed to the four `SDL_CreateWindow` calls
+  (`emu_window_sdl3_{gl,vk,null,aux}.cpp`) plus one position/size call; they are only
+  compile-checked in H1c.
+Acceptance:
+1. `git am` of 0001-0004+ on a fresh copy succeeds; 0001-0003 are unchanged.
+2. Standalone assert test `host/eden-duo/test/window_rect_test.cpp`, built like `stage_test`
+   with g++ and with MinGW, run natively and under `LC_ALL=C.UTF-8 WINEDEBUG=-all` wine: valid
+   rects parse; missing fields, extra fields, non-numbers, negative x/y, zero or negative w/h,
+   values beyond `int` are rejected with a message.
+3. `grep` of the patched tree: `SDL_WINDOW_RESIZABLE` is dropped and `SDL_WINDOW_BORDERLESS` set
+   only when the matching rect flag is given; `SDL_WINDOW_NOT_FOCUSABLE` only on the aux window
+   with `--aux-rect`; without the flags every create call passes the same flags as today.
+4. Help text lists both flags. The windows are built and checked on real Windows in H1c.
+Fallback if the patch is refused: a PowerShell script that finds the windows by title (`Eden - Screen 2 (DSMod aux)`) and sets style and
 position.
 
 ### H1c (user on Windows, after H1a, H1b, T1)
@@ -418,10 +433,13 @@ staging DACL (`host/eden-duo/test/stage_test.cpp:165`) and cleanup of the stagin
 failed load. On the user's Windows build of the patched fork:
 1. Build `host/eden-duo/test` with the Windows toolchain (MSYS2 `MINGW64` g++ with the Windows
    lines of `run.sh`: `fake.dll`, `stage_test.exe`, `planted.dll`, `importer.dll`, all in one
-   folder) and run `stage_test.exe fake.dll importer.dll` with `planted.dll` next to it. Must pass.
+   folder) and run `stage_test.exe fake.dll importer.dll` with `planted.dll` next to it, and
+   `window_rect_test.exe`. Must pass.
 2. Run `tests.exe "[dsmod][module]"` from the MSVC build (`-DYUZU_TESTS=ON`). Must pass.
 3. Smoke run as in the H1c row: TotK package installed, notice page in the aux window, `.shot`
-   screenshots, a tap on the aux window keeps controller input.
+   screenshots, a tap on the aux window keeps controller input. With
+   `--window-rect 0,0,1920,1080 --aux-rect 0,1080,1240,1080`: both windows sit at those rects,
+   borderless and not resizable (no maximize), and the aux window never takes focus.
 Send logs and screenshots back.
 
 Decision point: if a failed load leaves its `module-*` staging dir behind on real Windows,
