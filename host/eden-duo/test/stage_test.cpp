@@ -186,6 +186,15 @@ void CheckRoot(const fs::path& root, const std::vector<std::uint8_t>& module) {
     std::printf("  bad path error: %s\n", error.c_str());
     // A relative name would be searched for, so it is refused before the loader sees it.
     assert(!OpenStaged("0100000000000001.so", error) && !error.empty());
+#ifdef _WIN32
+    // So are drive- and root-relative forms, while a \\?\ path is absolute and loads.
+    for (const wchar_t* relative : {L"C:0100000000000001.so", L"\\0100000000000001.so"}) {
+        assert(!OpenStaged(relative, error) && error == "module path is not absolute");
+    }
+    void* prefixed = OpenStaged(L"\\\\?\\" + file.native(), error);
+    assert(prefixed && error.empty());
+    Unload(prefixed);
+#endif
 
     // Facts check (PLAN fact 2): does a plain remove_all cope with the read-only module?
     std::error_code plain;
@@ -240,10 +249,12 @@ void CheckPlantedImport(const fs::path& root, const std::vector<std::uint8_t>& i
     std::string error;
     assert(!OpenStaged(file, error) && !error.empty());
     std::printf("  planted import refused: %s\n", error.c_str());
-    // Wine keeps an image whose imports failed open, so its staging dir outlives RemoveStaged
-    // there (SweepStale takes it later). Reported, not asserted, until H1c sees real Windows.
+    // Wine keeps an image whose imports failed open, so there the staging dir outlives
+    // RemoveStaged. Nothing sweeps it later on desktop: SweepStale runs only from
+    // SetModuleCacheDirectory, which only Android calls.
     RemoveStaged(directory);
     std::printf("  failed-load staging dir removed: %d\n", !fs::exists(directory));
+    assert(Wine() || !fs::exists(directory));
 }
 #endif
 } // namespace

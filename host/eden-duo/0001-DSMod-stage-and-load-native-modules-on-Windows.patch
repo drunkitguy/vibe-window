@@ -1,4 +1,4 @@
-From 686a344af102568bae46b22934969abd99b44401 Mon Sep 17 00:00:00 2001
+From fe000a8b9eb62df0e38c921db0b390ae6d0a7450 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Tue, 27 Oct 2026 18:40:03 +0000
 Subject: [PATCH 1/3] DSMod: stage and load native modules on Windows
@@ -28,9 +28,9 @@ Claude-Session: https://claude.ai/code/session_01XgyuSR8o8AbzxuWHYqLwsv
 ---
  src/core/mods/duo_core.cmake       |   2 +
  src/core/mods/mod_module.cpp       |  95 ++----------
- src/core/mods/mod_module_stage.cpp | 222 +++++++++++++++++++++++++++++
+ src/core/mods/mod_module_stage.cpp | 232 +++++++++++++++++++++++++++++
  src/core/mods/mod_module_stage.h   |  36 +++++
- 4 files changed, 269 insertions(+), 86 deletions(-)
+ 4 files changed, 279 insertions(+), 86 deletions(-)
  create mode 100644 src/core/mods/mod_module_stage.cpp
  create mode 100644 src/core/mods/mod_module_stage.h
 
@@ -200,15 +200,16 @@ index 6176e1c..b2e58f9 100644
          EdenDsmodGetModuleFn entrypoint{};
 diff --git a/src/core/mods/mod_module_stage.cpp b/src/core/mods/mod_module_stage.cpp
 new file mode 100644
-index 0000000..1bfb639
+index 0000000..0c0c76c
 --- /dev/null
 +++ b/src/core/mods/mod_module_stage.cpp
-@@ -0,0 +1,222 @@
+@@ -0,0 +1,232 @@
 +// SPDX-FileCopyrightText: Copyright 2026 Eden DSMod fork
 +// SPDX-License-Identifier: GPL-3.0-or-later
 +
 +#include <algorithm>
 +#include <chrono>
++#include <memory>
 +#include <stdexcept>
 +#include <system_error>
 +
@@ -236,34 +237,30 @@ index 0000000..1bfb639
 +    // Like mkdtemp's 0700, the directory and the module in it grant only the owner (and SYSTEM),
 +    // ignoring the parent's ACL: under a portable install in C:\ that would let any signed-in
 +    // user replace the module between staging and loading.
-+    PSECURITY_DESCRIPTOR descriptor{};
++    PSECURITY_DESCRIPTOR raw{};
 +    if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(
-+            L"D:P(A;OICI;FA;;;OW)(A;OICI;FA;;;SY)", SDDL_REVISION_1, &descriptor, nullptr)) {
++            L"D:P(A;OICI;FA;;;OW)(A;OICI;FA;;;SY)", SDDL_REVISION_1, &raw, nullptr)) {
 +        throw std::runtime_error("cannot create private module staging directory");
 +    }
-+    SECURITY_ATTRIBUTES attributes{sizeof(attributes), descriptor, FALSE};
++    const std::unique_ptr<void, decltype(&LocalFree)> descriptor{raw, &LocalFree};
++    SECURITY_ATTRIBUTES attributes{sizeof(attributes), descriptor.get(), FALSE};
 +    static constexpr char Hex[] = "0123456789abcdef";
 +    std::random_device random;
-+    std::filesystem::path directory;
 +    for (int attempt = 0; attempt < 16; ++attempt) {
 +        const auto value = (std::uint64_t{random()} << 32) | random();
 +        std::string name = "module-";
 +        for (int shift = 60; shift >= 0; shift -= 4) {
 +            name.push_back(Hex[(value >> shift) & 0xF]);
 +        }
-+        if (CreateDirectoryW((root / name).c_str(), &attributes)) {
-+            directory = root / name;
-+            break;
++        auto directory = root / name;
++        if (CreateDirectoryW(directory.c_str(), &attributes)) {
++            return directory;
 +        }
 +        if (GetLastError() != ERROR_ALREADY_EXISTS) {
 +            break;
 +        }
 +    }
-+    LocalFree(descriptor);
-+    if (directory.empty()) {
-+        throw std::runtime_error("cannot create private module staging directory");
-+    }
-+    return directory;
++    throw std::runtime_error("cannot create private module staging directory");
 +}
 +
 +void WriteReadOnly(const std::filesystem::path& filename, const std::vector<std::uint8_t>& bytes) {
@@ -323,6 +320,19 @@ index 0000000..1bfb639
 +}
 +#endif
 +
++bool IsAbsolute(const std::filesystem::path& file) {
++#ifdef _WIN32
++    // MinGW's is_absolute() is false for UNC (\\server\share\...) and \\?\ paths, which are
++    // absolute. Drive-relative (C:a.so) and root-relative (\a.so) paths stay refused.
++    const auto& name = file.native();
++    const auto separator = [](wchar_t c) { return c == L'\\' || c == L'/'; };
++    if (name.size() > 2 && separator(name[0]) && separator(name[1])) {
++        return true;
++    }
++#endif
++    return file.is_absolute();
++}
++
 +} // namespace
 +
 +std::string_view Platform() {
@@ -358,7 +368,7 @@ index 0000000..1bfb639
 +void* OpenStaged(const std::filesystem::path& file, std::string& error) {
 +    error.clear();
 +    // A bare or relative name would make the loader search for it.
-+    if (!file.is_absolute()) {
++    if (!IsAbsolute(file)) {
 +        error = "module path is not absolute";
 +        return nullptr;
 +    }

@@ -1,4 +1,4 @@
-From 2a69b592af2e8dbd7c205efe36a5f974c8303d65 Mon Sep 17 00:00:00 2001
+From c06f04292d34a30888cdc0cc8307b8b7ae64a5f0 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Tue, 27 Oct 2026 18:19:09 +0000
 Subject: [PATCH 3/3] yuzu_cmd: build the DSMod harness without SIGUSR1/SIGUSR2
