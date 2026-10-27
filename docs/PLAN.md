@@ -351,7 +351,7 @@ Files:
 - `native/modules/totk_build_test.cpp`, `totk_status_test.cpp`, `totk_module_test.cpp`.
 - `packages/TearsOfTheKingdom/dualscreen/manifest.json`: `format 1`, `title_id`, `name`,
   `min_runtime 22`, `requires_module true`, canvas 1240x1080, page `main`: notice (rect + label
-  "Companion unavailable" + label `bind: module_error_message` giving the reason: wrong build, module error, checksum or platform) hidden when `totk.ready` is 1
+  "Companion unavailable" + label `bind_text: module_error_message` giving the reason: wrong build, module error, checksum or platform) hidden when `totk.ready` is 1
   (`hide_bind`/`hide_eq` [S3 PACKAGE_FORMAT §3.5; Dread manifest]); placeholder Ready label with
   `need_bind: totk.ready`. No game art, no `module` block.
 - `packages/TearsOfTheKingdom/dualscreen/9B4E43650501A4D4.json`: `{}`.
