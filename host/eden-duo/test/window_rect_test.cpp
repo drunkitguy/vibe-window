@@ -22,11 +22,11 @@ void Valid(const char* text, int x, int y, int w, int h) {
     assert(rect->x == x && rect->y == y && rect->w == w && rect->h == h);
 }
 
-void Invalid(const char* text) {
+void Invalid(const char* text, const char* expected) {
     std::string error;
     assert(!ParseWindowRect(text, error));
-    assert(!error.empty());
     std::printf("  %-26s -> %s\n", (std::string("'") + text + "'").c_str(), error.c_str());
+    assert(error.find(expected) != std::string::npos);
 }
 
 } // namespace
@@ -35,30 +35,36 @@ int main() {
     Valid("0,0,1920,1080", 0, 0, 1920, 1080);
     Valid("0,1080,1240,1080", 0, 1080, 1240, 1080);
     Valid("7,8,1,1", 7, 8, 1, 1);
-    Valid("2147483647,0,2147483647,1", 2147483647, 0, 2147483647, 1);
+    Valid("0,0,32767,32767", 0, 0, 32767, 32767);
+    Valid("32766,32766,1,1", 32766, 32766, 1, 1);
 
     std::printf("rejected:\n");
-    Invalid("");                       // missing fields
-    Invalid("0,0,1920");               // missing field
-    Invalid("0,0,1920,");              // empty last field
-    Invalid(",0,1920,1080");           // empty first field
-    Invalid("0,0,1920,1080,5");        // extra field
-    Invalid("0,0,1920,1080,");         // extra empty field
-    Invalid("a,0,1920,1080");          // non-number
-    Invalid("0,0,1920x,1080");         // trailing junk
-    Invalid("0,0,1.5,1080");           // not an integer
-    Invalid("0,0,+1920,1080");         // sign
-    Invalid(" 0,0,1920,1080");         // whitespace
-    Invalid("0, 0,1920,1080");         // whitespace
-    Invalid("-1,0,1920,1080");         // negative x
-    Invalid("0,-5,1920,1080");         // negative y
-    Invalid("0,0,0,1080");             // zero w
-    Invalid("0,0,1920,0");             // zero h
-    Invalid("0,0,-1920,1080");         // negative w
-    Invalid("0,0,1920,-1");            // negative h
-    Invalid("2147483648,0,1920,1080"); // beyond int
-    Invalid("0,0,1920,99999999999");   // beyond int
-    Invalid("0,-2147483649,1,1");      // below int
+    Invalid("", "not a number");                                // missing fields
+    Invalid("0,0,1920", "got 3 values");                        // missing field
+    Invalid("0,0,1920,", "not a number");                       // empty last field
+    Invalid(",0,1920,1080", "not a number");                    // empty first field
+    Invalid("0,0,1920,1080,5", "more than 4 values");           // extra field
+    Invalid("0,0,1920,1080,", "more than 4 values");            // extra empty field
+    Invalid("a,0,1920,1080", "not a number");                   // non-number
+    Invalid("0,0,1920x,1080", "not a number");                  // trailing junk
+    Invalid("0,0,1.5,1080", "not a number");                    // not an integer
+    Invalid("0,0,+1920,1080", "not a number");                  // sign
+    Invalid(" 0,0,1920,1080", "not a number");                  // whitespace
+    Invalid("0, 0,1920,1080", "not a number");                  // whitespace
+    Invalid("-1,0,1920,1080", "x and y");                       // negative x
+    Invalid("0,-5,1920,1080", "x and y");                       // negative y
+    Invalid("0,0,0,1080", "w and h");                           // zero w
+    Invalid("0,0,1920,0", "w and h");                           // zero h
+    Invalid("0,0,-1920,1080", "w and h");                       // negative w
+    Invalid("0,0,1920,-1", "w and h");                          // negative h
+    Invalid("2147483648,0,1920,1080", "out of range");          // beyond int
+    Invalid("0,0,1920,99999999999", "out of range");            // beyond int
+    Invalid("0,-2147483649,1,1", "out of range");               // below int
+    Invalid("32767,0,1,1", "x+w and y+h");                      // x+w past 32767
+    Invalid("0,32000,1,768", "x+w and y+h");                    // y+h past 32767
+    Invalid("2147483647,0,2147483647,1", "x+w and y+h");        // int max, x+w overflows int
+    Invalid("805240832,0,1920,1080", "x+w and y+h");            // SDL_WINDOWPOS_CENTERED
+    Invalid("0,536805376,1920,1080", "x+w and y+h");            // SDL_WINDOWPOS_UNDEFINED
 
     std::printf("window_rect_test: all checks passed\n");
     return 0;

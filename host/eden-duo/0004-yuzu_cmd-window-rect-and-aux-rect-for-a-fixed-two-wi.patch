@@ -1,4 +1,4 @@
-From 781ee4ae033faab7dfe56934a0dc27a5ca7fef67 Mon Sep 17 00:00:00 2001
+From c632508b6d41a491a9ec314b86a9b794903eec6c Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Tue, 27 Oct 2026 20:28:46 +0000
 Subject: [PATCH] yuzu_cmd: --window-rect and --aux-rect for a fixed two-window
@@ -12,34 +12,64 @@ e.g. --window-rect 0,0,1920,1080 --aux-rect 0,1080,1240,1080 on a
 With a rect the window is created SDL_WINDOW_BORDERLESS instead of
 SDL_WINDOW_RESIZABLE (on Windows SDL gives a resizable window
 WS_THICKFRAME | WS_MAXIMIZEBOX, which a capture host may stretch to
-fill the display) and is then moved and sized with
-SDL_SetWindowPosition/SDL_SetWindowSize. The aux window also gets
-SDL_WINDOW_NOT_FOCUSABLE (WS_EX_NOACTIVATE on Windows), so a tap on it
-never takes focus from the game window. Without the flags every
-SDL_CreateWindow call passes the same flags as before.
+fill the display), and SDL_WINDOW_HIDDEN so it does not flash at the
+default position; it is then moved with SDL_SetWindowPosition, sized
+with SDL_SetWindowSize and shown. The aux window also gets
+SDL_WINDOW_NOT_FOCUSABLE (WS_EX_NOACTIVATE on Windows, shown with
+SWP_NOACTIVATE), so a tap on it never takes focus from the game window.
+Without the flags every SDL_CreateWindow call passes the same flags as
+before.
 
 The value parser is std-only (src/yuzu_cmd/window_rect.{h,cpp}) so it
-can be tested without SDL or the emulator; a bad value prints its
-reason and eden-cli exits with failure.
+can be tested without SDL or the emulator. It keeps x+w and y+h within
+32767 (Win32's 16-bit window coordinates, and clear of SDL's
+SDL_WINDOWPOS_UNDEFINED/CENTERED encodings). --window-rect also needs
+at least the 640x360 minimum client size eden-cli sets afterwards. A
+bad value prints its reason and eden-cli exits with failure.
+
+The aux window's creation log now reports its pixel size. The ledger
+lists emu_window_sdl3_gl.cpp and emu_window_sdl3_null.cpp as upstream
+hooks.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01XgyuSR8o8AbzxuWHYqLwsv
 ---
- src/yuzu_cmd/dsmod_harness.cpp                | 42 ++++++++++++++-
- src/yuzu_cmd/dsmod_harness.h                  | 11 ++++
+ .upstream/duo-touched.tsv                     |  2 +
+ src/yuzu_cmd/dsmod_harness.cpp                | 58 +++++++++++++++++-
+ src/yuzu_cmd/dsmod_harness.h                  | 12 ++++
  src/yuzu_cmd/duo_cmd.cmake                    |  2 +
- .../emu_window/emu_window_sdl3_aux.cpp        |  9 +++-
- .../emu_window/emu_window_sdl3_gl.cpp         |  7 ++-
+ .../emu_window/emu_window_sdl3_aux.cpp        | 15 ++++-
+ .../emu_window/emu_window_sdl3_gl.cpp         |  8 ++-
  .../emu_window/emu_window_sdl3_null.cpp       |  7 ++-
  .../emu_window/emu_window_sdl3_vk.cpp         |  7 ++-
- src/yuzu_cmd/window_rect.cpp                  | 54 +++++++++++++++++++
- src/yuzu_cmd/window_rect.h                    | 27 ++++++++++
- 9 files changed, 161 insertions(+), 5 deletions(-)
+ src/yuzu_cmd/window_rect.cpp                  | 60 +++++++++++++++++++
+ src/yuzu_cmd/window_rect.h                    | 30 ++++++++++
+ 10 files changed, 195 insertions(+), 6 deletions(-)
  create mode 100644 src/yuzu_cmd/window_rect.cpp
  create mode 100644 src/yuzu_cmd/window_rect.h
 
+diff --git a/.upstream/duo-touched.tsv b/.upstream/duo-touched.tsv
+index 44efb72..29b6343 100644
+--- a/.upstream/duo-touched.tsv
++++ b/.upstream/duo-touched.tsv
+@@ -388,6 +388,7 @@ upstream-hook	M	4	6	2	src/core/debugger/debugger.cpp
+ upstream-hook	M	4	8	1	src/core/hle/service/ipc_helpers.h
+ upstream-hook	M	4	8	1	src/video_core/renderer_vulkan/renderer_vulkan.h
+ upstream-hook	M	4	9	6	src/video_core/renderer_opengl/renderer_opengl.cpp
++upstream-hook	M	4	7	1	src/yuzu_cmd/emu_window/emu_window_sdl3_gl.cpp
+ upstream-hook	M	3	10	0	src/input_common/drivers/android.cpp
+ upstream-hook	M	3	13	3	src/common/fs/file.cpp
+ upstream-hook	M	3	14	0	src/core/file_sys/romfs_factory.h
+@@ -401,6 +402,7 @@ upstream-hook	M	3	29	2	src/common/android/id_cache.cpp
+ upstream-hook	M	3	5	2	src/android/app/src/main/java/org/yuzu/yuzu_emu/utils/GameIconUtils.kt
+ upstream-hook	M	3	6	0	src/android/app/src/main/java/org/yuzu/yuzu_emu/fragments/AddonsFragment.kt
+ upstream-hook	M	3	6	1	src/android/app/src/main/java/org/yuzu/yuzu_emu/overlay/InputOverlay.kt
++upstream-hook	M	3	6	1	src/yuzu_cmd/emu_window/emu_window_sdl3_null.cpp
+ upstream-hook	M	2	10	0	src/core/cpu_manager.cpp
+ upstream-hook	M	2	10	0	src/core/perf_stats.cpp
+ upstream-hook	M	2	10	0	src/video_core/renderer_base.h
 diff --git a/src/yuzu_cmd/dsmod_harness.cpp b/src/yuzu_cmd/dsmod_harness.cpp
-index 5bc0f74..aa7b6f8 100644
+index 5bc0f74..3099cb0 100644
 --- a/src/yuzu_cmd/dsmod_harness.cpp
 +++ b/src/yuzu_cmd/dsmod_harness.cpp
 @@ -78,7 +78,9 @@ static void PrintHelp(const char* argv0) {
@@ -53,7 +83,7 @@ index 5bc0f74..aa7b6f8 100644
  }
  
  static void PrintVersion() {
-@@ -747,6 +749,29 @@ static void ServiceButtonRequests(Core::System& system,
+@@ -747,6 +749,36 @@ static void ServiceButtonRequests(Core::System& system,
      LOG_INFO(Frontend, "virtual input script loaded: {} steps", g_btn_queue.size());
  }
  
@@ -73,17 +103,24 @@ index 5bc0f74..aa7b6f8 100644
 +    if (window == nullptr || !rect) {
 +        return;
 +    }
-+    if (!SDL_SetWindowPosition(window, rect->x, rect->y) ||
-+        !SDL_SetWindowSize(window, rect->w, rect->h)) {
-+        LOG_ERROR(Frontend, "Failed to place window at {},{} {}x{}: {}", rect->x, rect->y, rect->w,
-+                  rect->h, SDL_GetError());
++    // Both calls are requests; Wayland, for one, refuses to move a top-level window.
++    if (!SDL_SetWindowPosition(window, rect->x, rect->y)) {
++        LOG_ERROR(Frontend, "Failed to move window to {},{}: {}", rect->x, rect->y, SDL_GetError());
++    }
++    if (!SDL_SetWindowSize(window, rect->w, rect->h)) {
++        LOG_ERROR(Frontend, "Failed to size window to {}x{}: {}", rect->w, rect->h, SDL_GetError());
++    }
++    // Created hidden so it does not flash at the default position. A NOT_FOCUSABLE window is
++    // shown without activation (SWP_NOACTIVATE on Windows).
++    if (!SDL_ShowWindow(window)) {
++        LOG_ERROR(Frontend, "Failed to show window: {}", SDL_GetError());
 +    }
 +}
 +
  Session::Session()
      : aux_window_requested{std::getenv("EDEN_AUX_WINDOW") != nullptr},
        aux_virtual_requested{std::getenv("EDEN_AUX_VIRTUAL") != nullptr} {}
-@@ -798,6 +823,8 @@ std::optional<SDL_AppResult> ParseCommandLine(Session& session, int argc, char**
+@@ -798,6 +830,8 @@ std::optional<SDL_AppResult> ParseCommandLine(Session& session, int argc, char**
          {"dump-romfs", required_argument, 0, 'R'},
          {"install", required_argument, 0, 'I'},
          {"screenshot-prefix", required_argument, 0, 'S'},
@@ -92,7 +129,7 @@ index 5bc0f74..aa7b6f8 100644
          {0, 0, 0, 0},
          // clang-format on
      };
-@@ -901,6 +928,19 @@ std::optional<SDL_AppResult> ParseCommandLine(Session& session, int argc, char**
+@@ -901,6 +935,28 @@ std::optional<SDL_AppResult> ParseCommandLine(Session& session, int argc, char**
              case 'S':
                  g_screenshot_prefix = optarg;
                  break;
@@ -102,6 +139,15 @@ index 5bc0f74..aa7b6f8 100644
 +                std::string error;
 +                auto& rect = arg == 'w' ? g_window_rect : g_aux_rect;
 +                rect = ParseWindowRect(optarg, error);
++                // eden-cli sets the main window's minimum size after placing it, which would
++                // silently enlarge a smaller rect.
++                if (rect && arg == 'w' &&
++                    (rect->w < static_cast<int>(Layout::MinimumSize::Width) ||
++                     rect->h < static_cast<int>(Layout::MinimumSize::Height))) {
++                    rect.reset();
++                    error = fmt::format("w and h must be at least {}x{}",
++                                        Layout::MinimumSize::Width, Layout::MinimumSize::Height);
++                }
 +                if (!rect) {
 +                    std::cout << "Wrong format for option --" << long_options[option_index].name
 +                              << ": " << error << "\n";
@@ -113,7 +159,7 @@ index 5bc0f74..aa7b6f8 100644
          } else {
  #ifdef _WIN32
 diff --git a/src/yuzu_cmd/dsmod_harness.h b/src/yuzu_cmd/dsmod_harness.h
-index 18cdc30..45fbbf9 100644
+index 18cdc30..a8e9528 100644
 --- a/src/yuzu_cmd/dsmod_harness.h
 +++ b/src/yuzu_cmd/dsmod_harness.h
 @@ -7,6 +7,7 @@
@@ -133,7 +179,7 @@ index 18cdc30..45fbbf9 100644
  class AuxWindow_SDL3;
  
  namespace Core {
-@@ -60,6 +63,14 @@ void OnGameLoaded(Session& session, Core::System& system);
+@@ -60,6 +63,15 @@ void OnGameLoaded(Session& session, Core::System& system);
  /// Once per SDL iteration: perf line, pending screenshots and scripted input.
  void Iterate(Core::System& system, InputCommon::InputSubsystem& input_subsystem);
  
@@ -142,7 +188,8 @@ index 18cdc30..45fbbf9 100644
 +const std::optional<WindowRect>& MainWindowRect();
 +const std::optional<WindowRect>& AuxWindowRect();
 +
-+/// Moves and sizes a new window to `rect`; does nothing without one.
++/// Moves and sizes a new window to `rect` and shows it (the rect branch creates it hidden);
++/// does nothing without a rect.
 +void PlaceWindow(SDL_Window* window, const std::optional<WindowRect>& rect);
 +
  /// Routes an SDL event to the aux window. Returns true when the aux window owned (and handled)
@@ -162,10 +209,10 @@ index df9d9fe..ba3edaf 100644
  
  if (YUZU_TESTS)
 diff --git a/src/yuzu_cmd/emu_window/emu_window_sdl3_aux.cpp b/src/yuzu_cmd/emu_window/emu_window_sdl3_aux.cpp
-index 0824dd1..f97041f 100644
+index 0824dd1..6f97cc2 100644
 --- a/src/yuzu_cmd/emu_window/emu_window_sdl3_aux.cpp
 +++ b/src/yuzu_cmd/emu_window/emu_window_sdl3_aux.cpp
-@@ -10,18 +10,25 @@
+@@ -10,18 +10,26 @@
  #include "core/frontend/framebuffer_layout.h"
  #include "video_core/dsmod/aux_routing.h"
  #include "video_core/gpu.h"
@@ -181,7 +228,8 @@ index 0824dd1..f97041f 100644
      window = SDL_CreateWindow("Eden - Screen 2 (DSMod aux)", static_cast<int>(width),
                                static_cast<int>(height),
 -                              SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
-+                              (rect ? SDL_WINDOW_BORDERLESS | SDL_WINDOW_NOT_FOCUSABLE
++                              (rect ? SDL_WINDOW_BORDERLESS | SDL_WINDOW_NOT_FOCUSABLE |
++                                          SDL_WINDOW_HIDDEN
 +                                    : SDL_WINDOW_RESIZABLE) |
 +                                  SDL_WINDOW_HIGH_PIXEL_DENSITY);
      if (window == nullptr) {
@@ -192,8 +240,20 @@ index 0824dd1..f97041f 100644
      window_id = SDL_GetWindowID(window);
      if (!FillWindowSystemInfoFromSDL(window, window_info)) {
          LOG_CRITICAL(Frontend, "Unable to determine native window backend for aux window");
+@@ -30,7 +38,10 @@ AuxWindow_SDL3::AuxWindow_SDL3(Core::System& system_, u32 width, u32 height) : s
+         return;
+     }
+     OnResize();
+-    LOG_INFO(Frontend, "DSMod aux window created ({}x{}, id {})", width, height, window_id);
++    int pixel_width = 0, pixel_height = 0;
++    SDL_GetWindowSizeInPixels(window, &pixel_width, &pixel_height);
++    LOG_INFO(Frontend, "DSMod aux window created ({}x{} px, id {})", pixel_width, pixel_height,
++             window_id);
+ }
+ 
+ AuxWindow_SDL3::~AuxWindow_SDL3() {
 diff --git a/src/yuzu_cmd/emu_window/emu_window_sdl3_gl.cpp b/src/yuzu_cmd/emu_window/emu_window_sdl3_gl.cpp
-index e86858a..4ecbcd0 100644
+index e86858a..6784692 100644
 --- a/src/yuzu_cmd/emu_window/emu_window_sdl3_gl.cpp
 +++ b/src/yuzu_cmd/emu_window/emu_window_sdl3_gl.cpp
 @@ -20,6 +20,7 @@
@@ -204,7 +264,7 @@ index e86858a..4ecbcd0 100644
  #include "yuzu_cmd/emu_window/emu_window_sdl3_gl.h"
  
  namespace {
-@@ -97,16 +98,20 @@ EmuWindow_SDL3_GL::EmuWindow_SDL3_GL(InputCommon::InputSubsystem* input_subsyste
+@@ -97,16 +98,21 @@ EmuWindow_SDL3_GL::EmuWindow_SDL3_GL(InputCommon::InputSubsystem* input_subsyste
  
      std::string window_title = fmt::format("{} | {}-{}", Common::g_build_fullname,
                                             Common::g_scm_branch, Common::g_scm_desc);
@@ -215,7 +275,8 @@ index e86858a..4ecbcd0 100644
                           Layout::ScreenUndocked::Height,
 -                         SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE |
 +                         SDL_WINDOW_OPENGL |
-+                             (rect ? SDL_WINDOW_BORDERLESS : SDL_WINDOW_RESIZABLE) |
++                             (rect ? SDL_WINDOW_BORDERLESS | SDL_WINDOW_HIDDEN
++                                   : SDL_WINDOW_RESIZABLE) |
                               SDL_WINDOW_HIGH_PIXEL_DENSITY);
  
      if (render_window == nullptr) {
@@ -227,7 +288,7 @@ index e86858a..4ecbcd0 100644
      strict_context_required = strcmp(SDL_GetCurrentVideoDriver(), "wayland") == 0;
  
 diff --git a/src/yuzu_cmd/emu_window/emu_window_sdl3_null.cpp b/src/yuzu_cmd/emu_window/emu_window_sdl3_null.cpp
-index f5e4e19..804a1b7 100644
+index f5e4e19..f2baa3f 100644
 --- a/src/yuzu_cmd/emu_window/emu_window_sdl3_null.cpp
 +++ b/src/yuzu_cmd/emu_window/emu_window_sdl3_null.cpp
 @@ -13,6 +13,7 @@
@@ -248,14 +309,14 @@ index f5e4e19..804a1b7 100644
          SDL_CreateWindow(window_title.c_str(), Layout::ScreenUndocked::Width,
                           Layout::ScreenUndocked::Height,
 -                         SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
-+                         (rect ? SDL_WINDOW_BORDERLESS : SDL_WINDOW_RESIZABLE) |
++                         (rect ? SDL_WINDOW_BORDERLESS | SDL_WINDOW_HIDDEN : SDL_WINDOW_RESIZABLE) |
 +                             SDL_WINDOW_HIGH_PIXEL_DENSITY);
 +    DSModHarness::PlaceWindow(render_window, rect);
  
      SetWindowIcon();
  
 diff --git a/src/yuzu_cmd/emu_window/emu_window_sdl3_vk.cpp b/src/yuzu_cmd/emu_window/emu_window_sdl3_vk.cpp
-index 7c3e2b2..f1fc91f 100644
+index 7c3e2b2..9a91544 100644
 --- a/src/yuzu_cmd/emu_window/emu_window_sdl3_vk.cpp
 +++ b/src/yuzu_cmd/emu_window/emu_window_sdl3_vk.cpp
 @@ -14,6 +14,7 @@
@@ -276,7 +337,7 @@ index 7c3e2b2..f1fc91f 100644
          SDL_CreateWindow(window_title.c_str(), Layout::ScreenUndocked::Width,
                           Layout::ScreenUndocked::Height,
 -                         SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
-+                         (rect ? SDL_WINDOW_BORDERLESS : SDL_WINDOW_RESIZABLE) |
++                         (rect ? SDL_WINDOW_BORDERLESS | SDL_WINDOW_HIDDEN : SDL_WINDOW_RESIZABLE) |
 +                             SDL_WINDOW_HIGH_PIXEL_DENSITY);
 +    DSModHarness::PlaceWindow(render_window, rect);
  
@@ -284,10 +345,10 @@ index 7c3e2b2..f1fc91f 100644
      SetWindowIcon();
 diff --git a/src/yuzu_cmd/window_rect.cpp b/src/yuzu_cmd/window_rect.cpp
 new file mode 100644
-index 0000000..ace0867
+index 0000000..f3c8a2b
 --- /dev/null
 +++ b/src/yuzu_cmd/window_rect.cpp
-@@ -0,0 +1,54 @@
+@@ -0,0 +1,60 @@
 +// SPDX-FileCopyrightText: Copyright 2026 Eden DSMod fork
 +// SPDX-License-Identifier: GPL-3.0-or-later
 +
@@ -315,7 +376,7 @@ index 0000000..ace0867
 +            error = "'" + std::string(field) + "' is out of range";
 +            return std::nullopt;
 +        }
-+        if (field.empty() || ec != std::errc{} || end != last) {
++        if (ec != std::errc{} || end != last) {
 +            error = "'" + std::string(field) + "' is not a number (expected x,y,w,h)";
 +            return std::nullopt;
 +        }
@@ -338,16 +399,22 @@ index 0000000..ace0867
 +        error = "w and h must be more than 0";
 +        return std::nullopt;
 +    }
++    // Win32 window coordinates are 16-bit, and larger values reach SDL's SDL_WINDOWPOS_UNDEFINED
++    // / SDL_WINDOWPOS_CENTERED encodings and overflow its x + w / 2.
++    if (w > MaxCoordinate - x || h > MaxCoordinate - y) {
++        error = "x+w and y+h must be " + std::to_string(MaxCoordinate) + " or less";
++        return std::nullopt;
++    }
 +    return WindowRect{x, y, w, h};
 +}
 +
 +} // namespace DSModHarness
 diff --git a/src/yuzu_cmd/window_rect.h b/src/yuzu_cmd/window_rect.h
 new file mode 100644
-index 0000000..4e8ceda
+index 0000000..e10518c
 --- /dev/null
 +++ b/src/yuzu_cmd/window_rect.h
-@@ -0,0 +1,27 @@
+@@ -0,0 +1,30 @@
 +// SPDX-FileCopyrightText: Copyright 2026 Eden DSMod fork
 +// SPDX-License-Identifier: GPL-3.0-or-later
 +
@@ -362,6 +429,9 @@ index 0000000..4e8ceda
 +
 +namespace DSModHarness {
 +
++/// Largest x+w and y+h a rect may reach.
++constexpr int MaxCoordinate = 32767;
++
 +/// A window's desktop position and client size, in SDL window coordinates.
 +struct WindowRect {
 +    int x;
@@ -370,8 +440,8 @@ index 0000000..4e8ceda
 +    int h;
 +};
 +
-+/// Parses `x,y,w,h`: four decimal ints, x and y >= 0, w and h > 0. Returns the rect, or nothing
-+/// with the reason in `error`.
++/// Parses `x,y,w,h`: four decimal ints, x and y >= 0, w and h > 0, x+w and y+h at most
++/// MaxCoordinate. Returns the rect, or nothing with the reason in `error`.
 +std::optional<WindowRect> ParseWindowRect(std::string_view text, std::string& error);
 +
 +} // namespace DSModHarness
