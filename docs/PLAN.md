@@ -220,7 +220,7 @@ Doable in this Linux container now (no game, no Windows, no Thor):
 | # | Packet | Depends | Status |
 |---|---|---|---|
 | 0 | Decisions: D1 host path = **C** (user, done); D2 target version | - | D1 done; D2 blocked: user |
-| H1a | Eden Duo: native modules on Windows (loader, harness compile fix, tests), as patches | - | todo |
+| H1a | Eden Duo: native modules on Windows (loader, harness compile fix, tests), as patches | - | doing |
 | T1 | TotK package skeleton: build gate, fail-closed reader, tests; Linux `.so` and Windows DLL; `.dsmod.zip` | H1a (builder patch) | todo |
 | H1b | eden-cli composite layout: `--window-rect`, `--aux-rect`, borderless, aux not focusable | H1a | todo |
 
@@ -254,20 +254,33 @@ wine is `/usr/lib/wine/wine64`).
 
 Changes:
 1. Move module staging into `src/core/mods/mod_module_stage.{h,cpp}` with only std + POSIX/Win32
-   dependencies, so it compiles and tests without the emulator: `Platform()`,
-   `StageModule(bytes, title, directory)`, `RemoveStaged(directory)`.
+   dependencies, so it compiles and tests without the emulator:
    - `Platform()`: add `windows-x86_64` for `_WIN32 && (_M_X64 || __x86_64__)` (MSVC defines
      `_M_X64`, not `__x86_64__`).
-   - Windows `StageModule`: unique private dir `module-<random>` under the cache dir
-     (`CreateDirectoryW`, fail if it exists), write `<TITLE>.so` with
-     `CreateFileW(..., CREATE_NEW, ...)`, then `FILE_ATTRIBUTE_READONLY`.
-   - `RemoveStaged`: clear the read-only attribute, then `remove_all`; used by `~GameModule`
-     (after `library.Close()`) and the stale-dir sweep.
-   - Error detail: `GetLastError()` text on Windows where Linux logs `dlerror()`.
+   - `std::filesystem::path StageModule(bytes, title, root)` returns the new staging dir. Windows:
+     dir `module-<random hex>` under `root` via `CreateDirectoryW`, retried on
+     `ERROR_ALREADY_EXISTS` up to a fixed count, then fail; write `<TITLE>.so` with
+     `CreateFileW(..., CREATE_NEW, ...)`, then `FILE_ATTRIBUTE_READONLY`. POSIX keeps today's
+     `mkdtemp` + `O_EXCL` behaviour.
+   - `void* OpenStaged(const std::filesystem::path&, std::string& error)`: Windows
+     `LoadLibraryExW(path.c_str(), ...)` with `GetLastError()` text; elsewhere `dlopen` with
+     `dlerror()`. `mod_module.cpp` wraps the handle in the existing
+     `Common::DynamicLibrary(void*)` constructor [S1 `src/common/dynamic_library.h:24`] instead of
+     `library.Open(filename.string().c_str())` (`mod_module.cpp:253`, which goes through
+     `LoadLibraryA` and breaks non-ASCII paths).
+   - `RemoveStaged(dir)`: clear the read-only attribute, then `remove_all`; used by `~GameModule`
+     (after `library.Close()`).
+   - `SweepStale(root)`: the stale-dir sweep moved out of `SetModuleCacheDirectory`
+     (`mod_module.cpp:161-180`), same rule (only `module-*` dirs older than 10 minutes), built on
+     `RemoveStaged`.
 2. `dsmod_harness.cpp`: register the SIGUSR1/SIGUSR2 handlers and log the pid only
    `#ifdef SIGUSR1`; the `.shot`/`.btn` files keep working everywhere.
-3. `src/tests/core/mods/duo_tests.cmake` + `module.cpp`: build the fake modules on Windows too and
-   take the platform name from `Platform()` instead of the hard-coded `linux-x86_64`.
+3. Loader tests:
+   - `src/tests/core/mods/duo_tests.cmake`: build the fake modules on Windows too.
+   - `src/tests/core/mods/module.cpp`: take the platform name from `Platform()` at line 50 (VFS
+     dir name) and line 66 (manifest JSON), both hard-coded `linux-x86_64` today.
+   - `src/tests/core/mods/fake_module.cpp`: `#ifdef _WIN32 __declspec(dllexport)` on
+     `eden_dsmod_get_module` and `eden_dsmod_get_data_extensions` (MSVC would export nothing).
 4. Companions `tools/build_dualscreen_package.py`: add `windows-x86_64` to `PLATFORMS`. The
    `.so` suffix and `modules/<platform>/<TITLEID>.so` path stay (fact 4).
 
@@ -275,21 +288,24 @@ Acceptance:
 1. `git apply --check` of every patch on a fresh `git worktree`/copy of each clone at the pinned
    commit; `git am` applies the series in order.
 2. A standalone test `host/eden-duo/test/stage_test.cpp` (built from the patched
-   `mod_module_stage.cpp` + eden's `src/tests/core/mods/fake_module.cpp` as the module) passes:
+   `mod_module_stage.cpp` + eden's patched `src/tests/core/mods/fake_module.cpp` as the module)
+   passes:
    - natively with g++ (Linux branch);
    - built with `x86_64-w64-mingw32-g++-posix -static` and run with
      `WINEDEBUG=-all /usr/lib/wine/wine64 stage_test.exe` (Windows branch).
-   It checks: `Platform()` is `linux-x86_64` / `windows-x86_64`; staging creates a new private dir
-   and a read-only `<TITLE>.so` with the exact bytes; a second stage gets a different dir; the
-   staged file loads (`dlopen` / `LoadLibraryExW`) and `eden_dsmod_get_module` returns the fake
-   table; after unload `RemoveStaged` leaves nothing; the sweep removes only `module-*` dirs older
-   than 10 minutes.
+   Both runs use an ASCII cache root and a non-ASCII one (e.g. `cache-é`). It checks:
+   `Platform()` is `linux-x86_64` / `windows-x86_64`; `StageModule` returns a new private dir
+   holding a read-only `<TITLE>.so` with the exact bytes; a second stage returns a different dir;
+   `OpenStaged` loads the staged file and `eden_dsmod_get_module` returns the fake table; a bad
+   path gives null and a non-empty error; after unload `RemoveStaged` leaves nothing;
+   `SweepStale` removes only `module-*` dirs older than 10 minutes.
 3. MinGW `-fsyntax-only` of the patched `dsmod_harness.cpp` is not required (it needs the whole
    tree); instead: `grep -n "SIGUSR" ` shows every use inside `#ifdef SIGUSR1`.
-4. Best effort, report the result either way: configure and build eden-duo on Linux with the
-   patches (`docs/Build.md`, `-DYUZU_TESTS=ON`), then run `tests "[dsmod][module]"`. The docs ask
-   for Ubuntu 26.04 dependencies and this container is 24.04 [S1 `docs/Deps.md`]; if configure
-   fails, give the first error and stop (H1c covers it on Windows).
+4. Best effort, time-boxed to 45 minutes: configure and build eden-duo on Linux with the patches
+   (`docs/Build.md`, `-DYUZU_TESTS=ON`), then run `tests "[dsmod][module]"`. The docs ask for
+   Ubuntu 26.04 dependencies and this container is 24.04 [S1 `docs/Deps.md`]; do not install a
+   26.04 toolchain. Stop at the first configure or build error and report it (H1c covers it on
+   Windows).
 5. The patched builder packs a `windows-x86_64` module and still refuses an unknown platform.
 
 ### T1 (coder, after H1a)
