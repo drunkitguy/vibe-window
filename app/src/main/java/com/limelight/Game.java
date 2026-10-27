@@ -45,6 +45,7 @@ import com.limelight.ui.ExternalControllerView;
 import com.limelight.ui.GameGestures;
 import com.limelight.ui.StreamContainer;
 import com.limelight.utils.Dialog;
+import com.limelight.utils.DualScreenLayout;
 import com.limelight.utils.ExternalDisplayControlActivity;
 import com.limelight.utils.MouseModeOption;
 import com.limelight.utils.NetHelper;
@@ -400,6 +401,17 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
         onExternelDisplay = currentDisplay.getDisplayId() != Display.DEFAULT_DISPLAY;
         com.limelight.preferences.AutoResolutionAndroid.resolveInto(this, prefConfig); // Auto resolution/FPS from this display; no-op for explicit values
 
+        if (prefConfig.dualScreen) {
+            // Request the composite mode; readPreferences already turned off full external display, 3D and PiP
+            DualScreenLayout.Mode mode = DualScreenLayout.mode(true, prefConfig.width, prefConfig.height, prefConfig.fps);
+            prefConfig.width = mode.width;
+            prefConfig.height = mode.height;
+            prefConfig.fps = mode.fps;
+            prefConfig.windowOnly = true;
+            prefConfig.autoInvertVideoResolution = false;
+            prefConfig.videoScaleMode = PreferenceConfiguration.ScaleMode.STRETCH;
+        }
+
         boolean shouldInvertDecoderResolution = false;
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
@@ -574,7 +586,7 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
         appUUID = Game.this.getIntent().getStringExtra(EXTRA_APP_UUID);
         appId = Game.this.getIntent().getIntExtra(EXTRA_APP_ID, StreamConfiguration.INVALID_APP_ID);
         uniqueId = Game.this.getIntent().getStringExtra(EXTRA_UNIQUEID);
-        vDisplay = Game.this.getIntent().getBooleanExtra(EXTRA_VDISPLAY, false);
+        vDisplay = prefConfig.dualScreen || Game.this.getIntent().getBooleanExtra(EXTRA_VDISPLAY, false);
         serverCommands = Game.this.getIntent().getStringArrayListExtra(EXTRA_SERVER_COMMANDS);
         boolean appSupportsHdr = Game.this.getIntent().getBooleanExtra(EXTRA_APP_HDR, false);
         byte[] derCertData = Game.this.getIntent().getByteArrayExtra(EXTRA_SERVER_CERT);
@@ -2577,6 +2589,10 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
         normalizedX /= streamContainer.getWidth();
         normalizedY /= streamContainer.getHeight();
 
+        if (prefConfig.dualScreen) {
+            // The main view shows the top crop (when it shows the bottom one, onTouch never gets here)
+            return DualScreenLayout.toVideo(DualScreenLayout.TOP_CROP, normalizedX, normalizedY);
+        }
         return new float[] { normalizedX, normalizedY };
     }
 
@@ -3450,6 +3466,11 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
         eventX = Math.min(Math.max(eventX, 0), streamContainer.getWidth());
         eventY = Math.min(Math.max(eventY, 0), streamContainer.getHeight());
 
+        if (prefConfig.dualScreen) {
+            int[] p = DualScreenLayout.mousePosition(DualScreenLayout.TOP_CROP, eventX, eventY, streamContainer.getWidth(), streamContainer.getHeight());
+            conn.sendMousePosition((short)p[0], (short)p[1], (short)p[2], (short)p[3]);
+            return;
+        }
         conn.sendMousePosition((short)eventX, (short)eventY, (short) streamContainer.getWidth(), (short) streamContainer.getHeight());
     }
 
@@ -3468,7 +3489,39 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
             view.requestUnbufferedDispatch(event);
         }
 
+        if (prefConfig.dualScreen && !streamContainer.isDualScreenMainTop()) {
+            // The main display shows the bottom crop
+            return sendDualScreenTouch(event, true, view);
+        }
         return handleMotionEvent(view, event);
+    }
+
+    // Dual screen: touches on the display without the user's touch mode go out as direct touch
+    public boolean sendDualScreenTouch(MotionEvent event, boolean bottom, View view) {
+        if (conn == null || !grabbedInput || view.getWidth() <= 0 || view.getHeight() <= 0) {
+            return false;
+        }
+        byte eventType = getLiTouchTypeFromEvent(event);
+        if (eventType < 0) {
+            return false;
+        }
+        // CANCEL_ALL would also drop the other display's touches, so cancel this display's pointers one by one
+        if (eventType == MoonBridge.LI_TOUCH_EVENT_CANCEL_ALL) {
+            eventType = MoonBridge.LI_TOUCH_EVENT_CANCEL;
+        }
+        int action = event.getActionMasked();
+        boolean allPointers = action == MotionEvent.ACTION_MOVE || action == MotionEvent.ACTION_CANCEL;
+        int first = allPointers ? 0 : event.getActionIndex();
+        int end = allPointers ? event.getPointerCount() : first + 1;
+        int[] crop = bottom ? DualScreenLayout.BOTTOM_CROP : DualScreenLayout.TOP_CROP;
+        for (int i = first; i < end; i++) {
+            float[] xy = DualScreenLayout.toVideo(crop, event.getX(i) / view.getWidth(), event.getY(i) / view.getHeight());
+            int pointerId = bottom ? DualScreenLayout.bottomPointerId(event.getPointerId(i))
+                    : DualScreenLayout.topPointerId(event.getPointerId(i));
+            conn.sendTouchEvent(eventType, pointerId, xy[0], xy[1],
+                    getPressureOrDistance(event, i), 0, 0, getRotationDegrees(event, i));
+        }
+        return true;
     }
 
     @Override
@@ -4244,7 +4297,7 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
                 // Touch mouse disabled
                 touchContextMap[i] = null;
             } else if (!prefConfig.touchscreenTrackpad) {
-                touchContextMap[i] = new AbsoluteTouchContext(conn, i, streamContainer, mode == 5);
+                touchContextMap[i] = new AbsoluteTouchContext(conn, i, streamContainer, mode == 5, prefConfig.dualScreen);
             } else if (mode == 3) {
                 touchContextMap[i] = new RelativeTouchContext(conn, i, REFERENCE_HORIZ_RES, REFERENCE_VERT_RES, streamContainer, prefConfig);
             } else {

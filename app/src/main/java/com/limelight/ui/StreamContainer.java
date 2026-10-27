@@ -1,13 +1,18 @@
 package com.limelight.ui;
 
+import android.app.Presentation;
 import android.content.Context;
 import android.graphics.PixelFormat;
+import android.graphics.Point;
 import android.opengl.GLSurfaceView;
 import android.util.AttributeSet;
+import android.view.Display;
 import android.view.KeyEvent;
 import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
+import android.view.View;
+import android.view.WindowManager;
 import android.view.inputmethod.BaseInputConnection;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
@@ -16,6 +21,9 @@ import android.widget.FrameLayout;
 import com.limelight.Game;
 import com.limelight.LimeLog;
 import com.limelight.preferences.PreferenceConfiguration;
+import com.limelight.utils.DualScreenLayout;
+import com.limelight.utils.DualScreenRenderer;
+import com.limelight.utils.ServerHelper;
 import com.limelight.utils.Stereo3DRenderer;
 
 /**
@@ -36,12 +44,17 @@ public class StreamContainer extends FrameLayout implements SurfaceHolder.Callba
     public enum StreamMode {
         MODE_2D,
         MODE_AI_3D,
-        MODE_AI_3D_MOVIE
+        MODE_AI_3D_MOVIE,
+        // Not a render_mode_list value: chosen by the Dual screen setting
+        MODE_DUAL_SCREEN
     }
 
     private Game game;
     private PreferenceConfiguration prefConfig;
     private Stereo3DRenderer mStereoRenderer;
+    private DualScreenRenderer mDualRenderer;
+    private Presentation mDualPresentation;
+    private boolean dualScreenMainTop = true;
 
     private SurfaceView mSurfaceView;
     private Surface mCurrentSurface;
@@ -69,7 +82,7 @@ public class StreamContainer extends FrameLayout implements SurfaceHolder.Callba
 
         this.game = game;
         this.prefConfig = prefConfig;
-        this.renderMode = mapIntToStreamMode(prefConfig.renderMode);
+        this.renderMode = prefConfig.dualScreen ? StreamMode.MODE_DUAL_SCREEN : mapIntToStreamMode(prefConfig.renderMode);
 
         Stereo3DRenderer.isMovieMode = renderMode == StreamMode.MODE_AI_3D_MOVIE;
 
@@ -83,7 +96,9 @@ public class StreamContainer extends FrameLayout implements SurfaceHolder.Callba
         mSurfaceView = new SurfaceView(context);
         addView(mSurfaceView, childParams);
 
-        if (renderMode != StreamMode.MODE_2D) {
+        if (renderMode == StreamMode.MODE_DUAL_SCREEN) {
+            initDualScreen(context, childParams);
+        } else if (renderMode != StreamMode.MODE_2D) {
             GLSurfaceView glSurfaceView = new GLSurfaceView(context);
             glSurfaceView.setEGLContextClientVersion(3);
             mStereoRenderer = new Stereo3DRenderer(glSurfaceView, this, context, prefConfig);
@@ -97,6 +112,70 @@ public class StreamContainer extends FrameLayout implements SurfaceHolder.Callba
         if (mSurfaceView.getHolder().getSurface() != null && mSurfaceView.getHolder().getSurface().isValid()) {
             surfaceChanged(mSurfaceView.getHolder(), PixelFormat.RGBA_8888, mSurfaceView.getWidth(), mSurfaceView.getHeight());
         }
+    }
+
+    // One GL context draws the main display's crop here and the other crop into a Presentation
+    private void initDualScreen(Context context, LayoutParams childParams) {
+        Display secondDisplay = ServerHelper.getSecondaryDisplay(context);
+        Point mainSize = new Point();
+        Point secondSize = new Point();
+        ((WindowManager) context.getSystemService(Context.WINDOW_SERVICE)).getDefaultDisplay().getRealSize(mainSize);
+        if (secondDisplay != null) {
+            secondDisplay.getRealSize(secondSize);
+        }
+        // The larger display shows the top crop
+        dualScreenMainTop = DualScreenLayout.isTopDisplay(mainSize.x, mainSize.y, secondSize.x, secondSize.y);
+        int[] mainCrop = dualScreenMainTop ? DualScreenLayout.TOP_CROP : DualScreenLayout.BOTTOM_CROP;
+        int[] secondCrop = dualScreenMainTop ? DualScreenLayout.BOTTOM_CROP : DualScreenLayout.TOP_CROP;
+
+        GLSurfaceView glSurfaceView = new GLSurfaceView(context);
+        glSurfaceView.setEGLContextClientVersion(2);
+        mDualRenderer = new DualScreenRenderer(glSurfaceView, this, mainCrop, secondCrop);
+        glSurfaceView.setRenderer(mDualRenderer);
+        glSurfaceView.setRenderMode(GLSurfaceView.RENDERMODE_WHEN_DIRTY);
+        mSurfaceView = glSurfaceView;
+        addView(mSurfaceView, childParams);
+
+        if (secondDisplay == null) {
+            LimeLog.warning("Dual screen: second display is gone; showing the main crop only");
+            return;
+        }
+        SurfaceView secondView = new SurfaceView(context);
+        secondView.getHolder().addCallback(new SurfaceHolder.Callback() {
+            @Override
+            public void surfaceCreated(SurfaceHolder holder) {
+            }
+            @Override
+            public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
+                mDualRenderer.setSecondSurface(holder.getSurface());
+            }
+            @Override
+            public void surfaceDestroyed(SurfaceHolder holder) {
+                mDualRenderer.setSecondSurface(null);
+            }
+        });
+        // The second display never gets the user's touch mode: its touches go out as direct touch
+        secondView.setOnTouchListener((view, event) -> game.sendDualScreenTouch(event, dualScreenMainTop, view));
+
+        mDualPresentation = new Presentation(context, secondDisplay);
+        // Not focusable: a tap below must not take key (controller) focus away from Game
+        mDualPresentation.getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN |
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE);
+        mDualPresentation.setContentView(secondView);
+        mDualPresentation.getWindow().getDecorView().setSystemUiVisibility(
+                View.SYSTEM_UI_FLAG_FULLSCREEN |
+                        View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
+                        View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
+        try {
+            mDualPresentation.show();
+        } catch (WindowManager.InvalidDisplayException e) {
+            LimeLog.warning("Dual screen: cannot show on the second display: " + e);
+            mDualPresentation = null;
+        }
+    }
+
+    public boolean isDualScreenMainTop() {
+        return dualScreenMainTop;
     }
 
     // --- Aspect Ratio and Scaling Logic ---
@@ -218,7 +297,7 @@ public class StreamContainer extends FrameLayout implements SurfaceHolder.Callba
 
     public StreamMode mapIntToStreamMode(int modeIndex) {
         StreamContainer.StreamMode[] modes = StreamContainer.StreamMode.values();
-        if (modeIndex >= 0 && modeIndex < modes.length) {
+        if (modeIndex >= 0 && modeIndex < StreamMode.MODE_DUAL_SCREEN.ordinal()) {
             return modes[modeIndex];
         } else {
             return StreamContainer.StreamMode.MODE_2D;
@@ -252,6 +331,8 @@ public class StreamContainer extends FrameLayout implements SurfaceHolder.Callba
             mCurrentSurface = null;
         } else if (mStereoRenderer != null) {
             mStereoRenderer.onSurfaceDestroyed();
+        } else if (mDualRenderer != null) {
+            mDualRenderer.onSurfaceDestroyed();
         }
 
         game.surfaceDestroyed(holder);
@@ -268,6 +349,13 @@ public class StreamContainer extends FrameLayout implements SurfaceHolder.Callba
     public void onDestroy() {
         if (mStereoRenderer != null) {
             mStereoRenderer.onSurfaceDestroyed();
+        }
+        if (mDualRenderer != null) {
+            if (mDualPresentation != null) {
+                mDualPresentation.dismiss();
+                mDualPresentation = null;
+            }
+            mDualRenderer.onSurfaceDestroyed();
         }
     }
 }

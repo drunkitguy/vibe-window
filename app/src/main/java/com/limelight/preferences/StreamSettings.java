@@ -64,6 +64,7 @@ import com.limelight.binding.input.virtual_controller.keyboard.KeyBoardControlle
 import com.limelight.binding.video.MediaCodecHelper;
 import com.limelight.utils.Dialog;
 import com.limelight.utils.FileUriUtils;
+import com.limelight.utils.ServerHelper;
 import com.limelight.utils.HelpLauncher;
 import com.limelight.utils.PerformanceDataTracker;
 import com.limelight.utils.UiHelper;
@@ -1010,6 +1011,11 @@ public class StreamSettings extends AppCompatActivity implements SettingsHost {
                     !pm.hasSystemFeature("android.software.picture_in_picture") ||
                     pm.hasSystemFeature("com.amazon.software.fireos")) {
                 removePreferenceByKey("checkbox_enable_pip");
+            }
+
+            // Dual screen needs a second display
+            if (ServerHelper.getSecondaryDisplay(activity) == null) {
+                removePreferenceByKey("checkbox_dual_screen");
             }
 
             // Fire TV apps are not allowed to use WebViews or browsers, so hide the Help category

@@ -602,6 +602,8 @@
     <string name="title_checkbox_use_virtual_display">Use Virtual Display</string>
     <string name="title_checkbox_window_only">Show only the app window</string>
     <string name="summary_checkbox_window_only">Stream only the launched app\'s window and hide the Windows desktop. Requires the Vibepollo window-only host build.</string>
+    <string name="title_checkbox_dual_screen">Dual screen</string>
+    <string name="summary_checkbox_dual_screen">Stream a 1920x2160 stacked picture and show the top half on the larger screen and the bottom-left 1240x1080 on the smaller one. Taps on the bottom screen go to the host as touch. Turns off full external display, 3D and picture-in-picture.</string>
     <string name="summary_checkbox_use_virtual_display">Use Virtual Display by default.\nVirtual Display can automatically match your client side resolution and frame rate settings, giving you a seamless streaming experience.\nRequires Apollo as host streaming software.</string>
     <string name="title_checkbox_resume_without_confirm">Quick Resume</string>
     <string name="summary_checkbox_resume_without_confirm">Do not show resume menu when clicking resume button, resume the app immediately.</string>

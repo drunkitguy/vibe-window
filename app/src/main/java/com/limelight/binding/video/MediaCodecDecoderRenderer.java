@@ -849,8 +849,8 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
     // Whether the decoder renders straight to the 2D SurfaceView (not to the Stereo 3D renderer)
     private boolean isTwoDimensionalTarget() {
         com.limelight.ui.StreamContainer.StreamMode[] modes = com.limelight.ui.StreamContainer.StreamMode.values();
-        return prefs.renderMode < 0 || prefs.renderMode >= modes.length ||
-                modes[prefs.renderMode] == com.limelight.ui.StreamContainer.StreamMode.MODE_2D;
+        return !prefs.dualScreen && (prefs.renderMode < 0 || prefs.renderMode >= com.limelight.ui.StreamContainer.StreamMode.MODE_DUAL_SCREEN.ordinal() ||
+                modes[prefs.renderMode] == com.limelight.ui.StreamContainer.StreamMode.MODE_2D);
     }
 
     // Whether the stream is shown on the primary (built-in) display

@@ -82,6 +82,12 @@
             android:summary="@string/summary_checkbox_use_virtual_display"
             android:title="@string/title_checkbox_use_virtual_display"
             app:iconSpaceReserved="false" />
+        <CheckBoxPreference
+            android:defaultValue="false"
+            android:key="checkbox_dual_screen"
+            android:summary="@string/summary_checkbox_dual_screen"
+            android:title="@string/title_checkbox_dual_screen"
+            app:iconSpaceReserved="false" />
         <com.limelight.preferences.StatsOverlayPreference
             android:entries="@array/stats_overlay_names"
             android:entryValues="@array/stats_overlay_values"

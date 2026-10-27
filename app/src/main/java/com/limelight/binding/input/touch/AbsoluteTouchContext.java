@@ -6,6 +6,7 @@ import android.view.View;
 
 import com.limelight.nvstream.NvConnection;
 import com.limelight.nvstream.input.MouseButtonPacket;
+import com.limelight.utils.DualScreenLayout;
 
 public class AbsoluteTouchContext implements TouchContext {
     private int lastTouchDownX = 0;
@@ -50,6 +51,7 @@ public class AbsoluteTouchContext implements TouchContext {
     private final int actionIndex;
     private final View targetView;
     private final Handler handler;
+    private final boolean dualScreenTop;
 
     private final Runnable leftButtonUpRunnable = new Runnable() {
         @Override
@@ -69,9 +71,10 @@ public class AbsoluteTouchContext implements TouchContext {
     private static final int TOUCH_DOWN_DEAD_ZONE_TIME_THRESHOLD = 100;
     private static final int TOUCH_DOWN_DEAD_ZONE_DISTANCE_THRESHOLD = 20;
 
-    public AbsoluteTouchContext(NvConnection conn, int actionIndex, View view, boolean swapped)
+    public AbsoluteTouchContext(NvConnection conn, int actionIndex, View view, boolean swapped, boolean dualScreenTop)
     {
         this.conn = conn;
+        this.dualScreenTop = dualScreenTop;
         this.actionIndex = actionIndex;
         this.targetView = view;
         this.handler = new Handler(Looper.getMainLooper());
@@ -126,6 +129,12 @@ public class AbsoluteTouchContext implements TouchContext {
         eventX = Math.min(Math.max(eventX, 0), targetView.getWidth());
         eventY = Math.min(Math.max(eventY, 0), targetView.getHeight());
 
+        if (dualScreenTop) {
+            // The view shows only the top crop of the composite stream
+            int[] p = DualScreenLayout.mousePosition(DualScreenLayout.TOP_CROP, eventX, eventY, targetView.getWidth(), targetView.getHeight());
+            conn.sendMousePosition((short)p[0], (short)p[1], (short)p[2], (short)p[3]);
+            return;
+        }
         conn.sendMousePosition((short)eventX, (short)eventY, (short)targetView.getWidth(), (short)targetView.getHeight());
     }
 

@@ -10,6 +10,7 @@ import androidx.preference.PreferenceManager;
 
 import com.limelight.nvstream.jni.MoonBridge;
 import com.limelight.profiles.ProfilesManager;
+import com.limelight.utils.ServerHelper;
 
 public class PreferenceConfiguration {
 
@@ -367,6 +368,9 @@ public class PreferenceConfiguration {
     public boolean enableNewAnalogStick;
 
     public boolean enableFullExDisplay;
+
+    // Composite stream split over two displays (DualScreenLayout)
+    public boolean dualScreen;
 
     //串流画面顶部居中显示
     public boolean alignDisplayTopCenter;
@@ -1440,6 +1444,15 @@ private static int getFramePacingValue(Context context) {
         config.enableNewAnalogStick=prefs.getBoolean(CHECKBOX_CHECKBOX_ENABLE_ANALOG_STICK_NEW,false);
 
         config.enableFullExDisplay=prefs.getBoolean("checkbox_enable_fullexdisplay",false);
+
+        // Read here, not in Game, because ServerHelper picks full external display before Game starts
+        config.dualScreen = prefs.getBoolean("checkbox_dual_screen", false) && ServerHelper.getSecondaryDisplay(context) != null;
+        if (config.dualScreen) {
+            // Dual screen owns both displays and the GL path
+            config.enableFullExDisplay = false;
+            config.renderMode = 0;
+            config.enablePip = false;
+        }
 
         config.alignDisplayTopCenter =prefs.getBoolean("checkbox_enable_view_top_center",false);
 

@@ -2,6 +2,7 @@
 # 1.4.3: checkbox_gamepad_motion_fallback defaults to true on purpose (motion on by default); nothing else changed.
 # 1.4.8: list_back_button_mode (Back button, default android) is added on purpose; nothing else changed.
 # 1.4.9: checkbox_enable_pip (Mini player) defaults to true on purpose, and checkbox_return_to_stream (default true) is added on purpose; nothing else changed.
+# H3: checkbox_dual_screen (Dual screen, default false) is added on purpose; nothing else changed.
 analog_scrolling	String	right
 checkbox_absolute_mouse_mode	Boolean	false
 checkbox_auto_invert_video_resolution	Boolean	true
@@ -10,6 +11,7 @@ checkbox_auto_res_prefer_external	Boolean	true
 checkbox_back_as_guide	Boolean	false
 checkbox_back_as_meta	Boolean	false
 checkbox_disable_warnings	Boolean	false
+checkbox_dual_screen	Boolean	false
 checkbox_enable_analog_stick_new	Boolean	false
 checkbox_enable_audiofx	Boolean	false
 checkbox_enable_clear_default_special_button	Boolean	false
