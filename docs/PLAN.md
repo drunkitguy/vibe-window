@@ -86,8 +86,9 @@ run, then the game-dependent companion pages, smallest first.
 7. **Thor screens**: top 6" 1920x1080 120 Hz, bottom 3.92" 1240x1080 60 Hz [S24]. The BotW
    companion canvas is 1240x1080 [S2 BotW `manifest.json`].
 8. **Artemis already drives a second Android display**: its `Game.java` uses `DisplayManager`,
-   `isOnExternalDisplay()` and an `ExternalDisplayControlActivity` [S25]. The user's client
-   fork drunkitguy/artemis-apollo2 is not attached to this session: its code was not read.
+   `isOnExternalDisplay()` and an `ExternalDisplayControlActivity` [S25]. The user's client is
+   their own Vibe Window APK (Moonlight-Android fork, `/home/user/vibe-window` branch
+   `claude/clever-clarke-k7hhhj`, tag `v1.4.10`), which keeps that code (see H3).
 9. **Module ABI is headers only** [S1 `src/core/mods/`]: the BotW module builds with
    `g++ ... -I$EDEN_SOURCE_ROOT/src` and nothing else [S2 `tools/botw/build_modules.sh`]. The
    companions' shared CMake needs fmt/nlohmann_json/zstd from `$EDEN_SOURCE_ROOT/.cache/cpm`,
@@ -113,7 +114,7 @@ run, then the game-dependent companion pages, smallest first.
 
 ```
 Windows PC                                                   AYN Thor
-eden-cli (patched fork, H1)                                  artemis-apollo2 (H3)
+eden-cli (patched fork, H1)                                  Vibe Window APK (H3)  
   main window  borderless at (0,0)    1920x1080  ┐            decode once (1920x2160)
   aux window   borderless at (0,1080) 1240x1080  ├ one virtual   ├ crop (0,0,1920,1080)    -> top screen
   TotK module 0100F2C0115B6000.so (PE DLL)       │ display        └ crop (0,1080,1240,1080) -> bottom screen
@@ -229,8 +230,8 @@ Needs the user, a Windows PC, the Thor or another repo:
 | # | Packet | Depends | Status |
 |---|---|---|---|
 | H1c | Windows build of the patched fork (MSVC Ninja per [S1 docs/Build.md], `EDEN_DSMOD_BUILD_DEV_TOOLS=ON`), smoke run: TotK package installed, notice page in the aux window, `.shot` screenshots, a tap on the aux window keeps controller input | H1a, H1b, T1 | blocked: user |
-| H2 | apollo2-vibe composite: per-client mode 1920x2160 for the Thor, `virtual_display_layout = exclusive`, app entry launching eden-cli with both rects; verify the driver accepts the mode and touch lands in the aux window. Code only if a check fails | H1c | blocked: user |
-| H3 | artemis-apollo2: split renderer + bottom-screen touch mapping | H2 design | blocked: repo |
+| H2 | apollo2-vibe window-host (`claude/clever-clarke-k7hhhj`): verify the 1920x2160 window-only composite with no host code; H2b (`dualScreen=1` pin) only if a check fails | H1c, H3 | blocked: user |
+| H3 | Vibe Window client (`/home/user/vibe-window` branch `claude/clever-clarke-k7hhhj`): "Dual screen" setting, split renderer, bottom-screen touch | H1b | todo |
 | T2 | Pin the build: user's `xxd` output replaces `kTargetBuild`; data file renamed; T1 tests rerun | T1, D2, dump | blocked: user |
 | T3 | State discovery on the user's build (Windows dev-tools eden-cli, gdbstub): position + layer, hearts, stamina, rupees, time, weather, temperature, equipped gear with durability; sentinel test, second boot [S3 PORTING_A_GAME §2-3] | T2, H1c | blocked: user |
 | T4 | Ready page v1 = smallest working companion: status + position + equipped gear, read-only | T3 | todo |
@@ -397,7 +398,10 @@ Not runnable here (say so in the report): Windows eden-cli, headless boot (no ga
 
 Patch `src/yuzu_cmd` so one 1920x2160 virtual display can hold both windows:
 - `--window-rect x,y,w,h` (main window) and `--aux-rect x,y,w,h` (aux window): borderless,
-  positioned and sized with SDL3; without the flags nothing changes.
+  positioned and sized with SDL3, and created **without** `SDL_WINDOW_RESIZABLE` (both are
+  resizable today). Reason: SDL3 gives every resizable window `WS_THICKFRAME | WS_MAXIMIZEBOX`
+  [S26], and the window-host tracker resizes such a target to fill the whole capture display
+  (H2 finding 4). Without the flags nothing changes.
 - With `--aux-rect`, create the aux window with `SDL_WINDOW_NOT_FOCUSABLE`, so taps never move
   keyboard focus away from the game window.
 - Help text lists both flags.
@@ -424,31 +428,99 @@ Decision point: if a failed load leaves its `module-*` staging dir behind on rea
 desktop eden-cli needs a `SweepStale` call at startup (today only Android calls
 `SetModuleCacheDirectory`). That becomes its own follow-up packet; H1c does not fix it.
 
-### H2 (user on Windows, after H1c)
+### H2 (host: apollo2-vibe window-host, verify first)
 
-apollo2-vibe needs no code if these hold (fact 5):
-1. Web UI, client "Thor": display mode `1920x2160x60`.
-2. `virtual_display_mode = per_client`, `virtual_display_layout = exclusive` (the virtual display
-   is alone, so its origin is 0,0).
-3. App "TotK duo": `eden-cli.exe --aux-window --window-rect 0,0,1920,1080 --aux-rect 0,1080,1240,1080 -g <TotK path>`.
-Checks: the virtual display comes up at 1920x2160 (Windows display settings); a Moonlight client
-sees both windows stacked; a touch in the lower area moves the companion (aux window gets
-finger or mouse events), a touch in the upper area does not; controller input reaches the game
-after a tap below. Any failing check becomes a code packet for `/home/user/apollo2-vibe`.
+Repo: `/home/user/apollo2-vibe`, branch `claude/clever-clarke-k7hhhj` (window-host 1.3.2,
+`43408b8`) [S21b]. The client sends `windowOnly=1`; the host captures the app's window with WGC in
+a helper process and paints everything else black. Findings from that code:
+1. **The aux window joins the captured set.** With `window_only_secondary_windows` on (default,
+   `src/config.cpp:955`), the tracker's app window set holds the target's process
+   (`window_target.cpp` `update_window_set` -> `build_app_pids(target_pid, ...)`), and the helper
+   gives every visible, top-level, non-transparent window of those processes that touches the
+   capture display its own WGC layer, up to 16 (`tools/sunshine_wgc_capture.cpp:3180-3190`;
+   `window_capture_policy.h` `is_secondary_window`, line 367). eden-cli's aux window is a visible
+   unowned top-level window of the same process, so it becomes a layer.
+2. **Position.** The target's client area and each layer are copied at their true desktop
+   position relative to the capture display; every other pixel is black
+   (`tools/sunshine_wgc_capture.cpp:1193-1196`, `CopySubresourceRegion` at `dst_x/dst_y`). The
+   frame is exactly the desktop layout of the two windows.
+3. **Target choice.** Foreground eligible window first, then the current target, then the
+   largest client area (`window_capture_policy.h` `choose_target`). The 1920x1080 main window
+   wins over the 1240x1080 aux window unless the aux window becomes foreground, and a target
+   change restarts capture (`display_wgc.cpp` `window_target_needs_reinit`). H1b's
+   `SDL_WINDOW_NOT_FOCUSABLE` becomes `WS_EX_NOACTIVATE` on Windows [S26], so a tap never makes the
+   aux window foreground. H1b's flags are needed.
+4. **Placement fight.** The tracker places each new target (`place_step`, `plan_placement`):
+   left alone if its client area covers the display; if resizable (`WS_THICKFRAME` +
+   `WS_MAXIMIZEBOX`, unowned) resized to fill the whole display; if fixed-size, moved only when
+   its client area is not already inside the display. eden-cli creates its main window
+   `SDL_WINDOW_RESIZABLE` (`emu_window_sdl3_vk.cpp:81-83`), which would stretch the game to
+   1920x2160. With H1b's non-resizable main window at `0,0,1920,1080` it is inside the display and
+   left alone. The dialog mover (`place_secondary_windows`) moves only captioned windows that are
+   owned or foreground, so the never-foreground aux window is not moved.
 
-### H3 (client, needs drunkitguy/artemis-apollo2)
+So no host code is needed if H1b holds. Setup on the PC:
+1. Install the window-host MSI built from that branch.
+2. App "TotK duo": `eden-cli.exe --aux-window --window-rect 0,0,1920,1080 --aux-rect 0,1080,1240,1080 -g <TotK path>`.
+3. Keep `virtual_display_mode = per_client` and `virtual_display_layout = exclusive` (the virtual
+   display is alone, origin 0,0). The client's Dual screen setting (H3) requests
+   `mode=1920x2160x60` with `virtualDisplay=1` and `windowOnly=1`; the host creates the virtual
+   display at the requested mode (`src/nvhttp.cpp:2003-2013`). Whether the virtual display driver
+   accepts 1920x2160 is `UNVERIFIED`.
 
-Planned from upstream Artemis [S25] and moonlight-common-c [S23]; the fork must be attached to
-check it. On a device with a second display and a host app flagged "dual screen":
-1. Decode the 1920x2160 stream once into a `SurfaceTexture`; draw the top 1920x1080 crop to the
-   main-display surface and the bottom 1240x1080 crop to a `Presentation` on the Thor's second
-   display (`DisplayManager`), each 1:1. MediaCodec has one output surface, so the split needs
-   one GL pass (adds one texture copy per frame; measure with the fork's latency trace).
-2. Bottom-display touches: `LiSendTouchEvent` with `x = tx / 1920`, `y = (1080 + ty) / 2160`
-   (normalized over the whole video area [S23]); top-display touches keep current behaviour.
-3. Keep audio, controller and the top screen exactly as today.
-Checks (on the Thor): both screens at native size with no scaling, tap position error under 2 px
-on the companion, no added frame drops at 60 fps.
+Checks (user, Windows + Thor, after H1c and H3):
+- the host log shows "Client requested window-only capture", eden-cli's main window as the
+  target, and "app window set has 1 process(es)";
+- the virtual display is 1920x2160;
+- the stream shows the game on top and the companion bottom-left, black elsewhere;
+- the target never changes after taps on the companion;
+- a touch in the bottom area moves the companion, one in the top area does not;
+- controller input reaches the game after a tap below.
+
+**H2b (code, only if a check fails)**, same repo and branch: a launch argument `dualScreen=1`,
+parsed next to `windowOnly` (`src/nvhttp.cpp:2114`) into the launch session and passed to the
+tracker as `pinned`. A pinned tracker never calls `place_step` or focus for its target, and keeps
+the largest window of the app as target even when a smaller app window is foreground.
+Acceptance: new cases in `tests/unit/test_window_capture_policy.cpp` for the pinned choice;
+without the argument behaviour is unchanged and the existing tests pass. The client sends the
+argument only once H2b exists.
+
+### H3 (client: Vibe Window APK)
+
+Repo: `/home/user/vibe-window`, branch `claude/clever-clarke-k7hhhj` (tag `v1.4.10`;
+Moonlight-Android fork, app id `app.vibewindow.client`, package `com.limelight`). Work on a new
+branch from that ref, never on the plan branch. What exists there [S27]:
+- `windowOnly` and `virtualDisplay` are sent on `/launch` and `/resume` with
+  `mode=<W>x<H>x<FPS>` from the negotiated size (`NvHTTP.java:885-897`); default 1920x1080@120.
+- Second-display support: `ServerHelper.getSecondaryDisplay` (first non-default display) and
+  "Full external display" mode, which starts `Game` on that display with
+  `ExternalDisplayControlActivity` on the other one (`ServerHelper.java:64-131`).
+- A GL path from the decoder's `SurfaceTexture` (`utils/Stereo3DRenderer.java`, wired in
+  `ui/StreamContainer.java`), the model for the split.
+- Direct touch through `conn.sendTouchEvent` with normalized coordinates (`Game.java:2768-2801`).
+- No per-app settings, so the switch is global.
+
+Changes:
+1. Setting **"Dual screen"** (global, default off, shown only when a second display exists).
+   When on: request `1920x2160x60` (overriding width, height and fps the way full external
+   display mode does in `Game.onCreate`), keep `windowOnly=1` and `virtualDisplay=1`, and turn off
+   the modes that fight it (full external display, stereo 3D, PiP).
+2. Split renderer: MediaCodec decodes into one `SurfaceTexture`; one GL context draws the top
+   1920x1080 crop to the main-display surface and the bottom 1240x1080 crop (origin `0,1080`) to a
+   `SurfaceView` inside a `Presentation` on the second display, 1:1, no scaling. Which display is
+   the top one is decided by size (1920x1080 vs 1240x1080), not assumed.
+3. Touch: bottom-display touches always go out as direct touch with `x = tx / 1920` and
+   `y = (1080 + ty) / 2160` (normalized over the whole video [S23]); top-display touches keep the
+   user's touch mode with `y` scaled into the top half. Pointer ids from the two displays never
+   collide.
+4. The pure parts (mode override, crop rects, coordinate mapping) live in one class with unit
+   tests (the repo already uses Robolectric).
+
+Acceptance: unit tests for the mapping (corners of both displays, pointer-id separation, mode
+string `1920x2160x60`); `./gradlew assembleDebug` and the unit tests pass if an Android SDK can be
+installed here, else the user builds; with the setting off, launch arguments and rendering are
+unchanged. On the Thor (user): both screens at native size, tap error under 2 px on the
+companion, no added frame drops at 60 fps.
 
 ## What needs the user
 
@@ -456,12 +528,12 @@ on the companion, no added frame drops at 60 fps.
 |---|---|---|
 | D2 target version | T1 constant, T2-T3 | Which TotK update they run. Default 1.2.1 (most leads), else 1.4.3 (current) |
 | eden-duo fork + Windows build | H1c | A fork repo for the H1 patches, and either a Windows build on their PC (MSVC + Ninja, `tools/windows/load-msvc-env.ps1` [S1 docs/Build.md]) or a GitHub Actions Windows runner in the fork |
-| Windows tests | H1c, H2 | Run the smoke checks above; send logs and `.shot` screenshots |
-| artemis-apollo2 repo | H3 | Attach drunkitguy/artemis-apollo2 to the session; Android build and Thor install |
+| Windows tests | H1c, H2 | Install the window-host MSI from `apollo2-vibe` branch `claude/clever-clarke-k7hhhj`, add the "TotK duo" app (H2), run the H1c and H2 checks; send host logs and `.shot` screenshots |
+| Vibe Window APK | H3 | Install the H3 client build on the Thor and turn on Settings -> "Dual screen" (keep "Show only the app window" on) |
 | Build id | T2 | `xxd -s 0x40 -l 32 -p main` from `eden-cli --dump-romfs` of base + update [S3 PORTING_A_GAME §1] |
 | Dump + running game for RE | T3 | Discovery runs on their Windows PC (dev-tools eden-cli, gdbstub), or they provide exefs/romfs and keys to this container outside the repo. Nothing from it is committed |
 | Test saves | T3, T5 | Isolated profile copies: Great Sky Island; Surface with Ultrahand/Fuse/Ascend/Recall; late game with Autobuild and Depths |
-| Thor | H3, T5 | Install the client build, test both screens and touch |
+| Thor | H2, H3, T5 | Stream "TotK duo" with Dual screen on; check both screens and touch |
 
 ## Host path (decided: C)
 
@@ -514,6 +586,9 @@ Path A stays the fallback: the same package works there with an `android-arm64-v
 | S22b | https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-loadlibraryw | `.dll` is appended only when the name has no extension |
 | S23 | https://github.com/moonlight-stream/moonlight-common-c `src/Limelight.h`, `src/Connection.c` | One connection per process (globals, "not thread-safe"); `LiSendTouchEvent` normalized coordinates |
 | S24 | https://www.androidauthority.com/ayn-thor-screen-size-3589297 ; https://droix.net/product/ayn-thor/ | Thor screens 1920x1080 and 1240x1080 |
+| S21b | /home/user/apollo2-vibe branch `claude/clever-clarke-k7hhhj` (`43408b8`) | Window-only tracker, target choice, placement, secondary-window layers |
+| S26 | https://github.com/libsdl-org/SDL `src/video/windows/SDL_windowswindow.c` (release-3.4.8) | `SDL_WINDOW_NOT_FOCUSABLE` -> `WS_EX_NOACTIVATE`; resizable -> `WS_THICKFRAME`, `WS_MAXIMIZEBOX` |
+| S27 | /home/user/vibe-window branch `claude/clever-clarke-k7hhhj` (tag `v1.4.10`) | Vibe Window client: launch args, secondary display, GL renderer, touch |
 | S25 | https://github.com/ClassicOldSong/moonlight-android (branch `moonlight-noir`, GPL-3.0) `app/src/main/java/com/limelight/Game.java` | Artemis external-display handling |
 
 The MinGW and wine results come from spikes in the planner's scratch dir
