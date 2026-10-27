@@ -1,0 +1,300 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+      - claude/clever-clarke-k7hhhj
+    # The TV app has its own workflow (tv-release.yml).
+    paths-ignore:
+      - 'tv/**'
+      - 'docs/tizen-tv-plan.md'
+      - '.github/workflows/tv-release.yml'
+
+permissions: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      published: ${{ steps.published.outputs.published }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          sparse-checkout: VERSION
+          sparse-checkout-cone-mode: false
+
+      - name: Read version
+        id: version
+        run: |
+          version="$(tr -d '[:space:]' < VERSION)"
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "VERSION must be MAJOR.MINOR.PATCH, got '$version'" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Check for a complete release
+        id: published
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION_NAME: ${{ steps.version.outputs.version }}
+        run: |
+          apk="VibeWindow-${VERSION_NAME}-arm64-v8a.apk"
+          assets="$(gh release view "v${VERSION_NAME}" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' 2>/dev/null || true)"
+          if grep -qxF "$apk" <<< "$assets" && grep -qxF "$apk.sha256" <<< "$assets"; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  # Always build and test, so pushes that do not bump VERSION are still
+  # verified; only the release job is skipped for a published version.
+  build:
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    concurrency:
+      group: build-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6  # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Install NDK
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;27.0.12077973"
+
+      - name: Run unit tests
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:testNonRoot_gameDebugUnitTest --no-daemon --stacktrace \
+            --tests 'com.limelight.library.*' \
+            --tests 'com.limelight.StartupTest' \
+            --tests 'com.limelight.StartupCrashTest' \
+            --tests 'com.limelight.profiles.*' \
+            --tests 'com.limelight.LayoutInflationTest' \
+            --tests 'com.limelight.ui.*' \
+            --tests 'com.limelight.preferences.*' \
+            --tests 'com.limelight.PcViewUiTest' \
+            --tests 'com.limelight.ReturnToStreamUiTest' \
+            --tests 'com.limelight.binding.video.*' \
+            --tests 'com.limelight.binding.input.*' \
+            --tests 'com.limelight.utils.*'
+
+      - name: Build release APK
+        env:
+          VERSION_NAME: ${{ needs.check.outputs.version }}
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:assembleNonRoot_gameRelease --no-daemon --stacktrace \
+            -PwindowClientVersionName="$VERSION_NAME" \
+            -PwindowClientVersionCode="$((1000 + GITHUB_RUN_NUMBER))"
+
+      - name: Collect and verify APK
+        env:
+          VERSION_NAME: ${{ needs.check.outputs.version }}
+        run: |
+          shopt -s nullglob
+          apks=(app/build/outputs/apk/nonRoot_game/release/*.apk)
+          if [ "${#apks[@]}" -ne 1 ]; then
+            echo "Expected exactly one release APK, found ${#apks[@]}" >&2
+            exit 1
+          fi
+          mkdir -p dist
+          out="dist/VibeWindow-${VERSION_NAME}-arm64-v8a.apk"
+          cp "${apks[0]}" "$out"
+          build_tools="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)"
+          "$build_tools/apksigner" verify --print-certs "$out"
+          (cd dist && sha256sum "$(basename "$out")" > "$(basename "$out").sha256")
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: vibe-window-apk
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    needs: [check, build]
+    if: needs.check.outputs.published == 'false'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    # Never cancel a publish half way, or the release is left without assets.
+    concurrency:
+      group: publish-release
+      cancel-in-progress: false
+    steps:
+      # Re-check inside the publish lock: another run may have published this
+      # version while this one was building.
+      - name: Check for a complete release
+        id: published
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION_NAME: ${{ needs.check.outputs.version }}
+        run: |
+          apk="VibeWindow-${VERSION_NAME}-arm64-v8a.apk"
+          assets="$(gh release view "v${VERSION_NAME}" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' 2>/dev/null || true)"
+          if grep -qxF "$apk" <<< "$assets" && grep -qxF "$apk.sha256" <<< "$assets"; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131  # v7.0.0
+        if: steps.published.outputs.published == 'false'
+        with:
+          name: vibe-window-apk
+          path: dist
+
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65  # v2.6.2
+        if: steps.published.outputs.published == 'false'
+        with:
+          tag_name: v${{ needs.check.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          name: Vibe Window ${{ needs.check.outputs.version }}
+          files: dist/*
+          fail_on_unmatched_files: true
+          make_latest: true
+          body: |
+            Android client for Vibepollo that streams only the launched app's window, never the Windows desktop.
+
+            **Requires the patched host.** Install the latest `window-host-v*` MSI from https://github.com/drunkitguy/apollo2-vibe/releases on the Windows PC first. Stock hosts stream the full display.
+
+            Install: download the APK below, open it on the device and allow installs from your browser or file manager. Verify with the `.sha256` file if you like.
+
+            Defaults: Auto resolution and frame rate (match the display), virtual display on, "Show only the app window" on, frame pacing Balanced, Motion on.
+
+            **Fixes in 1.4.10**
+
+            - Return to stream now works when you leave the app without the mini player: 1.4.9 forgot the stream instead of remembering it. Turning the screen off during a stream is remembered too, and the record is kept when the screen comes back on. Quit Session, Disconnect, Back and errors still forget it.
+            - The mini player can no longer stop a stream from starting on Android 12 and later with an ultrawide or very tall stream, or before the stream view has a size: the window ratio is kept within what Android allows.
+            - The Mini player row lines up with the other rows again.
+
+            **New in 1.4.9**
+
+            - Mini player: leaving the app during a stream now keeps it playing in a small picture-in-picture window. Tap it to go back to full screen with your controls; closing it ends the stream on this device while the session keeps running on the PC. It never opens while the in-stream menu or a dialog is up. On by default (also for saved profiles, once); turn it off with Mini player in Settings, App.
+            - Return to stream: coming back to the app after leaving a stream (or closing the mini player) goes straight back into that stream instead of the app list, when the PC is online and the game is still running there, within 30 minutes. Quit Session, Disconnect, Back and connection errors never bring you back. On by default; turn it off with Return to stream in Settings, App.
+            - Leaving the mini player (or rotating the screen) no longer shows an on-screen controller you had hidden.
+
+            **New in 1.4.8**
+
+            - Back button: a new setting in Touch and controls (and All settings, Gamepad Settings) for what a controller's Back button does while streaming. Android back keeps today's behaviour (the default). Select makes it the controller's Select on the PC, with Start+Select (Guide) and Select+LB (touchpad) working as with a real Select. Touchpad click sends the PlayStation touchpad click (the PC must see a PlayStation controller, for example with Motion on), Guide sends Guide, and Keyboard key sends F13 on the PC with any controller. Any choice except Android back replaces "Back button as Guide". Controllers whose Back is their only Start keep it; a Back from the phone itself still goes to Android. Profiles can set it too.
+
+            **Fixes in 1.4.7**
+
+            - Import Custom Keys only accepts a JSON object with a "data" list. Other files, such as {} or an on-screen keyboard layout export picked by mistake, are refused and leave the custom keys as they were (1.4.6 imported them and cleared the keys). An empty "data" list still clears them.
+
+            **Fixes in 1.4.6**
+
+            - Importing a custom key file with an empty "data" list clears the custom keys again (1.4.5 refused it); the import then says "Custom keys cleared". Only a file without a "data" list is refused.
+
+            **Fixes in 1.4.5**
+
+            - Motion: on devices without a gyroscope and accelerometer, saved profiles get motion emulation off too (once), so no profile brings back the controller type notice or the Select+LB remap there.
+            - Key sequences also play when the in-stream menu is shown on the external display control screen; they start once the menu closes.
+            - An invalid entry in a custom key file no longer hides the entries after it: only that entry is left out, with one notice. An entry with empty "keys" and no "steps" stays in the list and sends nothing, as before 1.4.4.
+            - Import Custom Keys checks the file first and refuses it, naming the entry and the reason, when an entry has "steps" but no "keys" (the on-screen keyboard only reads "keys"), uses an unknown key or a wait outside the limits, or when the file has no "data" list (an empty list clears the custom keys).
+
+            **New in 1.4.4**
+
+            - Send special keys is now in the in-stream quick menu itself, right after "Toggle keyboard" (it also stays under Advanced). Open the quick menu from a controller by tapping Start and then holding Start.
+            - The special keys list has "Ctrl + ,", the usual shortcut for an app's settings window.
+            - Key sequences: an entry of a custom key file can list "steps" that are sent one after another, such as "VK_LCONTROL+VK_OEM_COMMA", "wait:1000", "VK_LSHIFT+VK_TAB" (150 ms apart plus the waits; up to 32 steps, 5 s per wait, 10 s in all). Files with only "keys" work as before. To use one, copy the file to the device and pick it in Settings, All settings, MISC, Import Custom Keys (importing replaces the current custom keys); the entries then appear under Send special keys. An example with "Open settings, Controls page" and "Close dialog (Esc)" is docs/key-sequence-example.json in the source repository; the number of Shift+Tab steps may need adjusting for your app.
+            - Motion: on devices without a gyroscope and accelerometer, motion emulation stays off (1.4.3 turned it on there with no way to turn it off, which showed a controller type notice and remapped Select+LB in every stream).
+            - Motion, accurately: while Motion is on, the PC asks for motion during the whole stream, so this device sends its sensor readings (about 200 small packets a second) in every stream. Turn Motion off to stream exactly as in 1.4.2.
+
+            **New in 1.4.3**
+
+            - Motion: a new Off/On row in Settings, Touch and controls, Motion. On sends this device's gyroscope and accelerometer to the PC when your controller has no motion sensors of its own, and lets a controller with its own sensors use them. It is now on by default, also for existing installs and saved profiles (once; if you turn it off afterwards, it stays off).
+            - Tradeoff: while Motion is on, the PC sees a controller without its own sensors as a PlayStation controller, so button prompts in games may change to PlayStation symbols. Pick Off if you prefer the old prompts; a controller's own sensors keep working.
+            - To use this device's sensors even with a controller that has its own, turn on "Always use device's motion sensors" in Settings, All settings, Gamepad Settings.
+            - While Motion is on, the PC asks for motion during the whole stream, so this device sends its sensor readings (about 200 small packets a second) in every stream. Turn Motion off to stream exactly as in 1.4.2.
+            - With Motion on, a short notice about the controller type shows when a stream starts, and Select+LB acts as the PlayStation touchpad click.
+
+            **Fixes in 1.4.2**
+
+            - The settings beside the PC list are rebuilt on your return only when a setting changed while you were away, so sections you opened and the scroll position stay as they were after a plain Home and back.
+            - A list you left open in the settings panel (for example Video resolution, More) is no longer cut off from the panel when you come back to the app: your choice is saved, and the panel updates once the list closes. 1.4.1 could crash here when a native entry was picked.
+
+            **Fixes in 1.4.1**
+
+            - Sliders show and step from their real default again when you never changed them (for example on-screen controls opacity reads 90%, not 0%).
+            - The settings beside the PC list show values changed while you were away (a stream saves the touchscreen mode, for example), and a tap on the shown choice is always saved.
+            - Leaving a row with a pending choice, or jumping sections with L1 and R1 while a choice is highlighted, no longer risks a crash.
+            - Rotating or resizing keeps the settings panel as it was, with the focus on the same row; it is rebuilt only for another display.
+            - A list that was open in the settings panel when Android closed the app no longer stays behind on its own.
+            - On Android 13 and later Back in the settings panel first drops a highlighted choice, then returns to the PC list, as B does.
+
+            **New in 1.4.0**
+
+            - Simpler settings: the settings you change most are at the top of Settings with their controls in place. Tap a choice, or press Left and Right and then A; drag a slider, or press Left and Right; flip a switch. The "i" button (or Y on a controller) explains a setting; turn on "Show descriptions" in the "..." menu (Select on a controller) to see the explanations in the list again. Every other setting is under "All settings", grouped as before; each section opens with its "Show N settings" row. All your settings and profiles are kept as they were.
+            - Statistics overlay: one row with Off, Lite and Full replaces the two overlay switches. Off remembers whether you used Lite or Full.
+            - On landscape screens at least 720dp wide, Settings opens beside the PC list. Start moves between the two, B goes back to the PC list, and the panel button in the Settings header hides the panel (the Settings button shows it again). Narrower screens and portrait open Settings full screen as before.
+            - PC cards: a larger icon and the action as a full-width button. Offline PCs with Wake-on-LAN now wake with A or a tap; X or a long press still opens the menu.
+            - Streaming is unchanged from 1.3.5. The opt-in options moved with the new layout: frame pacing and the vendor decoder keys are in Settings, All settings, Video Settings; both Wi-Fi keepalive options and "Allow refresh rate reduction" are in Settings, All settings, Advanced Settings.
+
+            **Fixes in 1.3.5**
+
+            - Saved profiles are restored to the 1.2.2 streaming settings too, once: a profile keeps its own copy of every setting, so profiles made with 1.3.0 to 1.3.3 still used the newest-frame pacing, the vendor decoder keys and the Wi-Fi keepalive. Their frame pacing becomes Balanced (Warp Drive entries are kept), the vendor decoder keys follow the main setting (off unless you turned it on), and the keepalive is off. Changes you make to a profile afterwards stay.
+            - With "Keep Wi-Fi awake while streaming" on, the packet goes out every 20 ms again, as in 1.2.2. Sending once per frame is a separate opt-in: Settings, All settings, Advanced Settings, "Keep Wi-Fi awake every frame (experimental)".
+
+            **1.3.4: Restores 1.2.2 streaming behaviour by default after stutter reports; new options are opt-in**
+
+            - Streams play as in 1.2.2 again: frame pacing is Balanced, the decoder uses the 1.2.2 configuration, the Wi-Fi keepalive is off, and the video decoder again sets the stream's frame rate on the screen surface as 1.2.2 did. 1.3.0 to 1.3.3 are superseded.
+            - Settings that came from the 1.3 defaults return to the 1.2.2 values once: "Lowest latency (newest frame)", "Prefer smoothest video" and "Balanced with FPS limit" become Balanced, and the vendor decoder keys and the Wi-Fi keepalive (if 1.3 turned it on) go off. "Lowest latency (legacy)" chosen after 1.3.0, the Warp Drive entries, a keepalive you turned on in 1.2.2, and all profiles are kept. Anything you change afterwards stays as you set it.
+            - The Warp Drive entries run as Balanced with their higher frame rate request, as in 1.2.2.
+
+            **Opt-in options (all off by default)**
+
+            - Newest-frame pacing: Settings, All settings, Video Settings, Video frame pacing, "Lowest latency (newest frame, experimental)". At most one frame per screen refresh, always the newest; on Android 13 and later each frame is scheduled for the earliest refresh it can still make. Only on the built-in display. The full overlay shows its counters.
+            - Other pacing modes: "Lowest latency (legacy)", "Prefer smoothest video" and "Balanced with FPS limit" in the same list now pace as their names say (up to 1.2.2 every stream used Balanced).
+            - Snapdragon vendor decoder keys: Settings, All settings, Video Settings, "Use vendor decoder low-latency keys". Applies Qualcomm's low-latency decoder settings and steps down to the 1.2 configuration if the decoder refuses them.
+            - Wi-Fi keepalive: Settings, All settings, Advanced Settings, "Keep Wi-Fi awake while streaming". Sends a tiny packet every 20 ms on Wi-Fi only, from its own thread; "Keep Wi-Fi awake every frame (experimental)" sends it once per frame instead.
+
+            **Other changes in 1.3**
+
+            - Performance overlay: the full overlay shows the frame pacing mode and the decoder's low-latency path; the lite overlay adds rendered over incoming frame rate ("R/I").
+            - "Allow refresh rate reduction" (Settings, All settings, Advanced Settings) applies with Balanced, "Lowest latency (newest frame)" and "Lowest latency (legacy)".
+            - One-time setting changes also reach installs that only start streams from home screen shortcuts.
+            - "Lowest latency (legacy)" and "Keep Wi-Fi awake while streaming" show in English in every language until they are translated again.
+
+            **New in 1.2**
+
+            - Auto resolution and frame rate: "Auto (match display)" is the new first entry and default of the Video resolution and Video frame rate lists. At every stream start it uses the size and refresh rate of the screen the app is on, keeps that screen's shape, and stays within common host limits (up to 4K) and what the video decoder reports. On phones, Auto uses the full panel, including cutout areas. With "Use Virtual Display" on, the host creates its virtual display at that size, so the picture fills the screen. When the built-in screen is mirrored to a larger external monitor or TV, Auto uses that display's resolution; turn off "Use the external display's resolution when mirrored" (All settings, Video Settings) to stream at the built-in screen's size. The settings rows show what Auto currently resolves to.
+            - One-time migration: installs that were still on the old defaults (1920x1080, 120 FPS and the default bitrate for them) switch to Auto once. Any other resolution, frame rate or bitrate you picked, and every profile, is kept as it was.
+            - Fixed resolution: to stream at a fixed size again, open Settings and pick a size such as 1080p for Video resolution (and a rate such as 120 for Video frame rate) at the top; More lists every entry. Fixed, native and custom entries behave exactly as in 1.1.3.
+            - Checking monitor behaviour: Settings, All settings, MISC, Debug Info now has a Displays section that lists every display (state, flags, current and supported modes, HDR types) and what Auto would choose and why. Open it with and without an external monitor connected to see whether your device mirrors or extends the screen.
+            - Refreshed look for the PC list, settings and app library: host cards that show each PC's status and what A or a tap does, grouped settings with switches, and controller shortcuts (Start opens Settings, Y opens Profiles, X opens a PC's menu, L1/R1 jump between settings sections).
+
+            **Fixes in 1.2.2**
+
+            - The PC list no longer jumps back to the first PC on every status update while you scroll it by touch and no PC is online.
+            - Settings section cards keep correct rounded corners when the list is restored part way down.
+
+            **Fixes in 1.2.1**
+
+            - Host cards size themselves to the screen: two PCs fit side by side on handheld landscape screens, and cards no longer clip on narrow phones in portrait.
+            - Higher contrast for secondary text, tonal buttons, "Show more" and dialog buttons; system dialogs now match the new look.
+            - Auto checks the same video decoder the stream will use, and keeps the built-in screen's refresh rate if the list of other displays cannot be read. 4096x2160 displays stream at their full size.
+            - The bitrate shown in Settings is the one Auto will use; confirming the slider without moving it keeps it following the resolution.
+            - L1/R1 also jump between sections while editing a profile.
+
+            App library: apps are grouped by system (PC first, Apps last) and can be shown as a Grid, a Wheel or Shelves. Search covers every group, groups can be collapsed, and "Move to Group" files an app elsewhere on this device. Everything works by touch and by controller (X menu, Y search, L1/R1 groups, Start collapse, Select view menu). Grouping by system needs host `window-host-v1.1.0` or later and the Playnite connector 0.5.0 update from the host web UI (Integrations page), followed by a Playnite restart and one library sync. Older hosts show "Games" and "Apps".
+
+            Limitations: UAC prompts and the lock screen are still shown; switching from a launcher to the game window takes about a second; separate popup windows are not captured; exclusive fullscreen games may not produce frames.
+
+            Source: GPL-3.0, based on Artemis and Moonlight. See this repository.

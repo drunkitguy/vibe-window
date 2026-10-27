@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Action pill on the host card; the fill is tinted per host state -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <corners android:radius="@dimen/vw_radius_md" />
+    <solid android:color="@android:color/white" />
+</shape>

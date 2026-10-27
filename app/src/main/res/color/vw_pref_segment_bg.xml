@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Segment pill: accent when chosen, transparent on the track otherwise -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:color="@color/vw_accent_container" android:state_checked="true" />
+    <item android:color="@android:color/transparent" />
+</selector>

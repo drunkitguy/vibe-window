@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Title of a settings row with its current value in accent text on the same line -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/vw_pref_title_line"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:baselineAligned="true"
+    android:orientation="horizontal">
+
+    <TextView
+        android:id="@android:id/title"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:ellipsize="end"
+        android:maxLines="2"
+        android:textAppearance="@style/TextAppearance.Vibe.Body" />
+
+    <TextView
+        android:id="@+id/vw_pref_value"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/vw_space_3"
+        android:layout_marginLeft="@dimen/vw_space_3"
+        android:ellipsize="end"
+        android:gravity="end"
+        android:maxWidth="@dimen/vw_pref_value_max_width"
+        android:maxLines="2"
+        android:textAppearance="@style/TextAppearance.Vibe.Label"
+        android:textColor="@color/vw_accent_text"
+        android:visibility="gone" />
+</LinearLayout>

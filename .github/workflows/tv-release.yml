@@ -1,0 +1,225 @@
+name: TV Release
+
+# Builds the Samsung Tizen TV app in tv/ with its Dockerfile and publishes the
+# generic-signed .wgt files to the tv-v<VERSION> release. The Android APK
+# release (release.yml) stays the repository's "latest" release.
+
+on:
+  push:
+    branches:
+      - main
+      - claude/clever-clarke-k7hhhj
+    paths:
+      - 'tv/**'
+      - '.github/workflows/tv-release.yml'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      published: ${{ steps.published.outputs.published }}
+      notes: ${{ steps.notes.outputs.notes }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          sparse-checkout: |
+            tv/VERSION
+            tv/res/config.xml
+            tv/RELEASE_NOTES.md
+          sparse-checkout-cone-mode: false
+
+      - name: Read and check version
+        id: version
+        run: |
+          version="$(tr -d '[:space:]' < tv/VERSION)"
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "tv/VERSION must be MAJOR.MINOR.PATCH, got '$version'" >&2
+            exit 1
+          fi
+          widget_version="$(grep -oP '<widget [^>]*\bversion="\K[^"]+' tv/res/config.xml)"
+          if [ "$widget_version" != "$version" ]; then
+            echo "tv/res/config.xml version '$widget_version' does not match tv/VERSION '$version'" >&2
+            exit 1
+          fi
+          if ! grep -q 'package="VibeWinTV1"' tv/res/config.xml; then
+            echo "tv/res/config.xml package id must be VibeWinTV1" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      # Publishing needs release notes for this exact version, so pushes
+      # between releases only build and verify.
+      - name: Check release notes
+        id: notes
+        env:
+          VERSION_NAME: ${{ steps.version.outputs.version }}
+        run: |
+          if [ -f tv/RELEASE_NOTES.md ] && [ "$(head -n 1 tv/RELEASE_NOTES.md)" = "# Vibe Window TV ${VERSION_NAME}" ]; then
+            echo "notes=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No release notes for ${VERSION_NAME} in tv/RELEASE_NOTES.md; the release job is skipped."
+            echo "notes=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check for a complete release
+        id: published
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION_NAME: ${{ steps.version.outputs.version }}
+        run: |
+          assets="$(gh release view "tv-v${VERSION_NAME}" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' 2>/dev/null || true)"
+          published=true
+          for f in "VibeWindowTV-${VERSION_NAME}.wgt" "VibeWindowTV-ForceGM-${VERSION_NAME}.wgt"; do
+            if ! grep -qxF "$f" <<< "$assets" || ! grep -qxF "$f.sha256" <<< "$assets"; then
+              published=false
+            fi
+          done
+          echo "published=$published" >> "$GITHUB_OUTPUT"
+
+  # Always build and verify, so pushes that do not bump the version are still
+  # checked; only the release job is skipped.
+  build:
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - variant: standard
+            force_game_mode: 'false'
+            image_file: Moonlight.wgt
+            asset_prefix: VibeWindowTV
+          - variant: forcegm
+            force_game_mode: 'true'
+            image_file: Moonlight-ForceGM.wgt
+            asset_prefix: VibeWindowTV-ForceGM
+    concurrency:
+      group: tv-build-${{ github.ref }}-${{ matrix.variant }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+      - name: Build the .wgt with the Dockerfile
+        env:
+          DOCKER_BUILDKIT: '1'
+          FORCE_GAME_MODE: ${{ matrix.force_game_mode }}
+          REPO_OWNER: ${{ github.repository_owner }}
+          REPO_NAME: ${{ github.event.repository.name }}
+        run: |
+          docker build \
+            --build-arg BUILD_TYPE=release \
+            --build-arg REPO_OWNER="$REPO_OWNER" \
+            --build-arg REPO_NAME="$REPO_NAME" \
+            --build-arg FORCE_GAME_MODE="$FORCE_GAME_MODE" \
+            -t vwtv:ci tv
+
+      - name: Extract and verify the .wgt
+        env:
+          VERSION_NAME: ${{ needs.check.outputs.version }}
+          IMAGE_FILE: ${{ matrix.image_file }}
+          ASSET_PREFIX: ${{ matrix.asset_prefix }}
+          FORCE_GAME_MODE: ${{ matrix.force_game_mode }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          out="dist/${ASSET_PREFIX}-${VERSION_NAME}.wgt"
+          docker create --name vwtv vwtv:ci > /dev/null
+          docker cp "vwtv:/home/moonlight/${IMAGE_FILE}" "$out"
+          docker rm vwtv > /dev/null
+
+          listing="$(unzip -Z1 "$out")"
+          for f in config.xml author-signature.xml signature1.xml index.html platform/index.js; do
+            if ! grep -qxF "$f" <<< "$listing"; then
+              echo "Package is missing $f" >&2
+              exit 1
+            fi
+          done
+          if ! grep -qE '\.wasm$' <<< "$listing"; then
+            echo "Package has no .wasm file" >&2
+            exit 1
+          fi
+
+          config="$(unzip -p "$out" config.xml)"
+          grep -q 'package="VibeWinTV1"' <<< "$config" || { echo "config.xml package id is not VibeWinTV1" >&2; exit 1; }
+          grep -q "version=\"${VERSION_NAME}\"" <<< "$config" || { echo "config.xml version is not ${VERSION_NAME}" >&2; exit 1; }
+          if [ "$FORCE_GAME_MODE" = "true" ]; then
+            grep -q 'use.game.mode' <<< "$config" || { echo "ForceGM package lacks the Game Mode metadata" >&2; exit 1; }
+          elif grep -q 'use.game.mode' <<< "$config"; then
+            echo "Standard package unexpectedly has the Game Mode metadata" >&2
+            exit 1
+          fi
+          if unzip -p "$out" platform/index.js | grep -q '__REPO_OWNER__'; then
+            echo "platform/index.js still has the repository placeholder" >&2
+            exit 1
+          fi
+
+          (cd dist && sha256sum "$(basename "$out")" > "$(basename "$out").sha256")
+          ls -la dist
+          cat dist/*.sha256
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: vibe-window-tv-wgt-${{ matrix.variant }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    needs: [check, build]
+    if: needs.check.outputs.published == 'false' && needs.check.outputs.notes == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    # Never cancel a publish half way, or the release is left without assets.
+    concurrency:
+      group: publish-tv-release
+      cancel-in-progress: false
+    steps:
+      # Re-check inside the publish lock: another run may have published this
+      # version while this one was building.
+      - name: Check for a complete release
+        id: published
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION_NAME: ${{ needs.check.outputs.version }}
+        run: |
+          assets="$(gh release view "tv-v${VERSION_NAME}" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' 2>/dev/null || true)"
+          published=true
+          for f in "VibeWindowTV-${VERSION_NAME}.wgt" "VibeWindowTV-ForceGM-${VERSION_NAME}.wgt"; do
+            if ! grep -qxF "$f" <<< "$assets" || ! grep -qxF "$f.sha256" <<< "$assets"; then
+              published=false
+            fi
+          done
+          echo "published=$published" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        if: steps.published.outputs.published == 'false'
+        with:
+          sparse-checkout: tv/RELEASE_NOTES.md
+          sparse-checkout-cone-mode: false
+
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131  # v7.0.0
+        if: steps.published.outputs.published == 'false'
+        with:
+          pattern: vibe-window-tv-wgt-*
+          merge-multiple: true
+          path: dist
+
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65  # v2.6.2
+        if: steps.published.outputs.published == 'false'
+        with:
+          tag_name: tv-v${{ needs.check.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          name: Vibe Window TV ${{ needs.check.outputs.version }}
+          body_path: tv/RELEASE_NOTES.md
+          files: dist/*
+          fail_on_unmatched_files: true
+          make_latest: false

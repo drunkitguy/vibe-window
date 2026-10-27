@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Settings header: round back (or panel) button, centered title, round "..." button.
+     Up from the first settings row reaches the buttons. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/settingsTopBar"
+    android:layout_width="match_parent"
+    android:layout_height="72dp"
+    android:paddingStart="@dimen/vw_space_3"
+    android:paddingLeft="@dimen/vw_space_3"
+    android:paddingEnd="@dimen/vw_space_3"
+    android:paddingRight="@dimen/vw_space_3">
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/settingsBackButton"
+        style="@style/Widget.Vibe.RoundIconButton"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_gravity="start|center_vertical"
+        android:contentDescription="@string/settings_back"
+        android:nextFocusRight="@+id/settingsMoreButton"
+        app:icon="@drawable/ic_arrow_back" />
+
+    <TextView
+        android:id="@+id/settingsTitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:accessibilityHeading="true"
+        android:text="@string/settings_screen_title"
+        android:textAppearance="@style/TextAppearance.Vibe.Title" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/settingsMoreButton"
+        style="@style/Widget.Vibe.RoundIconButton"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_gravity="end|center_vertical"
+        android:contentDescription="@string/settings_more"
+        android:nextFocusLeft="@id/settingsBackButton"
+        app:icon="@drawable/ic_more_horiz" />
+</FrameLayout>

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Caption above a group of quick settings. Not focusable; the rows below sit flat
+     on the screen, without a card. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/vw_pref_caption"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingStart="@dimen/vw_space_4"
+    android:paddingLeft="@dimen/vw_space_4"
+    android:paddingTop="@dimen/vw_space_5"
+    android:paddingEnd="@dimen/vw_space_4"
+    android:paddingRight="@dimen/vw_space_4"
+    android:paddingBottom="@dimen/vw_space_1">
+
+    <TextView
+        android:id="@android:id/title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:accessibilityHeading="true"
+        android:letterSpacing="0.04"
+        android:textAllCaps="true"
+        android:textAppearance="@style/TextAppearance.Vibe.Caption" />
+
+    <TextView
+        android:id="@android:id/summary"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textAppearance="@style/TextAppearance.Vibe.Secondary"
+        android:visibility="gone" />
+</LinearLayout>

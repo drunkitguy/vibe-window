@@ -1,0 +1,25 @@
+Vibe Window
+Copyright (C) the Vibe Window contributors
+
+This program is a modified version of Artemis
+(https://github.com/ClassicOldSong/moonlight-android, commit
+c5cf27f4dc822db0e863c4691e7a70c74bea977a), which is a fork of Moonlight
+for Android (https://github.com/moonlight-stream/moonlight-android).
+Both are licensed under the GNU General Public License v3.0, and so is
+this program. See LICENSE.txt.
+
+Third-party components:
+- moonlight-common-c (https://github.com/ClassicOldSong/moonlight-common-c),
+  GPL-3.0, included as a git submodule.
+- ENet (bundled by moonlight-common-c), MIT license.
+- OpenSSL and Opus prebuilt libraries under app/src/main/jni, each under
+  its own license as shipped upstream.
+
+Modifications from upstream Artemis:
+- Application ID changed to app.vibewindow.client and app name to Vibe Window.
+- Default resolution 1920x1080, default frame rate 120 FPS, virtual display
+  on by default.
+- New "Show only the app window" setting that adds windowOnly=1 to host
+  launch and resume requests.
+- Crash log email recipient removed.
+- Release builds are arm64-v8a only and signed with a public CI key.

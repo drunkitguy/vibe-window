@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Motion tokens in milliseconds -->
+    <integer name="vw_motion_fast">80</integer>
+    <integer name="vw_motion_normal">120</integer>
+    <integer name="vw_motion_slow">180</integer>
+</resources>

@@ -1,0 +1,341 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!--
+        Base application theme, dependent on API level. This theme is replaced
+        by AppBaseTheme from res/values-vXX/styles.xml on newer devices.
+
+    -->
+    <style name="AppBaseTheme" parent="Theme.MaterialComponents.NoActionBar">
+        <!--
+            Theme customizations available in newer API levels can go in
+            res/values-vXX/styles.xml, while customizations related to
+            backward-compatibility can go here.
+        -->
+    </style>
+
+    <!-- Application theme. -->
+    <style name="AppTheme" parent="AppBaseTheme">
+        <!-- All customizations that are NOT specific to a particular API-level can go here. -->
+        <item name="android:windowActionBar">false</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:statusBarColor">@color/vw_bg</item>
+        <item name="android:navigationBarColor">@color/vw_bg</item>
+        <item name="android:colorBackground">@color/vw_bg</item>
+        <item name="android:windowBackground">@color/vw_bg</item>
+        <!-- Design tokens live here and not on AppBaseTheme, so StreamTheme stays untouched -->
+        <item name="colorPrimary">@color/vw_accent_container</item>
+        <item name="colorOnPrimary">@android:color/white</item>
+        <item name="colorSecondary">@color/vw_accent</item>
+        <item name="colorOnSecondary">@android:color/white</item>
+        <item name="colorAccent">@color/vw_accent</item>
+        <item name="colorControlActivated">@color/vw_accent</item>
+        <item name="colorSurface">@color/vw_surface</item>
+        <item name="colorOnSurface">@android:color/white</item>
+        <item name="colorSurfaceVariant">@color/vw_surface_high</item>
+        <item name="colorOutline">@color/vw_separator</item>
+        <item name="alertDialogTheme">@style/ThemeOverlay.Vibe.Dialog</item>
+        <!-- android.app.AlertDialog users (utils/Dialog, pairing) get the same look -->
+        <item name="android:alertDialogTheme">@style/Theme.Vibe.FrameworkDialog</item>
+        <item name="materialAlertDialogTheme">@style/ThemeOverlay.Vibe.MaterialDialog</item>
+        <item name="preferenceTheme">@style/PreferenceThemeOverlay.Vibe</item>
+    </style>
+
+    <style name="StreamBaseTheme" parent="AppBaseTheme">
+        <!-- Transparent streaming background to avoid extra overdraw -->
+        <item name="android:windowBackground">@android:color/transparent</item>
+    </style>
+
+    <!-- Stream activity theme -->
+    <style name="StreamTheme" parent="StreamBaseTheme">
+        <!-- All customizations that are NOT specific to a particular API-level can go here. -->
+        <item name="android:windowActionBar">false</item>
+        <item name="android:windowNoTitle">true</item>
+        <!-- Added for API 34+ where ImageButton requires these color attrs to inflate -->
+        <item name="android:colorControlNormal">@android:color/white</item>
+        <item name="android:colorControlHighlight">@android:color/white</item>
+        <item name="android:colorAccent">@android:color/white</item>
+        <item name="android:colorControlActivated">@android:color/white</item>
+        <item name="android:colorButtonNormal">@android:color/white</item>
+        <!-- Duplicate non-prefixed color attributes for AppCompat widgets -->
+        <item name="colorControlNormal">@android:color/white</item>
+        <item name="colorControlHighlight">@android:color/white</item>
+        <item name="colorAccent">@android:color/white</item>
+        <item name="colorControlActivated">@android:color/white</item>
+        <item name="colorButtonNormal">@android:color/white</item>
+    </style>
+
+    <style name="SettingsTheme" parent="AppTheme">
+        <item name="android:windowBackground">@color/vw_bg</item>
+    </style>
+
+    <!-- Type scale, system font only -->
+    <style name="TextAppearance.Vibe" parent="TextAppearance.AppCompat">
+        <item name="android:textColor">@color/vw_on_surface</item>
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:textStyle">normal</item>
+    </style>
+    <style name="TextAppearance.Vibe.Display">
+        <item name="android:textSize">28sp</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+    </style>
+    <style name="TextAppearance.Vibe.Title">
+        <item name="android:textSize">22sp</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+    </style>
+    <style name="TextAppearance.Vibe.Section">
+        <item name="android:textSize">20sp</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+    </style>
+    <style name="TextAppearance.Vibe.CardTitle">
+        <item name="android:textSize">20sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+    <style name="TextAppearance.Vibe.Body">
+        <item name="android:textSize">16sp</item>
+    </style>
+    <style name="TextAppearance.Vibe.Label">
+        <item name="android:textSize">15sp</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+    </style>
+    <style name="TextAppearance.Vibe.Secondary">
+        <item name="android:textSize">14sp</item>
+        <item name="android:textColor">@color/vw_on_surface_variant</item>
+    </style>
+    <style name="TextAppearance.Vibe.Secondary.Medium">
+        <item name="android:fontFamily">sans-serif-medium</item>
+    </style>
+    <style name="TextAppearance.Vibe.Caption">
+        <item name="android:textSize">12sp</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:textColor">@color/vw_on_surface_variant</item>
+    </style>
+
+    <!-- Shapes -->
+    <style name="ShapeAppearance.Vibe.Small" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">@dimen/vw_radius_sm</item>
+    </style>
+    <style name="ShapeAppearance.Vibe.Medium" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">@dimen/vw_radius_md</item>
+    </style>
+    <style name="ShapeAppearance.Vibe.Large" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">@dimen/vw_radius_lg</item>
+    </style>
+    <style name="ShapeAppearance.Vibe.ExtraLarge" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">@dimen/vw_radius_xl</item>
+    </style>
+
+    <!-- Dialogs: raised surface, large corners, accent controls -->
+    <style name="ThemeOverlay.Vibe.Dialog" parent="ThemeOverlay.MaterialComponents.Dialog.Alert">
+        <item name="android:windowBackground">@drawable/vw_dialog_background</item>
+        <item name="colorSurface">@color/vw_surface_high</item>
+        <item name="colorPrimary">@color/vw_accent_text</item>
+        <item name="colorSecondary">@color/vw_accent</item>
+        <item name="colorAccent">@color/vw_accent</item>
+        <item name="colorControlActivated">@color/vw_accent</item>
+    </style>
+    <!-- Framework dialog theme with the same surface, corners and accent -->
+    <style name="Theme.Vibe.FrameworkDialog" parent="@android:style/Theme.Material.Dialog.Alert">
+        <item name="android:windowBackground">@drawable/vw_dialog_background</item>
+        <item name="android:colorBackground">@color/vw_surface_high</item>
+        <item name="android:colorAccent">@color/vw_accent_text</item>
+        <item name="android:colorControlActivated">@color/vw_accent</item>
+        <item name="android:textColorPrimary">@color/vw_on_surface</item>
+        <item name="android:textColorSecondary">@color/vw_on_surface_variant</item>
+    </style>
+    <style name="ThemeOverlay.Vibe.MaterialDialog" parent="ThemeOverlay.MaterialComponents.MaterialAlertDialog">
+        <item name="colorSurface">@color/vw_surface_high</item>
+        <item name="colorPrimary">@color/vw_accent_text</item>
+        <item name="colorSecondary">@color/vw_accent</item>
+        <item name="colorAccent">@color/vw_accent</item>
+        <item name="colorControlActivated">@color/vw_accent</item>
+        <item name="shapeAppearanceMediumComponent">@style/ShapeAppearance.Vibe.ExtraLarge</item>
+    </style>
+
+    <!-- Buttons -->
+    <style name="Widget.Vibe.RailButton" parent="Widget.MaterialComponents.Button.TextButton">
+        <item name="android:layout_width">48dp</item>
+        <item name="android:layout_height">48dp</item>
+        <item name="android:minWidth">0dp</item>
+        <item name="android:minHeight">0dp</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="android:padding">12dp</item>
+        <item name="iconPadding">0dp</item>
+        <item name="iconSize">24dp</item>
+        <item name="iconGravity">textStart</item>
+        <item name="iconTint">@color/vw_rail_button_icon</item>
+        <item name="backgroundTint">@color/vw_rail_button_bg</item>
+        <item name="rippleColor">@color/vw_accent_tonal</item>
+        <item name="strokeColor">@color/vw_focus_stroke</item>
+        <item name="strokeWidth">@dimen/vw_row_focus_stroke</item>
+        <item name="cornerRadius">@dimen/vw_radius_md</item>
+    </style>
+    <!-- Round 48dp icon button of the settings and PC list headers -->
+    <style name="Widget.Vibe.RoundIconButton" parent="Widget.MaterialComponents.Button.UnelevatedButton">
+        <item name="android:layout_width">48dp</item>
+        <item name="android:layout_height">48dp</item>
+        <item name="android:minWidth">0dp</item>
+        <item name="android:minHeight">0dp</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="android:padding">12dp</item>
+        <item name="iconPadding">0dp</item>
+        <item name="iconSize">24dp</item>
+        <item name="iconGravity">textStart</item>
+        <item name="iconTint">@color/vw_accent_text</item>
+        <item name="backgroundTint">@color/vw_surface_high</item>
+        <item name="rippleColor">@color/vw_accent_tonal</item>
+        <item name="strokeColor">@color/vw_focus_stroke</item>
+        <item name="strokeWidth">@dimen/vw_row_focus_stroke</item>
+        <item name="cornerRadius">24dp</item>
+    </style>
+    <style name="Widget.Vibe.TonalButton" parent="Widget.MaterialComponents.Button.UnelevatedButton">
+        <item name="android:minHeight">48dp</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:textAppearance">@style/TextAppearance.Vibe.Label</item>
+        <item name="android:textColor">@color/vw_accent_text</item>
+        <item name="iconTint">@color/vw_accent_text</item>
+        <item name="backgroundTint">@color/vw_accent_tonal</item>
+        <item name="rippleColor">@color/vw_accent_tonal</item>
+        <item name="strokeColor">@color/vw_focus_stroke</item>
+        <item name="strokeWidth">@dimen/vw_row_focus_stroke</item>
+        <item name="cornerRadius">@dimen/vw_radius_md</item>
+    </style>
+    <style name="Widget.Vibe.Fab" parent="Widget.MaterialComponents.ExtendedFloatingActionButton.Icon">
+        <item name="android:textAllCaps">false</item>
+        <item name="android:textColor">@color/vw_on_surface</item>
+        <item name="iconTint">@color/vw_on_surface</item>
+        <item name="backgroundTint">@color/vw_surface_high</item>
+        <item name="rippleColor">@color/vw_accent_tonal</item>
+        <item name="strokeColor">@color/vw_focus_stroke</item>
+        <item name="strokeWidth">@dimen/vw_focus_stroke</item>
+        <item name="shapeAppearanceOverlay">@style/ShapeAppearance.Vibe.Large</item>
+        <item name="elevation">2dp</item>
+        <item name="android:stateListAnimator">@null</item>
+    </style>
+    <!-- Segmented layout toggle in the library top bar -->
+    <style name="Widget.Vibe.SegmentButton" parent="Widget.MaterialComponents.Button.UnelevatedButton">
+        <item name="android:layout_width">48dp</item>
+        <item name="android:layout_height">48dp</item>
+        <item name="android:minWidth">0dp</item>
+        <item name="android:minHeight">0dp</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="android:padding">0dp</item>
+        <item name="iconPadding">0dp</item>
+        <item name="iconGravity">textStart</item>
+        <item name="iconTint">@color/vw_segment_icon</item>
+        <item name="backgroundTint">@color/vw_segment_bg</item>
+        <item name="rippleColor">@color/vw_accent_tonal</item>
+        <item name="strokeColor">@color/vw_focus_stroke</item>
+        <item name="strokeWidth">@dimen/vw_row_focus_stroke</item>
+        <item name="cornerRadius">@dimen/vw_radius_md</item>
+    </style>
+
+    <style name="ExternalDisplayControllerTheme" parent="AppTheme">
+        <item name="android:statusBarColor">@android:color/black</item>
+        <item name="android:navigationBarColor">@android:color/black</item>
+        <item name="android:colorBackground">@android:color/black</item>
+        <item name="android:windowBackground">@android:color/black</item>
+    </style>
+
+    <!-- Settings rows, grouped cards and switches. Only layouts and styles change;
+         every preference class stays as it is. -->
+    <style name="PreferenceThemeOverlay.Vibe" parent="PreferenceThemeOverlay">
+        <item name="preferenceStyle">@style/Preference.Vibe</item>
+        <item name="checkBoxPreferenceStyle">@style/Preference.Vibe.CheckBox</item>
+        <item name="dialogPreferenceStyle">@style/Preference.Vibe.Dialog</item>
+        <item name="editTextPreferenceStyle">@style/Preference.Vibe.EditText</item>
+        <item name="preferenceCategoryStyle">@style/Preference.Vibe.Category</item>
+    </style>
+    <style name="Preference.Vibe" parent="Preference.Material">
+        <item name="android:layout">@layout/vw_pref_row</item>
+    </style>
+    <style name="Preference.Vibe.CheckBox" parent="Preference.CheckBoxPreference.Material">
+        <item name="android:layout">@layout/vw_pref_row</item>
+        <item name="android:widgetLayout">@layout/vw_pref_switch</item>
+    </style>
+    <style name="Preference.Vibe.Dialog" parent="Preference.DialogPreference.Material">
+        <item name="android:layout">@layout/vw_pref_row</item>
+    </style>
+    <style name="Preference.Vibe.EditText" parent="Preference.DialogPreference.EditTextPreference.Material">
+        <item name="android:layout">@layout/vw_pref_row</item>
+    </style>
+    <style name="Preference.Vibe.Category" parent="Preference.Category.Material">
+        <item name="android:layout">@layout/vw_pref_category</item>
+    </style>
+
+    <!-- Inline slider on settings rows: accent fill, white thumb -->
+    <style name="Widget.Vibe.Slider" parent="Widget.AppCompat.SeekBar">
+        <item name="android:progressDrawable">@drawable/vw_slider_track</item>
+        <item name="android:thumb">@drawable/vw_slider_thumb</item>
+        <item name="android:splitTrack">false</item>
+        <item name="android:minHeight">6dp</item>
+        <item name="android:maxHeight">6dp</item>
+        <item name="android:paddingTop">@dimen/vw_space_3</item>
+        <item name="android:paddingBottom">@dimen/vw_space_3</item>
+        <item name="android:paddingStart">12dp</item>
+        <item name="android:paddingLeft">12dp</item>
+        <item name="android:paddingEnd">12dp</item>
+        <item name="android:paddingRight">12dp</item>
+        <item name="android:background">@null</item>
+    </style>
+
+    <!-- One pill of a segmented settings row -->
+    <style name="Widget.Vibe.Segment" parent="Widget.MaterialComponents.Button.UnelevatedButton">
+        <item name="android:minWidth">0dp</item>
+        <item name="android:minHeight">36dp</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="android:paddingStart">8dp</item>
+        <item name="android:paddingLeft">8dp</item>
+        <item name="android:paddingEnd">8dp</item>
+        <item name="android:paddingRight">8dp</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:ellipsize">none</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:letterSpacing">0</item>
+        <item name="android:textColor">@color/vw_pref_segment_text</item>
+        <item name="backgroundTint">@color/vw_pref_segment_bg</item>
+        <item name="rippleColor">@color/vw_accent_tonal</item>
+        <item name="strokeColor">@color/vw_accent_text</item>
+        <item name="strokeWidth">0dp</item>
+        <item name="cornerRadius">18dp</item>
+        <item name="android:checkable">true</item>
+    </style>
+
+    <!-- Switch on API 29+, where the base theme is Material 3 -->
+    <style name="Widget.Vibe.Switch" parent="Widget.Material3.CompoundButton.MaterialSwitch">
+        <item name="thumbTint">@color/vw_switch_thumb</item>
+        <item name="thumbIconTint">@android:color/transparent</item>
+        <item name="trackTint">@color/vw_switch_track</item>
+        <item name="trackDecorationTint">@android:color/transparent</item>
+        <item name="android:textAppearance">@style/TextAppearance.Vibe.Body</item>
+        <item name="android:textColor">@color/vw_on_surface</item>
+    </style>
+    <!-- Same look below API 29 with the Material Components switch -->
+    <style name="Widget.Vibe.SwitchLegacy" parent="Widget.MaterialComponents.CompoundButton.Switch">
+        <item name="useMaterialThemeColors">false</item>
+        <item name="thumbTint">@color/vw_switch_thumb</item>
+        <item name="trackTint">@color/vw_switch_track</item>
+    </style>
+
+    <declare-styleable name="ApertureViewGroup">
+        <attr name="aperture_color1" format="color" />
+        <attr name="aperture_color2" format="color" />
+        <attr name="aperture_border_width" format="dimension" />
+        <attr name="aperture_border_angle" format="dimension" />
+        <attr name="aperture_duration" format="integer" />
+        <attr name="aperture_middle_color" format="color" />
+    </declare-styleable>
+
+</resources>

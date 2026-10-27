@@ -1,0 +1,206 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Short segment labels on settings rows -->
+    <string name="seg_auto">Auto</string>
+    <string name="seg_more">More</string>
+    <string name="seg_720p">720p</string>
+    <string name="seg_1080p">1080p</string>
+    <string name="seg_1440p">1440p</string>
+    <string name="seg_4k">4K</string>
+    <string name="seg_30">30</string>
+    <string name="seg_60">60</string>
+    <string name="seg_90">90</string>
+    <string name="seg_120">120</string>
+    <string name="seg_h264">H.264</string>
+    <string name="seg_hevc">HEVC</string>
+    <string name="seg_av1">AV1</string>
+    <string name="seg_fit">Fit</string>
+    <string name="seg_fill">Fill</string>
+    <string name="seg_stretch">Stretch</string>
+    <string name="seg_off">Off</string>
+    <string name="seg_on">On</string>
+    <string name="seg_lite">Lite</string>
+    <string name="seg_full">Full</string>
+    <string name="seg_touch">Touch</string>
+    <string name="seg_trackpad">Trackpad</string>
+    <string name="seg_pointer">Pointer</string>
+    <string name="seg_stereo">Stereo</string>
+    <string name="seg_51">5.1</string>
+    <string name="seg_71">7.1</string>
+    <string name="seg_none">None</string>
+    <string name="seg_left">Left</string>
+    <string name="seg_center">Center</string>
+    <string name="seg_right">Right</string>
+    <string name="seg_2d">2D</string>
+    <string name="seg_3d">3D</string>
+    <string name="seg_3d_film">3D film</string>
+    <!-- Content description of one segment: setting title, then the full choice -->
+    <string name="seg_content_description">%1$s: %2$s</string>
+
+    <string-array name="seg_values_resolution" translatable="false">
+        <item>auto</item>
+        <item>1280x720</item>
+        <item>1920x1080</item>
+        <item>2560x1440</item>
+        <item>3840x2160</item>
+    </string-array>
+    <string-array name="seg_labels_resolution">
+        <item>@string/seg_auto</item>
+        <item>@string/seg_720p</item>
+        <item>@string/seg_1080p</item>
+        <item>@string/seg_1440p</item>
+        <item>@string/seg_4k</item>
+    </string-array>
+
+    <string-array name="seg_values_fps" translatable="false">
+        <item>auto</item>
+        <item>30</item>
+        <item>60</item>
+        <item>90</item>
+        <item>120</item>
+    </string-array>
+    <string-array name="seg_labels_fps">
+        <item>@string/seg_auto</item>
+        <item>@string/seg_30</item>
+        <item>@string/seg_60</item>
+        <item>@string/seg_90</item>
+        <item>@string/seg_120</item>
+    </string-array>
+
+    <string-array name="seg_values_video_format" translatable="false">
+        <item>auto</item>
+        <item>neverh265</item>
+        <item>forceh265</item>
+        <item>forceav1</item>
+    </string-array>
+    <string-array name="seg_labels_video_format">
+        <item>@string/seg_auto</item>
+        <item>@string/seg_h264</item>
+        <item>@string/seg_hevc</item>
+        <item>@string/seg_av1</item>
+    </string-array>
+
+    <string-array name="seg_values_scale_mode" translatable="false">
+        <item>fit</item>
+        <item>fill</item>
+        <item>stretch</item>
+    </string-array>
+    <string-array name="seg_labels_scale_mode">
+        <item>@string/seg_fit</item>
+        <item>@string/seg_fill</item>
+        <item>@string/seg_stretch</item>
+    </string-array>
+
+    <string-array name="seg_values_mouse_mode" translatable="false">
+        <item>0</item>
+        <item>2</item>
+        <item>1</item>
+        <item>4</item>
+    </string-array>
+    <string-array name="seg_labels_mouse_mode">
+        <item>@string/seg_touch</item>
+        <item>@string/seg_trackpad</item>
+        <item>@string/seg_pointer</item>
+        <item>@string/seg_off</item>
+    </string-array>
+
+    <string-array name="seg_values_audio" translatable="false">
+        <item>2</item>
+        <item>51</item>
+        <item>71</item>
+    </string-array>
+    <string-array name="seg_labels_audio">
+        <item>@string/seg_stereo</item>
+        <item>@string/seg_51</item>
+        <item>@string/seg_71</item>
+    </string-array>
+
+    <string-array name="seg_values_analog_scrolling" translatable="false">
+        <item>none</item>
+        <item>right</item>
+        <item>left</item>
+    </string-array>
+    <string-array name="seg_labels_analog_scrolling">
+        <item>@string/seg_none</item>
+        <item>@string/seg_right</item>
+        <item>@string/seg_left</item>
+    </string-array>
+
+    <string-array name="seg_values_align" translatable="false">
+        <item>left</item>
+        <item>center</item>
+        <item>right</item>
+    </string-array>
+    <string-array name="seg_labels_align">
+        <item>@string/seg_left</item>
+        <item>@string/seg_center</item>
+        <item>@string/seg_right</item>
+    </string-array>
+
+    <string-array name="seg_values_render_mode" translatable="false">
+        <item>0</item>
+        <item>1</item>
+        <item>2</item>
+    </string-array>
+    <string-array name="seg_labels_render_mode">
+        <item>@string/seg_2d</item>
+        <item>@string/seg_3d</item>
+        <item>@string/seg_3d_film</item>
+    </string-array>
+
+    <string-array name="motion_values" translatable="false">
+        <item>off</item>
+        <item>on</item>
+    </string-array>
+    <string-array name="motion_labels">
+        <item>@string/seg_off</item>
+        <item>@string/seg_on</item>
+    </string-array>
+    <string-array name="motion_names">
+        <item>@string/motion_off</item>
+        <item>@string/motion_on</item>
+    </string-array>
+
+    <string-array name="stats_overlay_values" translatable="false">
+        <item>off</item>
+        <item>lite</item>
+        <item>full</item>
+    </string-array>
+    <string-array name="stats_overlay_labels">
+        <item>@string/seg_off</item>
+        <item>@string/seg_lite</item>
+        <item>@string/seg_full</item>
+    </string-array>
+    <string-array name="stats_overlay_names">
+        <item>@string/stats_overlay_off</item>
+        <item>@string/stats_overlay_lite</item>
+        <item>@string/stats_overlay_full</item>
+    </string-array>
+    <!-- Back button (list_back_button_mode) -->
+    <string name="seg_back_android">Android</string>
+    <string name="seg_back_select">Select</string>
+    <string name="seg_back_touchpad">Touchpad</string>
+    <string name="seg_back_guide">Guide</string>
+    <string name="seg_back_key">F13</string>
+    <string-array name="back_button_mode_values" translatable="false">
+        <item>android</item>
+        <item>select</item>
+        <item>touchpad</item>
+        <item>guide</item>
+        <item>key</item>
+    </string-array>
+    <string-array name="back_button_mode_labels">
+        <item>@string/seg_back_android</item>
+        <item>@string/seg_back_select</item>
+        <item>@string/seg_back_touchpad</item>
+        <item>@string/seg_back_guide</item>
+        <item>@string/seg_back_key</item>
+    </string-array>
+    <string-array name="back_button_mode_names">
+        <item>@string/back_button_android</item>
+        <item>@string/back_button_select</item>
+        <item>@string/back_button_touchpad</item>
+        <item>@string/back_button_guide</item>
+        <item>@string/back_button_key</item>
+    </string-array>
+</resources>

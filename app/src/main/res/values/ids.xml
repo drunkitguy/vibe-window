@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The AppView.AppObject bound to a library card, read by the context menu -->
+    <item name="tag_app_object" type="id" />
+    <!-- Last tile color bound to a host card, used to crossfade state changes -->
+    <item name="tag_host_tile_color" type="id" />
+    <!-- Cached child views of a host card -->
+    <item name="tag_host_views" type="id" />
+    <!-- The preference a settings row was last bound to -->
+    <item name="tag_pref_owner" type="id" />
+</resources>

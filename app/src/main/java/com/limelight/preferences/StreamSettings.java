@@ -1,0 +1,1768 @@
+package com.limelight.preferences;
+
+import static com.limelight.utils.ServerHelper.getActiveDisplay;
+
+import android.content.Context;
+import android.content.Intent;
+import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
+import android.content.res.Configuration;
+import android.media.MediaCodecInfo;
+import android.net.Uri;
+import android.os.Build;
+import android.os.Bundle;
+import android.app.Activity;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.Vibrator;
+
+import androidx.annotation.NonNull;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.widget.PopupMenu;
+import androidx.core.content.FileProvider;
+import androidx.fragment.app.DialogFragment;
+import androidx.preference.CheckBoxPreference;
+import androidx.preference.EditTextPreference;
+import androidx.preference.ListPreference;
+import androidx.preference.Preference;
+import androidx.preference.PreferenceCategory;
+import androidx.preference.PreferenceFragmentCompat;
+import androidx.preference.PreferenceGroup;
+import androidx.preference.PreferenceManager;
+import androidx.preference.PreferenceScreen;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
+
+import android.text.InputFilter;
+import android.text.InputType;
+import android.text.TextUtils;
+import android.util.DisplayMetrics;
+import android.util.Log;
+import android.util.Range;
+import android.view.Display;
+import android.view.DisplayCutout;
+import android.view.KeyEvent;
+import android.view.LayoutInflater;
+import android.view.Menu;
+import android.view.MenuItem;
+import android.view.SubMenu;
+import android.view.View;
+import android.view.ViewGroup;
+import android.view.WindowInsets;
+import android.widget.EditText;
+import android.widget.Toast;
+
+import com.google.gson.Gson;
+import com.limelight.DebugInfoActivity;
+import com.limelight.BuildConfig;
+import com.limelight.GameMenu;
+import com.limelight.LimeLog;
+import com.limelight.PcView;
+import com.limelight.ProfilesActivity;
+import com.limelight.R;
+import com.limelight.binding.input.virtual_controller.keyboard.KeyBoardControllerConfigurationLoader;
+import com.limelight.binding.video.MediaCodecHelper;
+import com.limelight.utils.Dialog;
+import com.limelight.utils.FileUriUtils;
+import com.limelight.utils.HelpLauncher;
+import com.limelight.utils.PerformanceDataTracker;
+import com.limelight.utils.UiHelper;
+import org.json.JSONObject;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+
+public class StreamSettings extends AppCompatActivity implements SettingsHost {
+    private PreferenceConfiguration previousPrefs;
+    private int previousDisplayPixelCount;
+    private int previousDisplayId = Display.INVALID_DISPLAY;
+
+    private SettingsFragment prefsFragment;
+
+    // HACK for Android 9
+    static DisplayCutout displayCutoutP;
+
+    @Override
+    public void reloadSettings() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            Display.Mode mode = getActiveDisplay(StreamSettings.this, previousPrefs).getMode();
+            previousDisplayPixelCount = mode.getPhysicalWidth() * mode.getPhysicalHeight();
+        }
+        previousDisplayId = AutoResolutionAndroid.getActivityDisplay(this).getDisplayId();
+        prefsFragment = new SettingsFragment(PreferenceConfiguration.readPreferences(
+                this,
+                PreferenceManager.getDefaultSharedPreferences(this)
+        ));
+        getSupportFragmentManager().beginTransaction().replace(
+                R.id.stream_settings, prefsFragment
+        ).commitAllowingStateLoss();
+    }
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+//        setTheme(R.style.AppTheme);
+        super.onCreate(savedInstanceState);
+
+        previousPrefs = PreferenceConfiguration.readPreferences(this);
+
+        UiHelper.setLocale(this);
+
+        setContentView(R.layout.activity_stream_settings);
+
+        View backButton = findViewById(R.id.settingsBackButton);
+        if (backButton != null) {
+            backButton.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    onBackPressed();
+                }
+            });
+        }
+        View moreButton = findViewById(R.id.settingsMoreButton);
+        if (moreButton != null) {
+            moreButton.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    if (prefsFragment != null && prefsFragment.getView() != null) {
+                        prefsFragment.showMoreMenu(v);
+                    }
+                }
+            });
+        }
+
+//        UiHelper.notifyNewRootView(this);
+    }
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        int keyCode = event.getKeyCode();
+        // L1 and R1 jump to the previous or next settings category
+        if ((keyCode == KeyEvent.KEYCODE_BUTTON_L1 || keyCode == KeyEvent.KEYCODE_BUTTON_R1) &&
+                prefsFragment != null && prefsFragment.getView() != null) {
+            if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                prefsFragment.jumpToCategory(keyCode == KeyEvent.KEYCODE_BUTTON_R1 ? 1 : -1);
+            }
+            return true;
+        }
+        // Select opens the "..." menu
+        if (keyCode == KeyEvent.KEYCODE_BUTTON_SELECT && prefsFragment != null && prefsFragment.getView() != null) {
+            View moreButton = findViewById(R.id.settingsMoreButton);
+            if (event.getAction() == KeyEvent.ACTION_UP && moreButton != null) {
+                prefsFragment.showMoreMenu(moreButton);
+            }
+            return true;
+        }
+        return super.dispatchKeyEvent(event);
+    }
+
+    @Override
+    public void onAttachedToWindow() {
+        super.onAttachedToWindow();
+
+        rememberDisplayCutout(this);
+
+        reloadSettings();
+    }
+
+    /**
+     * We have to use this hack on Android 9 because we don't have Display.getCutout()
+     * which was added in Android 10. Called by every activity that shows the settings.
+     */
+    public static void rememberDisplayCutout(Activity activity) {
+        if (Build.VERSION.SDK_INT == Build.VERSION_CODES.P) {
+            // Insets can be null when the activity is recreated on screen rotation
+            // https://stackoverflow.com/questions/61241255/windowinsets-getdisplaycutout-is-null-everywhere-except-within-onattachedtowindo
+            WindowInsets insets = activity.getWindow().getDecorView().getRootWindowInsets();
+            if (insets != null) {
+                displayCutoutP = insets.getDisplayCutout();
+            }
+        }
+    }
+
+    @Override
+    public void onSettingsLanguageChanged() {
+        // Handled when the screen closes (onBackPressed), as before
+    }
+
+    @Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            Display.Mode mode = getActiveDisplay(StreamSettings.this, previousPrefs).getMode();
+
+            // If the display's physical pixel count has changed, we consider that it's a new display
+            // and we should reload our settings (which include display-dependent values).
+            //
+            // NB: We aren't using displayId here because that stays the same (DEFAULT_DISPLAY) when
+            // switching between screens on a foldable device.
+            if (mode.getPhysicalWidth() * mode.getPhysicalHeight() != previousDisplayPixelCount) {
+                reloadSettings();
+                return;
+            }
+        }
+
+        // Moving the window to another display refreshes the auto resolution hint
+        if (AutoResolutionAndroid.getActivityDisplay(this).getDisplayId() != previousDisplayId) {
+            reloadSettings();
+        }
+    }
+
+    @Override
+    // NOTE: This will NOT be called on Android 13+ with android:enableOnBackInvokedCallback="true"
+    public void onBackPressed() {
+        finish();
+
+        // Language changes are handled via configuration changes in Android 13+,
+        // so manual activity relaunching is no longer required.
+        PreferenceConfiguration newPrefs = PreferenceConfiguration.readPreferences(this);
+        if (!newPrefs.language.equals(previousPrefs.language)) {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+                // Restart the PC view to apply UI changes
+                Intent intent = new Intent(this, PcView.class);
+                intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK | Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(intent, null);
+            } else {
+                if (newPrefs.language == PreferenceConfiguration.DEFAULT_LANGUAGE) {
+                    Toast.makeText(this, "Language has been reset to default, please restart the app!", Toast.LENGTH_LONG).show();
+                    System.exit(0);
+                }
+            }
+        }
+    }
+
+    public static class SettingsFragment extends PreferenceFragmentCompat {
+        private int nativeResolutionStartIndex = Integer.MAX_VALUE;
+        private boolean nativeFramerateShown = false;
+
+        private PreferenceConfiguration prevPrefConfig;
+
+        /** Set for the settings panel beside the PC list: no initial focus, raised cards. */
+        public static final String ARG_EMBEDDED = "vw_embedded";
+
+        boolean isEmbedded() {
+            Bundle args = getArguments();
+            return args != null && args.getBoolean(ARG_EMBEDDED, false);
+        }
+
+        /** Caption between the quick settings and the grouped sections. */
+        static final String ALL_SETTINGS_KEY = "category_all_settings";
+        /** Captions of the quick settings at the top. */
+        static final String[] QUICK_CATEGORY_KEYS = {
+                "category_quick_stream", "category_quick_controls", "category_quick_audio", "category_quick_app"
+        };
+
+        public SettingsFragment(PreferenceConfiguration prefCfg) {
+            prevPrefConfig = prefCfg;
+        }
+
+        /**
+         * Used by the FragmentManager when it recreates the fragment after process death or a
+         * configuration change. The configuration is read in onCreatePreferences.
+         */
+        public SettingsFragment() {
+            prevPrefConfig = null;
+        }
+
+        /** Removes a preference from whichever group holds it. Missing keys are ignored. */
+        protected boolean removePreferenceByKey(String key) {
+            Preference preference = findPreference(key);
+            if (preference == null) {
+                return false;
+            }
+            PreferenceGroup parent = preference.getParent();
+            return parent != null && parent.removePreference(preference);
+        }
+
+        protected SharedPreferences getPrefs() {
+            return getPreferenceManager().getSharedPreferences();
+        }
+
+        private void setValue(String preferenceKey, String value) {
+            ListPreference pref = (ListPreference) findPreference(preferenceKey);
+
+            pref.setValue(value);
+        }
+
+        private void appendPreferenceEntry(ListPreference pref, String newEntryName, String newEntryValue) {
+            CharSequence[] newEntries = Arrays.copyOf(pref.getEntries(), pref.getEntries().length + 1);
+            CharSequence[] newValues = Arrays.copyOf(pref.getEntryValues(), pref.getEntryValues().length + 1);
+
+            // Add the new option
+            newEntries[newEntries.length - 1] = newEntryName;
+            newValues[newValues.length - 1] = newEntryValue;
+
+            pref.setEntries(newEntries);
+            pref.setEntryValues(newValues);
+        }
+
+        private void addNativeResolutionEntry(int nativeWidth, int nativeHeight, boolean insetsRemoved, boolean portrait, boolean is_custom) {
+            ListPreference pref = (ListPreference) findPreference(PreferenceConfiguration.RESOLUTION_PREF_STRING);
+
+            String newName;
+
+            if (insetsRemoved) {
+                newName = getResources().getString(R.string.resolution_prefix_native_fullscreen);
+            }
+            else {
+                newName = is_custom ? getResources().getString(R.string.resolution_prefix_custom) : getResources().getString(R.string.resolution_prefix_native);
+            }
+
+            if (PreferenceConfiguration.isSquarishScreen(nativeWidth, nativeHeight)) {
+                if (portrait) {
+                    newName += " " + getResources().getString(R.string.resolution_prefix_native_portrait);
+                }
+                else {
+                    newName += " " + getResources().getString(R.string.resolution_prefix_native_landscape);
+                }
+            }
+
+            newName += " ("+nativeWidth+"x"+nativeHeight+")";
+
+            String newValue = nativeWidth+"x"+nativeHeight;
+
+            // Check if the native resolution is already present
+            for (CharSequence value : pref.getEntryValues()) {
+                if (newValue.equals(value.toString())) {
+                    // It is present in the default list, so don't add it again
+                    return;
+                }
+            }
+
+            if (pref.getEntryValues().length < nativeResolutionStartIndex) {
+                nativeResolutionStartIndex = pref.getEntryValues().length;
+            }
+            appendPreferenceEntry(pref, newName, newValue);
+        }
+
+        private void addNativeResolutionEntries(int nativeWidth, int nativeHeight, boolean insetsRemoved, boolean is_custom) {
+            if (PreferenceConfiguration.isSquarishScreen(nativeWidth, nativeHeight)) {
+                addNativeResolutionEntry(nativeHeight, nativeWidth, insetsRemoved, true, is_custom);
+            }
+            addNativeResolutionEntry(nativeWidth, nativeHeight, insetsRemoved, false, is_custom);
+        }
+
+        private void addNativeFrameRateEntry(float framerate, boolean is_custom) {
+            if (!is_custom) {
+                framerate = Math.round(framerate);
+                if (framerate == 0) {
+                    return;
+                }
+            }
+
+            ListPreference pref = (ListPreference) findPreference(PreferenceConfiguration.FPS_PREF_STRING);
+            String fpsValue = is_custom ? Float.toString(framerate) : Integer.toString(Math.round(framerate));
+            String fpsName = (is_custom ? getResources().getString(R.string.resolution_prefix_custom) : getResources().getString(R.string.resolution_prefix_native)) +
+                    " (" + fpsValue + " " + getResources().getString(R.string.fps_suffix_fps) + ")";
+
+            // Check if the native frame rate is already present
+            for (CharSequence value : pref.getEntryValues()) {
+                if (fpsValue.equals(value.toString())) {
+                    // It is present in the default list, so don't add it again
+                    nativeFramerateShown = false;
+                    return;
+                }
+            }
+
+            appendPreferenceEntry(pref, fpsName, fpsValue);
+            nativeFramerateShown = true;
+        }
+
+        private void removeValue(String preferenceKey, String value, Runnable onMatched) {
+            int matchingCount = 0;
+
+            ListPreference pref = (ListPreference) findPreference(preferenceKey);
+
+            // Count the number of matching entries we'll be removing
+            for (CharSequence seq : pref.getEntryValues()) {
+                if (seq.toString().equalsIgnoreCase(value)) {
+                    matchingCount++;
+                }
+            }
+
+            // Create the new arrays
+            CharSequence[] entries = new CharSequence[pref.getEntries().length-matchingCount];
+            CharSequence[] entryValues = new CharSequence[pref.getEntryValues().length-matchingCount];
+            int outIndex = 0;
+            for (int i = 0; i < pref.getEntryValues().length; i++) {
+                if (pref.getEntryValues()[i].toString().equalsIgnoreCase(value)) {
+                    // Skip matching values
+                    continue;
+                }
+
+                entries[outIndex] = pref.getEntries()[i];
+                entryValues[outIndex] = pref.getEntryValues()[i];
+                outIndex++;
+            }
+
+            if (pref.getValue().equalsIgnoreCase(value)) {
+                onMatched.run();
+            }
+
+            // Update the preference with the new list
+            pref.setEntries(entries);
+            pref.setEntryValues(entryValues);
+        }
+
+        private void resetBitrateToDefault(SharedPreferences prefs, String res, String fps) {
+            if (res == null) {
+                res = prefs.getString(PreferenceConfiguration.RESOLUTION_PREF_STRING, PreferenceConfiguration.DEFAULT_RESOLUTION);
+            }
+            if (fps == null) {
+                fps = prefs.getString(PreferenceConfiguration.FPS_PREF_STRING, PreferenceConfiguration.DEFAULT_FPS);
+            }
+
+            int bitrate = PreferenceConfiguration.getDefaultBitrate(res, fps);
+            if (PreferenceConfiguration.RES_AUTO.equals(res) || PreferenceConfiguration.FPS_AUTO.equals(fps)) {
+                // Use what auto resolves to on this display rather than the placeholders
+                AutoResolution.Result resolved = previewAuto(res, fps);
+                if (resolved != null) {
+                    bitrate = Math.min(PreferenceConfiguration.MAX_BITRATE_KBPS,
+                            PreferenceConfiguration.getDefaultBitrate(resolved.width, resolved.height, resolved.fps));
+                }
+            }
+
+            // The bitrate is the default again, so it follows the resolution from now on
+            prefs.edit()
+                    .putInt(PreferenceConfiguration.BITRATE_PREF_STRING, bitrate)
+                    .putBoolean(PreferenceConfiguration.BITRATE_FOLLOWS_RESOLUTION_PREF_STRING, true)
+                    .apply();
+        }
+
+        /** What auto resolves to for the given list values on the display settings are shown on. */
+        private AutoResolution.Result previewAuto(String res, String fps) {
+            Activity activity = getActivity();
+            if (activity == null) {
+                return null;
+            }
+            boolean autoResolution = PreferenceConfiguration.RES_AUTO.equals(res);
+            boolean autoFps = PreferenceConfiguration.FPS_AUTO.equals(fps);
+            int width = PreferenceConfiguration.AUTO_PLACEHOLDER_WIDTH;
+            int height = PreferenceConfiguration.AUTO_PLACEHOLDER_HEIGHT;
+            float frameRate = PreferenceConfiguration.AUTO_PLACEHOLDER_FPS;
+            try {
+                if (!autoResolution) {
+                    String[] parts = res.split("x");
+                    width = Integer.parseInt(parts[0]);
+                    height = Integer.parseInt(parts[1]);
+                }
+                if (!autoFps) {
+                    frameRate = Float.parseFloat(fps);
+                }
+            } catch (RuntimeException e) {
+                return null;
+            }
+            // A fresh configuration from the current (or profile) preferences for every preview
+            return AutoResolutionAndroid.preview(activity, PreferenceConfiguration.forAutoPreview(getPrefs()),
+                    autoResolution, autoFps, width, height, frameRate);
+        }
+
+        /** The bitrate that "follows the resolution" would use for the current list values, or -1. */
+        private int followedBitrate(SharedPreferences prefs) {
+            String res = prefs.getString(PreferenceConfiguration.RESOLUTION_PREF_STRING, PreferenceConfiguration.DEFAULT_RESOLUTION);
+            String fps = prefs.getString(PreferenceConfiguration.FPS_PREF_STRING, PreferenceConfiguration.DEFAULT_FPS);
+            try {
+                if (PreferenceConfiguration.RES_AUTO.equals(res) || PreferenceConfiguration.FPS_AUTO.equals(fps)) {
+                    AutoResolution.Result resolved = previewAuto(res, fps);
+                    if (resolved == null) {
+                        return -1;
+                    }
+                    return Math.min(PreferenceConfiguration.MAX_BITRATE_KBPS,
+                            PreferenceConfiguration.getDefaultBitrate(resolved.width, resolved.height, resolved.fps));
+                }
+                return PreferenceConfiguration.getDefaultBitrate(res, fps);
+            } catch (RuntimeException e) {
+                return -1;
+            }
+        }
+
+        /** First summary line of the resolution and FPS rows while they are set to auto. */
+        void updateAutoHints() {
+            if (getActivity() == null || getPreferenceScreen() == null) {
+                return;
+            }
+            SharedPreferences prefs = getPrefs();
+            String res = prefs.getString(PreferenceConfiguration.RESOLUTION_PREF_STRING, PreferenceConfiguration.DEFAULT_RESOLUTION);
+            String fps = prefs.getString(PreferenceConfiguration.FPS_PREF_STRING, PreferenceConfiguration.DEFAULT_FPS);
+            boolean autoResolution = PreferenceConfiguration.RES_AUTO.equals(res);
+            boolean autoFps = PreferenceConfiguration.FPS_AUTO.equals(fps);
+
+            String hint = null;
+            String resolutionValue = null;
+            String fpsValue = null;
+            if (autoResolution || autoFps) {
+                AutoResolution.Result resolved = previewAuto(res, fps);
+                if (resolved != null) {
+                    hint = formatAutoHint(prefs, resolved);
+                    // Short form for the title line of the segmented rows
+                    resolutionValue = resolved.width + "x" + resolved.height;
+                    fpsValue = AutoResolution.formatFps(resolved.fps) + " " + getString(R.string.fps_suffix_fps);
+
+                    // Keep the stored bitrate (and the slider) at the value the stream will use.
+                    // Only for the base settings: profiles are never changed behind the user's back.
+                    if (getPreferenceManager().getPreferenceDataStore() == null &&
+                            prefs.getBoolean(PreferenceConfiguration.BITRATE_FOLLOWS_RESOLUTION_PREF_STRING, true)) {
+                        int followed = Math.min(PreferenceConfiguration.MAX_BITRATE_KBPS,
+                                PreferenceConfiguration.getDefaultBitrate(resolved.width, resolved.height, resolved.fps));
+                        Object stored = prefs.getAll().get(PreferenceConfiguration.BITRATE_PREF_STRING);
+                        if (!(stored instanceof Integer) || (Integer) stored != followed) {
+                            prefs.edit().putInt(PreferenceConfiguration.BITRATE_PREF_STRING, followed).apply();
+                            Preference bitratePref = findPreference(PreferenceConfiguration.BITRATE_PREF_STRING);
+                            if (bitratePref instanceof SeekBarPreference) {
+                                ((SeekBarPreference) bitratePref).setProgress(followed);
+                            }
+                        }
+                    }
+                }
+            }
+
+            Preference resolutionPref = findPreference(PreferenceConfiguration.RESOLUTION_PREF_STRING);
+            if (resolutionPref != null) {
+                resolutionPref.setSummary(withHint(autoResolution ? hint : null, R.string.summary_resolution_list));
+                if (resolutionPref instanceof SegmentedListPreference) {
+                    ((SegmentedListPreference) resolutionPref).setAutoValueText(autoResolution ? resolutionValue : null);
+                }
+            }
+            Preference fpsPref = findPreference(PreferenceConfiguration.FPS_PREF_STRING);
+            if (fpsPref != null) {
+                fpsPref.setSummary(withHint(autoFps ? hint : null, R.string.summary_fps_list));
+                if (fpsPref instanceof SegmentedListPreference) {
+                    ((SegmentedListPreference) fpsPref).setAutoValueText(autoFps ? fpsValue : null);
+                }
+            }
+
+            // The inline bitrate slider shows the stored value, which the listeners may have reset
+            Preference bitrate = findPreference(PreferenceConfiguration.BITRATE_PREF_STRING);
+            if (bitrate instanceof SeekBarPreference) {
+                ((SeekBarPreference) bitrate).refreshFromStore();
+            }
+        }
+
+        private CharSequence withHint(String hint, int summaryRes) {
+            String summary = getString(summaryRes);
+            return hint == null ? summary : hint + "\n" + summary;
+        }
+
+        private String formatAutoHint(SharedPreferences prefs, AutoResolution.Result resolved) {
+            String display;
+            if (resolved.mode == AutoResolution.Mode.MIRRORED_EXTERNAL) {
+                display = getString(R.string.auto_res_display_mirrored);
+            }
+            else if (resolved.targetDisplayId == Display.DEFAULT_DISPLAY) {
+                display = getString(R.string.auto_res_display_builtin);
+            }
+            else {
+                display = getString(R.string.auto_res_display_external);
+            }
+            StringBuilder hint = new StringBuilder(getString(R.string.auto_res_hint,
+                    resolved.width + "x" + resolved.height, AutoResolution.formatFps(resolved.fps), display));
+
+            if (prefs.getBoolean(PreferenceConfiguration.BITRATE_FOLLOWS_RESOLUTION_PREF_STRING, true)) {
+                int bitrate = Math.min(PreferenceConfiguration.MAX_BITRATE_KBPS,
+                        PreferenceConfiguration.getDefaultBitrate(resolved.width, resolved.height, resolved.fps));
+                String mbps = bitrate % 1000 == 0 ? Integer.toString(bitrate / 1000) :
+                        String.format(Locale.US, "%.1f", bitrate / 1000f);
+                hint.append(getString(R.string.auto_res_hint_bitrate, mbps));
+            }
+
+            int scale = 100;
+            Object scaleValue = prefs.getAll().get("seekbar_resolution_scale_factor");
+            if (scaleValue instanceof Integer) {
+                scale = (Integer) scaleValue;
+            }
+            if (scale != 100 && scale > 0) {
+                hint.append(getString(R.string.auto_res_hint_scale,
+                        (resolved.width * scale / 100) + "x" + (resolved.height * scale / 100)));
+            }
+            return hint.toString();
+        }
+
+        private void postAutoHintUpdate() {
+            new Handler(Looper.getMainLooper()).post(new Runnable() {
+                @Override
+                public void run() {
+                    updateAutoHints();
+                }
+            });
+        }
+
+        @NonNull
+        @Override
+        public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
+            View view = super.onCreateView(inflater, container, savedInstanceState);
+            UiHelper.applyStatusBarPadding(view);
+            return view;
+        }
+
+        public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState, boolean unused) {
+            return super.onCreateView(inflater, container, savedInstanceState);
+        }
+
+        @Override
+        public void onViewCreated(@NonNull View view, Bundle savedInstanceState) {
+            super.onViewCreated(view, savedInstanceState);
+
+            setDivider(null);
+            final RecyclerView list = getListView();
+            if (list == null) {
+                return;
+            }
+
+            // Rows of each category are drawn as one rounded card. Seed the header view types
+            // (section headers and the quick settings captions) from the adapter so even a list
+            // restored mid-category draws correct corners.
+            GroupedCardDecoration decoration = new GroupedCardDecoration(requireContext());
+            RecyclerView.Adapter<?> adapter = list.getAdapter();
+            PreferenceScreen screen = getPreferenceScreen();
+            if (adapter instanceof PreferenceGroup.PreferencePositionCallback && screen != null) {
+                for (int i = 0; i < screen.getPreferenceCount(); i++) {
+                    Preference preference = screen.getPreference(i);
+                    if (preference instanceof PreferenceCategory && preference.isVisible()) {
+                        int position = ((PreferenceGroup.PreferencePositionCallback) adapter)
+                                .getPreferenceAdapterPosition(preference);
+                        if (position != RecyclerView.NO_POSITION) {
+                            decoration.addHeaderViewType(adapter.getItemViewType(position));
+                        }
+                    }
+                }
+            }
+            // The quick settings above "All settings" sit flat on the screen
+            decoration.setFlatRegion(new GroupedCardDecoration.FlatRegion() {
+                @Override
+                public int lastFlatPosition() {
+                    return adapterPositionOf(ALL_SETTINGS_KEY);
+                }
+            });
+            if (isEmbedded()) {
+                // The panel itself is the surface color: raise the cards above it
+                decoration.setCardColor(androidx.core.content.ContextCompat.getColor(requireContext(), R.color.vw_surface_high));
+            }
+            list.addItemDecoration(decoration);
+
+            // Center the content and never let it grow wider than the max width
+            final int maxWidth = getResources().getDimensionPixelSize(R.dimen.vw_settings_max_width);
+            final int gutter = getResources().getDimensionPixelSize(R.dimen.vw_gutter);
+            list.setClipToPadding(false);
+            list.addOnLayoutChangeListener(new View.OnLayoutChangeListener() {
+                @Override
+                public void onLayoutChange(final View v, int left, int top, int right, int bottom,
+                                           int oldLeft, int oldTop, int oldRight, int oldBottom) {
+                    final int padding = Math.max(gutter, (right - left - maxWidth) / 2);
+                    if (v.getPaddingLeft() != padding || v.getPaddingRight() != padding) {
+                        v.post(new Runnable() {
+                            @Override
+                            public void run() {
+                                v.setPadding(padding, v.getPaddingTop(), padding, v.getPaddingBottom());
+                            }
+                        });
+                    }
+                }
+            });
+
+            // Controller users start on the first row of the first category (resolution).
+            // Beside the PC list the focus starts on the hosts instead.
+            if (!isEmbedded()) {
+                list.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (!list.isInTouchMode() && list.getFocusedChild() == null) {
+                            focusFirstRowAfter(list, 0, 2);
+                        }
+                    }
+                });
+            }
+        }
+
+        /** Adapter position of the focused row, or -1. */
+        public int focusedRowPosition() {
+            RecyclerView list = getListView();
+            if (list == null || list.getFocusedChild() == null) {
+                return RecyclerView.NO_POSITION;
+            }
+            return list.getChildAdapterPosition(list.getFocusedChild());
+        }
+
+        /**
+         * Focuses the row at (or the first focusable row after) an adapter position. Returns
+         * whether a row has the focus now; otherwise it is focused after the next layout.
+         */
+        public boolean focusRow(int position) {
+            final RecyclerView list = getListView();
+            if (list == null) {
+                return false;
+            }
+            final int target = Math.max(0, position);
+            RecyclerView.Adapter<?> adapter = list.getAdapter();
+            for (int pos = target; adapter != null && pos < adapter.getItemCount(); pos++) {
+                RecyclerView.ViewHolder holder = list.findViewHolderForAdapterPosition(pos);
+                if (holder == null) {
+                    break;
+                }
+                if (holder.itemView.isFocusable() && holder.itemView.requestFocus()) {
+                    return true;
+                }
+            }
+            if (list.getLayoutManager() != null) {
+                list.getLayoutManager().scrollToPosition(target);
+            }
+            focusFirstRowAfter(list, target, 2);
+            return list.getFocusedChild() != null;
+        }
+
+        /** Adapter position of a preference in the list, or -1 (RecyclerView.NO_POSITION). */
+        int adapterPositionOf(String key) {
+            RecyclerView list = getListView();
+            Preference preference = findPreference(key);
+            if (list == null || preference == null ||
+                    !(list.getAdapter() instanceof PreferenceGroup.PreferencePositionCallback)) {
+                return RecyclerView.NO_POSITION;
+            }
+            return ((PreferenceGroup.PreferencePositionCallback) list.getAdapter())
+                    .getPreferenceAdapterPosition(preference);
+        }
+
+        private static void focusFirstRowAfter(final RecyclerView list, final int adapterPosition, final int retries) {
+            RecyclerView.Adapter<?> adapter = list.getAdapter();
+            if (adapter == null) {
+                return;
+            }
+            for (int pos = adapterPosition; pos < adapter.getItemCount(); pos++) {
+                RecyclerView.ViewHolder holder = list.findViewHolderForAdapterPosition(pos);
+                if (holder == null) {
+                    // Not laid out yet; try again after the next layout
+                    if (retries > 0) {
+                        list.post(new Runnable() {
+                            @Override
+                            public void run() {
+                                focusFirstRowAfter(list, adapterPosition, retries - 1);
+                            }
+                        });
+                    }
+                    return;
+                }
+                if (holder.itemView.isFocusable()) {
+                    holder.itemView.requestFocus();
+                    return;
+                }
+            }
+        }
+
+        /** The visible sections L1, R1 and "Jump to section" move between, in list order. */
+        List<PreferenceCategory> jumpTargets() {
+            List<PreferenceCategory> result = new ArrayList<>();
+            final RecyclerView list = getListView();
+            PreferenceScreen screen = getPreferenceScreen();
+            if (list == null || screen == null ||
+                    !(list.getAdapter() instanceof PreferenceGroup.PreferencePositionCallback)) {
+                return result;
+            }
+            // Categories are read from the inflated screen, so removed ones are skipped
+            final PreferenceGroup.PreferencePositionCallback positions =
+                    (PreferenceGroup.PreferencePositionCallback) list.getAdapter();
+            for (int i = 0; i < screen.getPreferenceCount(); i++) {
+                Preference preference = screen.getPreference(i);
+                // The "All settings" caption has no rows of its own
+                if (preference instanceof PreferenceCategory && preference.isVisible() &&
+                        !ALL_SETTINGS_KEY.equals(preference.getKey()) &&
+                        positions.getPreferenceAdapterPosition(preference) != RecyclerView.NO_POSITION) {
+                    result.add((PreferenceCategory) preference);
+                }
+            }
+            Collections.sort(result, new java.util.Comparator<PreferenceCategory>() {
+                @Override
+                public int compare(PreferenceCategory a, PreferenceCategory b) {
+                    return Integer.compare(positions.getPreferenceAdapterPosition(a),
+                            positions.getPreferenceAdapterPosition(b));
+                }
+            });
+            return result;
+        }
+
+        /** Scrolls to the previous (-1) or next (1) category and focuses its first row. */
+        public boolean jumpToCategory(int direction) {
+            final RecyclerView list = getListView();
+            List<PreferenceCategory> targets = jumpTargets();
+            if (targets.isEmpty() || !(list.getLayoutManager() instanceof LinearLayoutManager)) {
+                return false;
+            }
+            List<Integer> categoryPositions = new ArrayList<>();
+            for (PreferenceCategory category : targets) {
+                categoryPositions.add(adapterPositionOf(category.getKey()));
+            }
+
+            LinearLayoutManager layoutManager = (LinearLayoutManager) list.getLayoutManager();
+            int focusedPosition = RecyclerView.NO_POSITION;
+            View focused = list.getFocusedChild();
+            if (focused != null) {
+                focusedPosition = list.getChildAdapterPosition(focused);
+            }
+            if (focusedPosition == RecyclerView.NO_POSITION) {
+                // Nothing focused (touch mode): use the category shown at the top
+                focusedPosition = layoutManager.findFirstVisibleItemPosition();
+            }
+
+            int current = CategoryNavigation.currentCategoryIndex(categoryPositions, focusedPosition);
+            int target = CategoryNavigation.nextCategoryIndex(current, direction, categoryPositions.size());
+            return jumpToCategoryAt(target);
+        }
+
+        /** Scrolls to the section at an index of jumpTargets() and focuses its first row. */
+        public boolean jumpToCategoryAt(int index) {
+            final RecyclerView list = getListView();
+            List<PreferenceCategory> targets = jumpTargets();
+            if (index < 0 || index >= targets.size() || !(list.getLayoutManager() instanceof LinearLayoutManager)) {
+                return false;
+            }
+            final int headerPosition = adapterPositionOf(targets.get(index).getKey());
+            // Commit a pending slider and drop a segment highlight before the rows are recycled
+            settlePendingRows(getPreferenceScreen());
+            ((LinearLayoutManager) list.getLayoutManager()).scrollToPositionWithOffset(headerPosition, 0);
+            list.post(new Runnable() {
+                @Override
+                public void run() {
+                    focusFirstRowAfter(list, headerPosition + 1, 2);
+                }
+            });
+            return true;
+        }
+
+        private static void settlePendingRows(PreferenceGroup group) {
+            if (group == null) {
+                return;
+            }
+            for (int i = 0; i < group.getPreferenceCount(); i++) {
+                Preference preference = group.getPreference(i);
+                if (preference instanceof PrefRowBinder.RowKeyHandler) {
+                    ((PrefRowBinder.RowKeyHandler) preference).onRowFocusLost();
+                }
+                if (preference instanceof PreferenceGroup) {
+                    settlePendingRows((PreferenceGroup) preference);
+                }
+            }
+        }
+
+        /** Drops a segment highlight that was not committed; returns whether there was one. */
+        public boolean dropPendingChoice() {
+            return dropPendingChoice(getPreferenceScreen());
+        }
+
+        private static boolean dropPendingChoice(PreferenceGroup group) {
+            if (group == null) {
+                return false;
+            }
+            boolean dropped = false;
+            for (int i = 0; i < group.getPreferenceCount(); i++) {
+                Preference preference = group.getPreference(i);
+                if (preference instanceof SegmentedListPreference) {
+                    dropped |= ((SegmentedListPreference) preference).dropPending();
+                }
+                if (preference instanceof PreferenceGroup) {
+                    dropped |= dropPendingChoice((PreferenceGroup) preference);
+                }
+            }
+            return dropped;
+        }
+
+        static final int MENU_JUMP = 1;
+        static final int MENU_DESCRIPTIONS = 2;
+        static final int MENU_PROFILES = 3;
+        static final int MENU_HELP = 4;
+        static final int MENU_JUMP_FIRST_SECTION = 100;
+
+        // The menu shown last, for tests
+        PopupMenu shownMoreMenu;
+
+        /** The "..." menu of the settings header. */
+        public void showMoreMenu(View anchor) {
+            PopupMenu popup = new PopupMenu(requireContext(), anchor);
+            buildMoreMenu(popup.getMenu());
+            popup.setOnMenuItemClickListener(new PopupMenu.OnMenuItemClickListener() {
+                @Override
+                public boolean onMenuItemClick(MenuItem item) {
+                    return onMoreMenuItem(item);
+                }
+            });
+            shownMoreMenu = popup;
+            popup.show();
+        }
+
+        void buildMoreMenu(Menu menu) {
+            SubMenu jump = menu.addSubMenu(Menu.NONE, MENU_JUMP, 0, R.string.settings_menu_jump);
+            List<PreferenceCategory> targets = jumpTargets();
+            for (int i = 0; i < targets.size(); i++) {
+                jump.add(Menu.NONE, MENU_JUMP_FIRST_SECTION + i, i, targets.get(i).getTitle());
+            }
+            menu.add(Menu.NONE, MENU_DESCRIPTIONS, 1, R.string.pref_show_descriptions)
+                    .setCheckable(true)
+                    .setChecked(isShowingDescriptions());
+            menu.add(Menu.NONE, MENU_PROFILES, 2, R.string.settings_menu_profiles);
+            if (!requireContext().getPackageManager().hasSystemFeature("amazon.hardware.fire_tv")) {
+                menu.add(Menu.NONE, MENU_HELP, 3, R.string.help);
+            }
+        }
+
+        boolean onMoreMenuItem(MenuItem item) {
+            int id = item.getItemId();
+            if (id >= MENU_JUMP_FIRST_SECTION) {
+                return jumpToCategoryAt(id - MENU_JUMP_FIRST_SECTION);
+            }
+            if (id == MENU_DESCRIPTIONS) {
+                setShowDescriptions(!isShowingDescriptions());
+                return true;
+            }
+            if (id == MENU_PROFILES) {
+                startActivity(new Intent(requireContext(), ProfilesActivity.class));
+                return true;
+            }
+            if (id == MENU_HELP) {
+                HelpLauncher.launchSetupGuide(requireContext());
+                return true;
+            }
+            return false;
+        }
+
+        @NonNull
+        @Override
+        protected RecyclerView.Adapter onCreateAdapter(@NonNull PreferenceScreen preferenceScreen) {
+            return new VwPreferenceAdapter(preferenceScreen, requireContext());
+        }
+
+        /** Shows the row summaries inline (true) or behind the info buttons (false). */
+        public void setShowDescriptions(boolean show) {
+            UiState.setShowDescriptions(requireContext(), show);
+            RecyclerView list = getListView();
+            if (list != null && list.getAdapter() != null) {
+                list.getAdapter().notifyDataSetChanged();
+            }
+        }
+
+        public boolean isShowingDescriptions() {
+            return UiState.showDescriptions(requireContext());
+        }
+
+        @Override
+        public void onCreatePreferences(Bundle bundle, String s) {
+            initializePreferences();
+        }
+
+        public void initializePreferences() {
+            if (prevPrefConfig == null) {
+                // Recreated by the FragmentManager with the no-argument constructor
+                prevPrefConfig = PreferenceConfiguration.readPreferences(requireActivity(), getPrefs());
+            }
+            addPreferencesFromResource(R.xml.preferences);
+            PreferenceScreen screen = getPreferenceScreen();
+
+            AppCompatActivity activity = (AppCompatActivity) requireActivity();
+            PackageManager pm = activity.getPackageManager();
+
+            // Every removal goes through the key, never through a fixed category, so a row
+            // can live in any category (the quick settings at the top move several of them)
+
+            // hide on-screen controls category on non touch screen devices
+            if (!pm.hasSystemFeature(PackageManager.FEATURE_TOUCHSCREEN)) {
+                removePreferenceByKey("category_onscreen_controls");
+                removePreferenceByKey("category_special_key_layout");
+                // The on-screen controls switch and its opacity may sit outside that category
+                removePreferenceByKey("checkbox_show_onscreen_controls");
+                removePreferenceByKey("seekbar_osc_opacity");
+            }
+
+            // Hide remote desktop mouse mode on pre-Oreo (which doesn't have pointer capture)
+            // and NVIDIA SHIELD devices (which support raw mouse input in pointer capture mode)
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O ||
+                    getActivity().getPackageManager().hasSystemFeature("com.nvidia.feature.shield")) {
+                removePreferenceByKey("checkbox_absolute_mouse_mode");
+            }
+
+            // Hide gamepad motion sensor option when running on OSes before Android 12.
+            // Support for motion, LED, battery, and other extensions were introduced in S.
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+                removePreferenceByKey("checkbox_gamepad_motion_sensors");
+            }
+
+            // Hide gamepad motion sensor fallback option if the device has no gyro or accelerometer
+            if (!pm.hasSystemFeature(PackageManager.FEATURE_SENSOR_ACCELEROMETER) &&
+                    !activity.getPackageManager().hasSystemFeature(PackageManager.FEATURE_SENSOR_GYROSCOPE)) {
+                removePreferenceByKey("checkbox_force_device_motion");
+                removePreferenceByKey("checkbox_gamepad_motion_fallback");
+                // Nothing to send without device sensors
+                removePreferenceByKey(MotionPreference.KEY);
+            }
+
+            // Hide USB driver options on devices without USB host support
+            if (!pm.hasSystemFeature(PackageManager.FEATURE_USB_HOST)) {
+                removePreferenceByKey("checkbox_usb_bind_all");
+                removePreferenceByKey("checkbox_usb_driver");
+            }
+
+            // Remove PiP mode on devices pre-Oreo, where the feature is not available (some low RAM devices),
+            // and on Fire OS where it violates the Amazon App Store guidelines for some reason.
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O ||
+                    !pm.hasSystemFeature("android.software.picture_in_picture") ||
+                    pm.hasSystemFeature("com.amazon.software.fireos")) {
+                removePreferenceByKey("checkbox_enable_pip");
+            }
+
+            // Fire TV apps are not allowed to use WebViews or browsers, so hide the Help category
+            /*if (getActivity().getPackageManager().hasSystemFeature("amazon.hardware.fire_tv")) {
+                PreferenceCategory category =
+                        (PreferenceCategory) findPreference("category_help");
+                screen.removePreference(category);
+            }*/
+            // Remove the vibration options if the device can't vibrate
+            if (!((Vibrator)getActivity().getSystemService(Context.VIBRATOR_SERVICE)).hasVibrator()) {
+                removePreferenceByKey("checkbox_vibrate_fallback");
+                removePreferenceByKey("seekbar_vibrate_fallback_strength");
+                // The entire OSC category may have already been removed by the touchscreen check above
+                removePreferenceByKey("checkbox_vibrate_osc");
+                removePreferenceByKey("checkbox_vibrate_keyboard");
+                removePreferenceByKey("checkbox_enable_device_rumble");
+            }
+            else if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O ||
+                    !((Vibrator)getActivity().getSystemService(Context.VIBRATOR_SERVICE)).hasAmplitudeControl()) {
+                // Remove the vibration strength selector of the device doesn't have amplitude control
+                removePreferenceByKey("seekbar_vibrate_fallback_strength");
+            }
+
+            // Check custom resolution
+            String customResStr = prevPrefConfig.customResolution;
+            if(customResStr != null && !customResStr.isEmpty()){
+                String[] resolutionSegments = customResStr.split("x");
+                if(resolutionSegments.length == 2){
+                    try {
+                        addNativeResolutionEntries(Integer.parseInt(resolutionSegments[0]), Integer.parseInt(resolutionSegments[1]), false, true);
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+            
+            // Check custom refresh rate
+            String customRefreshRateStr = prevPrefConfig.customRefreshRate;
+            if (customRefreshRateStr != null && !customRefreshRateStr.isEmpty()) {
+                try {
+                    float customRefreshRateValue = Float.parseFloat(customRefreshRateStr);
+                    if (customRefreshRateValue > 0) {
+                        addNativeFrameRateEntry(customRefreshRateValue, true);
+                    }
+                } catch (NumberFormatException e) {
+                    getPrefs().edit().remove(PreferenceConfiguration.CUSTOM_REFRESH_RATE_PREF_STRING).apply();
+                }
+            }
+
+            Display display = activity.getWindowManager().getDefaultDisplay();
+            float maxSupportedFps = display.getRefreshRate();
+
+            // Hide non-supported resolution/FPS combinations
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                int maxSupportedResW = 0;
+
+                // Add a native resolution with any insets included for users that don't want content
+                // behind the notch of their display
+                boolean hasInsets = false;
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    DisplayCutout cutout;
+
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        // Use the much nicer Display.getCutout() API on Android 10+
+                        cutout = display.getCutout();
+                    }
+                    else {
+                        // Android 9 only
+                        cutout = displayCutoutP;
+                    }
+
+                    if (cutout != null) {
+                        int widthInsets = cutout.getSafeInsetLeft() + cutout.getSafeInsetRight();
+                        int heightInsets = cutout.getSafeInsetBottom() + cutout.getSafeInsetTop();
+
+                        if (widthInsets != 0 || heightInsets != 0) {
+                            DisplayMetrics metrics = new DisplayMetrics();
+                            display.getRealMetrics(metrics);
+
+                            int width = Math.max(metrics.widthPixels - widthInsets, metrics.heightPixels - heightInsets);
+                            int height = Math.min(metrics.widthPixels - widthInsets, metrics.heightPixels - heightInsets);
+
+                            addNativeResolutionEntries(width, height, false, false);
+                            hasInsets = true;
+                        }
+                    }
+                }
+
+                // Always allow resolutions that are smaller or equal to the active
+                // display resolution because decoders can report total non-sense to us.
+                // For example, a p201 device reports:
+                // AVC Decoder: OMX.amlogic.avc.decoder.awesome
+                // HEVC Decoder: OMX.amlogic.hevc.decoder.awesome
+                // AVC supported width range: 64 - 384
+                // HEVC supported width range: 64 - 544
+                for (Display.Mode candidate : display.getSupportedModes()) {
+                    // Some devices report their dimensions in the portrait orientation
+                    // where height > width. Normalize these to the conventional width > height
+                    // arrangement before we process them.
+
+                    int width = Math.max(candidate.getPhysicalWidth(), candidate.getPhysicalHeight());
+                    int height = Math.min(candidate.getPhysicalWidth(), candidate.getPhysicalHeight());
+
+                    // Some TVs report strange values here, so let's avoid native resolutions on a TV
+                    // unless they report greater than 4K resolutions.
+                    if (!activity.getPackageManager().hasSystemFeature(PackageManager.FEATURE_TELEVISION) ||
+                            (width > 3840 || height > 2160)) {
+                        addNativeResolutionEntries(width, height, hasInsets, false);
+                    }
+
+                    if ((width >= 3840 || height >= 2160) && maxSupportedResW < 3840) {
+                        maxSupportedResW = 3840;
+                    }
+                    else if ((width >= 2560 || height >= 1440) && maxSupportedResW < 2560) {
+                        maxSupportedResW = 2560;
+                    }
+                    else if ((width >= 1920 || height >= 1080) && maxSupportedResW < 1920) {
+                        maxSupportedResW = 1920;
+                    }
+
+                    if (candidate.getRefreshRate() > maxSupportedFps) {
+                        maxSupportedFps = candidate.getRefreshRate();
+                    }
+                }
+
+                // This must be called to do runtime initialization before calling functions that evaluate
+                // decoder lists.
+                MediaCodecHelper.initialize(getContext(), GlPreferences.readPreferences(requireContext()).glRenderer);
+
+                MediaCodecInfo avcDecoder = MediaCodecHelper.findProbableSafeDecoder("video/avc", -1);
+                MediaCodecInfo hevcDecoder = MediaCodecHelper.findProbableSafeDecoder("video/hevc", -1);
+
+                if (avcDecoder != null) {
+                    Range<Integer> avcWidthRange = avcDecoder.getCapabilitiesForType("video/avc").getVideoCapabilities().getSupportedWidths();
+
+                    LimeLog.info("AVC supported width range: "+avcWidthRange.getLower()+" - "+avcWidthRange.getUpper());
+
+                    // If 720p is not reported as supported, ignore all results from this API
+                    if (avcWidthRange.contains(1280)) {
+                        if (avcWidthRange.contains(3840) && maxSupportedResW < 3840) {
+                            maxSupportedResW = 3840;
+                        }
+                        else if (avcWidthRange.contains(1920) && maxSupportedResW < 1920) {
+                            maxSupportedResW = 1920;
+                        }
+                        else if (maxSupportedResW < 1280) {
+                            maxSupportedResW = 1280;
+                        }
+                    }
+                }
+
+                if (hevcDecoder != null) {
+                    Range<Integer> hevcWidthRange = hevcDecoder.getCapabilitiesForType("video/hevc").getVideoCapabilities().getSupportedWidths();
+
+                    LimeLog.info("HEVC supported width range: "+hevcWidthRange.getLower()+" - "+hevcWidthRange.getUpper());
+
+                    // If 720p is not reported as supported, ignore all results from this API
+                    if (hevcWidthRange.contains(1280)) {
+                        if (hevcWidthRange.contains(3840) && maxSupportedResW < 3840) {
+                            maxSupportedResW = 3840;
+                        }
+                        else if (hevcWidthRange.contains(1920) && maxSupportedResW < 1920) {
+                            maxSupportedResW = 1920;
+                        }
+                        else if (maxSupportedResW < 1280) {
+                            maxSupportedResW = 1280;
+                        }
+                    }
+                }
+
+                LimeLog.info("Maximum resolution slot: "+maxSupportedResW);
+
+                if (maxSupportedResW != 0) {
+                    if (maxSupportedResW < 3840) {
+                        // 4K is unsupported
+                        removeEntryFromListAndSetValue(PreferenceConfiguration.RESOLUTION_PREF_STRING, PreferenceConfiguration.RES_4K, PreferenceConfiguration.RES_1440P);
+                    }
+                    if (maxSupportedResW < 2560) {
+                        // 1440p is unsupported
+                        removeEntryFromListAndSetValue(PreferenceConfiguration.RESOLUTION_PREF_STRING, PreferenceConfiguration.RES_1440P, PreferenceConfiguration.RES_1080P);
+                    }
+                    if (maxSupportedResW < 1920) {
+                        // 1080p is unsupported
+                        removeEntryFromListAndSetValue(PreferenceConfiguration.RESOLUTION_PREF_STRING, PreferenceConfiguration.RES_1080P, PreferenceConfiguration.RES_720P);
+                    }
+                    // Never remove 720p
+                }
+            }
+            else {
+                // We can get the true metrics via the getRealMetrics() function (unlike the lies
+                // that getWidth() and getHeight() tell to us).
+                DisplayMetrics metrics = new DisplayMetrics();
+                display.getRealMetrics(metrics);
+                int width = Math.max(metrics.widthPixels, metrics.heightPixels);
+                int height = Math.min(metrics.widthPixels, metrics.heightPixels);
+                addNativeResolutionEntries(width, height, false, false);
+            }
+
+            if (!PreferenceConfiguration.readPreferences(this.getActivity()).unlockFps) {
+                // We give some extra room in case the FPS is rounded down
+                if (maxSupportedFps < 118) {
+                    removeEntryFromListAndSetValue(PreferenceConfiguration.FPS_PREF_STRING, "120", "90");
+                }
+                if (maxSupportedFps < 88) {
+                    // 1080p is unsupported
+                    removeEntryFromListAndSetValue(PreferenceConfiguration.FPS_PREF_STRING, "90", "60");
+                }
+                // Never remove 30 FPS or 60 FPS
+            }
+            addNativeFrameRateEntry(maxSupportedFps, false);
+
+            // Android L introduces the drop duplicate behavior of releaseOutputBuffer()
+            // that the unlock FPS option relies on to not massively increase latency.
+            findPreference(PreferenceConfiguration.UNLOCK_FPS_STRING).setOnPreferenceChangeListener(new Preference.OnPreferenceChangeListener() {
+                @Override
+                public boolean onPreferenceChange(Preference preference, Object newValue) {
+                    // HACK: We need to let the preference change succeed before reinitializing to ensure
+                    // it's reflected in the new layout.
+                    reloadSettings();
+
+                    // Allow the original preference change to take place
+                    return true;
+                }
+            });
+
+            // Remove HDR preference for devices below Nougat
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
+                LimeLog.info("Excluding HDR toggle based on OS");
+                removePreferenceByKey("checkbox_enable_hdr");
+            }
+            else {
+                Display.HdrCapabilities hdrCaps = display.getHdrCapabilities();
+                Log.d("HDR CAP", display + "");
+                // We must now ensure our display is compatible with HDR10
+                boolean foundHdr10 = false;
+                if (hdrCaps != null) {
+                    // getHdrCapabilities() returns null on Lenovo Lenovo Mirage Solo (vega), Android 8.0
+                    for (int hdrType : hdrCaps.getSupportedHdrTypes()) {
+                        if (hdrType == Display.HdrCapabilities.HDR_TYPE_HDR10) {
+                            foundHdr10 = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (!foundHdr10) {
+                    LimeLog.info("Excluding HDR toggle based on display capabilities");
+                    removePreferenceByKey("checkbox_enable_hdr");
+                }
+                else if (PreferenceConfiguration.isShieldAtvFirmwareWithBrokenHdr()) {
+                    LimeLog.info("Disabling HDR toggle on old broken SHIELD TV firmware");
+                    CheckBoxPreference hdrPref = findPreference("checkbox_enable_hdr");
+                    if (hdrPref != null) {
+                        hdrPref.setEnabled(false);
+                        hdrPref.setChecked(false);
+                        hdrPref.setSummary("Update the firmware on your NVIDIA SHIELD Android TV to enable HDR");
+                    }
+                }
+            }
+
+            // A quick settings caption whose rows were all removed for this device goes too
+            for (String key : QUICK_CATEGORY_KEYS) {
+                PreferenceCategory quick = findPreference(key);
+                if (quick != null) {
+                    boolean anyVisible = false;
+                    for (int i = 0; i < quick.getPreferenceCount(); i++) {
+                        if (quick.getPreference(i).isVisible()) {
+                            anyVisible = true;
+                            break;
+                        }
+                    }
+                    quick.setVisible(anyVisible);
+                }
+            }
+
+            // Add a listener to the FPS and resolution preference
+            // so the bitrate can be auto-adjusted
+            findPreference(PreferenceConfiguration.RESOLUTION_PREF_STRING).setOnPreferenceChangeListener(new Preference.OnPreferenceChangeListener() {
+                @Override
+                public boolean onPreferenceChange(Preference preference, Object newValue) {
+                    SharedPreferences prefs = getPrefs();
+                    String valueStr = (String) newValue;
+
+                    // Detect if this value is the native resolution option
+                    CharSequence[] values = ((ListPreference)preference).getEntryValues();
+                    boolean isNativeRes = true;
+                    for (int i = 0; i < values.length; i++) {
+                        // Look for a match prior to the start of the native resolution entries
+                        if (valueStr.equals(values[i].toString()) && i < nativeResolutionStartIndex) {
+                            isNativeRes = false;
+                            break;
+                        }
+                    }
+
+                    // If this is native resolution, show the warning dialog
+                    if (isNativeRes) {
+                        Dialog.displayDialog(getActivity(),
+                                getResources().getString(R.string.title_native_res_dialog),
+                                getResources().getString(R.string.text_native_res_dialog),
+                                false);
+                    }
+
+                    // Write the new bitrate value
+                    resetBitrateToDefault(prefs, valueStr, null);
+                    postAutoHintUpdate();
+
+                    // Allow the original preference change to take place
+                    return true;
+                }
+            });
+            findPreference(PreferenceConfiguration.FPS_PREF_STRING).setOnPreferenceChangeListener(new Preference.OnPreferenceChangeListener() {
+                @Override
+                public boolean onPreferenceChange(Preference preference, Object newValue) {
+                    SharedPreferences prefs = getPrefs();
+                    String valueStr = (String) newValue;
+
+                    // If this is native frame rate, show the warning dialog
+                    CharSequence[] values = ((ListPreference)preference).getEntryValues();
+                    if (nativeFramerateShown && values[values.length - 1].toString().equals(newValue.toString())) {
+                        Dialog.displayDialog(getActivity(),
+                                getResources().getString(R.string.title_native_fps_dialog),
+                                getResources().getString(R.string.text_native_res_dialog),
+                                false);
+                    }
+
+                    // Write the new bitrate value
+                    resetBitrateToDefault(prefs, null, valueStr);
+                    postAutoHintUpdate();
+
+                    // Allow the original preference change to take place
+                    return true;
+                }
+            });
+
+            // Moving the bitrate slider is a deliberate choice: stop following the resolution
+            Preference bitratePref = findPreference(PreferenceConfiguration.BITRATE_PREF_STRING);
+            if (bitratePref != null) {
+                bitratePref.setOnPreferenceChangeListener(new Preference.OnPreferenceChangeListener() {
+                    @Override
+                    public boolean onPreferenceChange(Preference preference, Object newValue) {
+                        // OK without moving the slider keeps following; only a new value stops it
+                        SharedPreferences prefs = getPrefs();
+                        if (newValue instanceof Integer && (Integer) newValue != followedBitrate(prefs)) {
+                            prefs.edit()
+                                    .putBoolean(PreferenceConfiguration.BITRATE_FOLLOWS_RESOLUTION_PREF_STRING, false)
+                                    .apply();
+                            postAutoHintUpdate();
+                        }
+                        return true;
+                    }
+                });
+            }
+            Preference preferExternalPref = findPreference(PreferenceConfiguration.AUTO_RES_PREFER_EXTERNAL_PREF_STRING);
+            if (preferExternalPref != null) {
+                preferExternalPref.setOnPreferenceChangeListener(new Preference.OnPreferenceChangeListener() {
+                    @Override
+                    public boolean onPreferenceChange(Preference preference, Object newValue) {
+                        postAutoHintUpdate();
+                        return true;
+                    }
+                });
+            }
+            updateAutoHints();
+
+            // The host activity applies a new language (the PC list restarts itself)
+            Preference languagePref = findPreference("list_languages");
+            if (languagePref != null) {
+                languagePref.setOnPreferenceChangeListener(new Preference.OnPreferenceChangeListener() {
+                    @Override
+                    public boolean onPreferenceChange(Preference preference, Object newValue) {
+                        new Handler(Looper.getMainLooper()).post(new Runnable() {
+                            @Override
+                            public void run() {
+                                Activity host = getActivity();
+                                if (host instanceof SettingsHost) {
+                                    ((SettingsHost) host).onSettingsLanguageChanged();
+                                }
+                            }
+                        });
+                        return true;
+                    }
+                });
+            }
+
+            findPreference("checkbox_enable_perf_logging").setOnPreferenceChangeListener(new Preference.OnPreferenceChangeListener() {
+                @Override
+                public boolean onPreferenceChange(Preference preference, Object newValue) {
+                    Boolean loggingEnabled = (Boolean) newValue;
+
+                    if(!loggingEnabled) {
+                        new PerformanceDataTracker().clearLogs(preference.getContext());
+                    }
+
+                    // Allow the original preference change to take place
+                    return true;
+                }
+            });
+
+            Preference _pref;
+            _pref = findPreference("import_keyboard_file");
+            if (_pref != null) {
+                _pref.setOnPreferenceClickListener(new Preference.OnPreferenceClickListener() {
+                    @Override
+                    public boolean onPreferenceClick(Preference preference) {
+                        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                        intent.addCategory(Intent.CATEGORY_OPENABLE);
+                        intent.setType("application/json");
+                        startActivityForResult(intent, READ_REQUEST_CODE);
+                        return false;
+                    }
+                });
+            }
+
+            _pref = findPreference("import_special_button_file");
+            if (_pref != null) {
+                _pref.setOnPreferenceClickListener(new Preference.OnPreferenceClickListener() {
+                    @Override
+                    public boolean onPreferenceClick(Preference preference) {
+                        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                        intent.addCategory(Intent.CATEGORY_OPENABLE);
+                        intent.setType("application/json");
+                        startActivityForResult(intent, READ_REQUEST_SPECIAL_CODE);
+                        return false;
+                    }
+                });
+            }
+
+            _pref = findPreference("share_performance_logs");
+            if (_pref != null) {
+                _pref.setOnPreferenceClickListener(new Preference.OnPreferenceClickListener() {
+                    @Override
+                    public boolean onPreferenceClick(Preference preference) {
+                        Context context = preference.getContext();
+                        PerformanceDataTracker tracker = new PerformanceDataTracker();
+                        String logs = tracker.getLog(context);
+
+                        if (logs == null || logs.trim().isEmpty()) {
+                            Toast.makeText(context, context.getString(R.string.toast_no_logs), Toast.LENGTH_SHORT).show();
+                            return false;
+                        }
+
+                        String prefixMessage = context.getString(R.string.email_prefix_message);
+                        String emailRecipient = context.getString(R.string.email_recipient);
+                        String emailSubject = context.getString(R.string.email_subject);
+                        String chooserTitle = context.getString(R.string.email_chooser_title);
+                        String noEmailClientsMsg = context.getString(R.string.toast_no_email_clients);
+
+                        try {
+                            File cacheDir = context.getCacheDir();
+                            File logFile = new File(cacheDir, "artemistics_logs.txt");
+                            try (FileOutputStream fos = new FileOutputStream(logFile)) {
+                                fos.write(logs.getBytes(StandardCharsets.UTF_8));
+                            }
+
+                            Uri logFileUri = FileProvider.getUriForFile(context,
+                                    context.getPackageName() + ".fileprovider",
+                                    logFile);
+
+                            Intent emailIntent = new Intent(Intent.ACTION_SEND);
+                            emailIntent.setType("text/plain");
+                            emailIntent.putExtra(Intent.EXTRA_EMAIL, new String[]{emailRecipient});
+                            emailIntent.putExtra(Intent.EXTRA_SUBJECT, emailSubject);
+                            emailIntent.putExtra(Intent.EXTRA_TEXT, prefixMessage);
+                            emailIntent.putExtra(Intent.EXTRA_STREAM, logFileUri);
+
+                            emailIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+
+                            context.startActivity(Intent.createChooser(emailIntent, chooserTitle));
+                        } catch (IOException e) {
+                            Log.d("PerformanceDataTracker", "Error creating log file");
+                        } catch (android.content.ActivityNotFoundException ex) {
+                            Toast.makeText(context, noEmailClientsMsg, Toast.LENGTH_SHORT).show();
+                        }
+                        return false;
+                    }
+                });
+            }
+
+            _pref = findPreference("export_keyboard_file");
+            if (_pref != null) {
+                _pref.setOnPreferenceClickListener(new Preference.OnPreferenceClickListener() {
+                    @Override
+                    public boolean onPreferenceClick(Preference preference) {
+                        File file = new File(requireActivity().getExternalCacheDir(),"export_settings");
+                        if(!file.exists()){
+                            file.mkdir();
+                        }
+                        File file1= getJsonContent(requireActivity(),file);
+                        if(file1==null){
+                            Toast.makeText(requireActivity(),getString(R.string.pref_error_occurred),Toast.LENGTH_SHORT).show();
+                            return false;
+                        }
+                        Uri uri;
+                        Intent intent = new Intent(Intent.ACTION_SEND);
+                        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                        String authority= BuildConfig.APPLICATION_ID+".fileprovider";
+                        uri = FileProvider.getUriForFile(requireActivity(),authority,file1);
+                        intent.putExtra(Intent.EXTRA_STREAM, uri);
+                        intent.setType("application/json");
+                        startActivity(Intent.createChooser(intent,getString(R.string.pref_save_keyboard_profile)));
+                        return false;
+                    }
+                });
+            }
+
+            _pref = findPreference("pref_debug_info");
+            if (_pref != null) {
+                _pref.setOnPreferenceClickListener(new Preference.OnPreferenceClickListener() {
+                    @Override
+                    public boolean onPreferenceClick(@NonNull Preference preference) {
+                        Intent intent=new Intent(requireActivity(), DebugInfoActivity.class);
+                        requireActivity().startActivity(intent);
+                        return false;
+                    }
+                });
+            }
+
+            EditTextPreference bitrateEditPref = findPreference(PreferenceConfiguration.CUSTOM_BITRATE_PREF_STRING);
+            if (bitrateEditPref != null) {
+                bitrateEditPref.setOnBindEditTextListener((EditText editText) -> {
+                    editText.setInputType(InputType.TYPE_NUMBER_FLAG_DECIMAL);
+                    editText.setFilters(new InputFilter[]{new InputFilter.LengthFilter(5)});
+                });
+
+                bitrateEditPref.setOnPreferenceChangeListener((preference, newValue) -> {
+                    String value = (String) newValue;
+                    if (TextUtils.isEmpty(value)) {
+                        Toast.makeText(getActivity(), getString(R.string.pref_enter_value_0_9999), Toast.LENGTH_SHORT).show();
+                        return false;
+                    }
+                    float bitrateValue = Float.parseFloat(value) * 1000;
+                    int bitrate = (int) bitrateValue;
+                    SharedPreferences prefs = getPrefs();
+                    // A custom bitrate no longer follows the resolution
+                    prefs.edit()
+                            .putInt(PreferenceConfiguration.BITRATE_PREF_STRING, bitrate)
+                            .putBoolean(PreferenceConfiguration.BITRATE_FOLLOWS_RESOLUTION_PREF_STRING, false)
+                            .apply();
+                    postAutoHintUpdate();
+                    Toast.makeText(getActivity(), getString(R.string.pref_set_success), Toast.LENGTH_SHORT).show();
+                    return true;
+                });
+            }
+
+            EditTextPreference resolutionEditPref = findPreference(PreferenceConfiguration.CUSTOM_RESOLUTION_PREF_STRING);
+            if (resolutionEditPref != null) {
+                resolutionEditPref.setOnBindEditTextListener((EditText editText) -> {
+                    editText.setInputType(InputType.TYPE_CLASS_TEXT);
+                    editText.setFilters(new InputFilter[]{new InputFilter.LengthFilter(11)});
+                });
+
+                resolutionEditPref.setOnPreferenceChangeListener((preference, newValue) -> {
+                    String value = (String) newValue;
+                    if (TextUtils.isEmpty(value)) {
+                        Toast.makeText(getActivity(), getString(R.string.pref_enter_value_0_9999), Toast.LENGTH_SHORT).show();
+                        return false;
+                    }
+
+                    // Verify format: [width]x[height]
+                    String[] resolutionSegments = value.split("x");
+                    if (resolutionSegments.length != 2) {
+                        Toast.makeText(getActivity(), getString(R.string.pref_error_occurred), Toast.LENGTH_SHORT).show();
+                        return false;
+                    }
+
+                    try {
+                        int width = Integer.parseInt(resolutionSegments[0]);
+                        int height = Integer.parseInt(resolutionSegments[1]);
+                        
+                        if (width <= 0 || height <= 0) {
+                            Toast.makeText(getActivity(), getString(R.string.pref_error_occurred), Toast.LENGTH_SHORT).show();
+                            return false;
+                        }
+
+                        // Save the value and reload settings
+                        editAndReload(PreferenceConfiguration.CUSTOM_RESOLUTION_PREF_STRING, value);
+
+                        return true;
+                    } catch (NumberFormatException e) {
+                        Toast.makeText(getActivity(), getString(R.string.pref_error_occurred), Toast.LENGTH_SHORT).show();
+                        return false;
+                    }
+                });
+            }
+
+            EditTextPreference customRefreshRatePref = findPreference(PreferenceConfiguration.CUSTOM_REFRESH_RATE_PREF_STRING);
+            if (customRefreshRatePref != null) {
+                customRefreshRatePref.setOnBindEditTextListener((EditText editText) -> {
+                    editText.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
+                    editText.setFilters(new InputFilter[]{new InputFilter.LengthFilter(7)});
+                });
+
+                customRefreshRatePref.setOnPreferenceChangeListener((preference, newValue) -> {
+                    String value = (String) newValue;
+                    if (TextUtils.isEmpty(value)) {
+                        Toast.makeText(getActivity(), getString(R.string.pref_enter_value_0_9999), Toast.LENGTH_SHORT).show();
+                        return false;
+                    }
+                    
+                    try {
+                        float refreshRate = Float.parseFloat(value);
+                        if (refreshRate <= 0) {
+                            Toast.makeText(getActivity(), getString(R.string.pref_enter_value_0_9999), Toast.LENGTH_SHORT).show();
+                            return false;
+                        }
+                        
+                        // Format to max 3 decimal places
+                        String formattedValue = String.format("%.3f", refreshRate);
+                        // Remove trailing zeros
+                        formattedValue = formattedValue.replaceAll("0+$", "").replaceAll("\\.$", "");
+
+                        editAndReload(PreferenceConfiguration.CUSTOM_REFRESH_RATE_PREF_STRING, formattedValue);
+
+                        return true;
+                    } catch (NumberFormatException e) {
+                        Toast.makeText(getActivity(), getString(R.string.pref_error_occurred), Toast.LENGTH_SHORT).show();
+                        return false;
+                    }
+                });
+            }
+        }
+
+        private void removeEntryFromListAndSetValue(String resolutionPrefString, String entryToRemove, String nextDefault) {
+            removeValue(resolutionPrefString, entryToRemove, new Runnable() {
+                @Override
+                public void run() {
+                    SharedPreferences prefs = getPrefs();
+                    setValue(resolutionPrefString, nextDefault);
+                    resetBitrateToDefault(prefs, null, null);
+                }
+            });
+        }
+
+        private void editAndReload(String prefKey, String newVal) {
+            SharedPreferences prefs = getPrefs();
+            prefs.edit().putString(prefKey, newVal).apply();
+
+            reloadSettings();
+        }
+
+        protected void reloadSettings() {
+            // HACK: We need to let the preference change succeed before reinitializing to ensure
+            // it's reflected in the new layout.
+            final Handler h = new Handler();
+            h.postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    // Ensure the activity is still open when this timeout expires
+                    Activity host = SettingsFragment.this.getActivity();
+                    if (host instanceof SettingsHost && !host.isFinishing()) {
+                        ((SettingsHost) host).reloadSettings();
+                    }
+                }
+            }, 500);
+        }
+
+        int READ_REQUEST_CODE = 1001;
+        int READ_REQUEST_SPECIAL_CODE = 1002;
+
+        @Override
+        public void onActivityResult(int requestCode, int resultCode, Intent data) {
+            super.onActivityResult(requestCode, resultCode, data);
+            if (requestCode == READ_REQUEST_CODE && resultCode == Activity.RESULT_OK && data.getData() != null) {
+                try {
+                    Uri uri = data.getData();
+                    String json = FileUriUtils.openUriForRead(getActivity(), uri);
+                    if (TextUtils.isEmpty(json)) {
+                        Toast.makeText(getActivity(), getString(R.string.pref_empty_file), Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    String name = getPrefs().getString(KeyBoardControllerConfigurationLoader.OSC_PREFERENCE, KeyBoardControllerConfigurationLoader.OSC_PREFERENCE_VALUE);
+                    SharedPreferences.Editor prefEditor = requireActivity().getSharedPreferences(name, Activity.MODE_PRIVATE).edit();
+                    JSONObject object = new JSONObject(json);
+                    Iterator it = object.keys();
+                    prefEditor.clear();
+                    while (it.hasNext()) {
+                        String key = (String) it.next();// 获得key
+                        String value = object.getString(key);// 获得value
+                        prefEditor.putString(key, value);
+                    }
+                    prefEditor.apply();
+                    Toast.makeText(getActivity(), getString(R.string.pref_import_success), Toast.LENGTH_SHORT).show();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    Toast.makeText(getActivity(), getString(R.string.pref_error_occurred) + e.getMessage(), Toast.LENGTH_SHORT).show();
+                }
+                return;
+            }
+
+            if (requestCode == READ_REQUEST_SPECIAL_CODE && resultCode == Activity.RESULT_OK && data.getData() != null) {
+                try {
+                    Uri uri = data.getData();
+                    String json = FileUriUtils.openUriForRead(getActivity(), uri);
+                    if (TextUtils.isEmpty(json)) {
+                        Toast.makeText(getActivity(), getString(R.string.pref_empty_file), Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    // Refuse a file the menu or the on-screen keyboard could not use
+                    String problem = com.limelight.utils.KeyConfigHelper.validateForImport(json);
+                    if (problem != null) {
+                        Toast.makeText(getActivity(), getString(R.string.pref_import_refused, problem), Toast.LENGTH_LONG).show();
+                        return;
+                    }
+                    SharedPreferences.Editor prefEditor = getActivity().getSharedPreferences(GameMenu.PREF_NAME, Activity.MODE_PRIVATE).edit();
+                    prefEditor.putString(GameMenu.KEY_NAME, json);
+                    prefEditor.apply();
+                    Toast.makeText(getActivity(), getString(com.limelight.utils.KeyConfigHelper.clearsCustomKeys(json) ?
+                            R.string.pref_import_cleared : R.string.pref_import_success), Toast.LENGTH_SHORT).show();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    Toast.makeText(getActivity(), getString(R.string.pref_error_occurred) + e.getMessage(), Toast.LENGTH_SHORT).show();
+                }
+            }
+        }
+
+        @Override
+        public void onDisplayPreferenceDialog(@NonNull Preference preference) {
+            if (preference instanceof ConfirmDeleteOscPreference) {
+                DialogFragment dialogFragment = ConfirmDeleteOscPreference.DialogFragmentCompat.newInstance(preference.getKey());
+                dialogFragment.setTargetFragment(this, 0);
+                dialogFragment.show(getFragmentManager(), null);
+            } else if (preference instanceof ConfirmDeleteKeyboardPreference) {
+                DialogFragment dialogFragment = ConfirmDeleteKeyboardPreference.DialogFragmentCompat.newInstance(preference.getKey());
+                dialogFragment.setTargetFragment(this, 0);
+                dialogFragment.show(getFragmentManager(), null);
+            } else super.onDisplayPreferenceDialog(preference);
+        }
+
+        private File getJsonContent(Context context,File file){
+            String name = getPrefs().getString(KeyBoardControllerConfigurationLoader.OSC_PREFERENCE, KeyBoardControllerConfigurationLoader.OSC_PREFERENCE_VALUE);
+            SharedPreferences pref = context.getSharedPreferences(name, Activity.MODE_PRIVATE);
+            Map<String,?> map = pref.getAll();
+            File file1= new File(file,name+".json");
+            String jsonStr=new Gson().toJson(map);
+            if(!FileUriUtils.writerFileString(file1,jsonStr)){
+                return null;
+            }
+            return file1;
+        }
+
+        //获取所有设置项配置文件
+        private File getAllJsonData(File file){
+            SharedPreferences pref = getPrefs();
+            Map<String,?> map = pref.getAll();
+            //获取适配电脑的数据库信息
+//            List<ComputerDetails> map= new ComputerDatabaseManager(context).getAllComputers();
+            File file1= new File(file,"allJSON.json");
+            String jsonStr=new Gson().toJson(map);
+            if(!FileUriUtils.writerFileString(file1,jsonStr)){
+                return null;
+            }
+            return file1;
+        }
+    }
+}
+
