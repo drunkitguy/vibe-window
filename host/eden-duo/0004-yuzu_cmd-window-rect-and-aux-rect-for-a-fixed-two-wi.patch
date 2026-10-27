@@ -1,0 +1,380 @@
+From 781ee4ae033faab7dfe56934a0dc27a5ca7fef67 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 27 Oct 2026 20:28:46 +0000
+Subject: [PATCH] yuzu_cmd: --window-rect and --aux-rect for a fixed two-window
+ layout
+
+Add --window-rect x,y,w,h (main window) and --aux-rect x,y,w,h (aux
+window) so one virtual display can hold both windows at known places,
+e.g. --window-rect 0,0,1920,1080 --aux-rect 0,1080,1240,1080 on a
+1920x2160 display.
+
+With a rect the window is created SDL_WINDOW_BORDERLESS instead of
+SDL_WINDOW_RESIZABLE (on Windows SDL gives a resizable window
+WS_THICKFRAME | WS_MAXIMIZEBOX, which a capture host may stretch to
+fill the display) and is then moved and sized with
+SDL_SetWindowPosition/SDL_SetWindowSize. The aux window also gets
+SDL_WINDOW_NOT_FOCUSABLE (WS_EX_NOACTIVATE on Windows), so a tap on it
+never takes focus from the game window. Without the flags every
+SDL_CreateWindow call passes the same flags as before.
+
+The value parser is std-only (src/yuzu_cmd/window_rect.{h,cpp}) so it
+can be tested without SDL or the emulator; a bad value prints its
+reason and eden-cli exits with failure.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01XgyuSR8o8AbzxuWHYqLwsv
+---
+ src/yuzu_cmd/dsmod_harness.cpp                | 42 ++++++++++++++-
+ src/yuzu_cmd/dsmod_harness.h                  | 11 ++++
+ src/yuzu_cmd/duo_cmd.cmake                    |  2 +
+ .../emu_window/emu_window_sdl3_aux.cpp        |  9 +++-
+ .../emu_window/emu_window_sdl3_gl.cpp         |  7 ++-
+ .../emu_window/emu_window_sdl3_null.cpp       |  7 ++-
+ .../emu_window/emu_window_sdl3_vk.cpp         |  7 ++-
+ src/yuzu_cmd/window_rect.cpp                  | 54 +++++++++++++++++++
+ src/yuzu_cmd/window_rect.h                    | 27 ++++++++++
+ 9 files changed, 161 insertions(+), 5 deletions(-)
+ create mode 100644 src/yuzu_cmd/window_rect.cpp
+ create mode 100644 src/yuzu_cmd/window_rect.h
+
+diff --git a/src/yuzu_cmd/dsmod_harness.cpp b/src/yuzu_cmd/dsmod_harness.cpp
+index 5bc0f74..aa7b6f8 100644
+--- a/src/yuzu_cmd/dsmod_harness.cpp
++++ b/src/yuzu_cmd/dsmod_harness.cpp
+@@ -78,7 +78,9 @@ static void PrintHelp(const char* argv0) {
+                  "-p, --program         Pass following string as arguments to executable\n"
+                  "-u, --user            Select a user profile from 0 to 7 or by name\n"
+                  "-d, --debug           Run the GDB stub on a port from 1 to 65535\n"
+-                 "-v, --version         Output version information and exit\n";
++                 "-v, --version         Output version information and exit\n"
++                 "    --window-rect=x,y,w,h Main window at x,y, size w,h, borderless, fixed size\n"
++                 "    --aux-rect=x,y,w,h    Same for the --aux-window window, never focused\n";
+ }
+ 
+ static void PrintVersion() {
+@@ -747,6 +749,29 @@ static void ServiceButtonRequests(Core::System& system,
+     LOG_INFO(Frontend, "virtual input script loaded: {} steps", g_btn_queue.size());
+ }
+ 
++// --window-rect / --aux-rect, read by the window constructors.
++static std::optional<WindowRect> g_window_rect;
++static std::optional<WindowRect> g_aux_rect;
++
++const std::optional<WindowRect>& MainWindowRect() {
++    return g_window_rect;
++}
++
++const std::optional<WindowRect>& AuxWindowRect() {
++    return g_aux_rect;
++}
++
++void PlaceWindow(SDL_Window* window, const std::optional<WindowRect>& rect) {
++    if (window == nullptr || !rect) {
++        return;
++    }
++    if (!SDL_SetWindowPosition(window, rect->x, rect->y) ||
++        !SDL_SetWindowSize(window, rect->w, rect->h)) {
++        LOG_ERROR(Frontend, "Failed to place window at {},{} {}x{}: {}", rect->x, rect->y, rect->w,
++                  rect->h, SDL_GetError());
++    }
++}
++
+ Session::Session()
+     : aux_window_requested{std::getenv("EDEN_AUX_WINDOW") != nullptr},
+       aux_virtual_requested{std::getenv("EDEN_AUX_VIRTUAL") != nullptr} {}
+@@ -798,6 +823,8 @@ std::optional<SDL_AppResult> ParseCommandLine(Session& session, int argc, char**
+         {"dump-romfs", required_argument, 0, 'R'},
+         {"install", required_argument, 0, 'I'},
+         {"screenshot-prefix", required_argument, 0, 'S'},
++        {"window-rect", required_argument, 0, 'w'},
++        {"aux-rect", required_argument, 0, 'A'},
+         {0, 0, 0, 0},
+         // clang-format on
+     };
+@@ -901,6 +928,19 @@ std::optional<SDL_AppResult> ParseCommandLine(Session& session, int argc, char**
+             case 'S':
+                 g_screenshot_prefix = optarg;
+                 break;
++            case 'w':
++            case 'A': {
++                // Long-only: 'w' and 'A' are not in the short option string.
++                std::string error;
++                auto& rect = arg == 'w' ? g_window_rect : g_aux_rect;
++                rect = ParseWindowRect(optarg, error);
++                if (!rect) {
++                    std::cout << "Wrong format for option --" << long_options[option_index].name
++                              << ": " << error << "\n";
++                    return SDL_APP_FAILURE;
++                }
++                break;
++            }
+             }
+         } else {
+ #ifdef _WIN32
+diff --git a/src/yuzu_cmd/dsmod_harness.h b/src/yuzu_cmd/dsmod_harness.h
+index 18cdc30..45fbbf9 100644
+--- a/src/yuzu_cmd/dsmod_harness.h
++++ b/src/yuzu_cmd/dsmod_harness.h
+@@ -7,6 +7,7 @@
+ //   * the command line (Duo keeps its own option table, see .upstream/DIVERGENCES.md) and the
+ //     one-shot utility modes --dump-il2cpp, --dump-romfs and --install;
+ //   * the second ("aux") screen: --aux-window, --aux-virtual, the desktop haptic sink;
++//   * fixed window placement for a streamed composite: --window-rect, --aux-rect;
+ //   * headless control: screenshots (<prefix>.shot, SIGUSR1) and scripted input (<prefix>.btn);
+ //   * EDEN_VSYNC / EDEN_NVDEC overrides and a periodic perf line.
+ 
+@@ -18,6 +19,8 @@
+ 
+ #include <SDL3/SDL.h>
+ 
++#include "yuzu_cmd/window_rect.h"
++
+ class AuxWindow_SDL3;
+ 
+ namespace Core {
+@@ -60,6 +63,14 @@ void OnGameLoaded(Session& session, Core::System& system);
+ /// Once per SDL iteration: perf line, pending screenshots and scripted input.
+ void Iterate(Core::System& system, InputCommon::InputSubsystem& input_subsystem);
+ 
++/// --window-rect / --aux-rect, empty without the flag. With a rect the window is created
++/// borderless instead of resizable (the aux window also not focusable) and placed with PlaceWindow.
++const std::optional<WindowRect>& MainWindowRect();
++const std::optional<WindowRect>& AuxWindowRect();
++
++/// Moves and sizes a new window to `rect`; does nothing without one.
++void PlaceWindow(SDL_Window* window, const std::optional<WindowRect>& rect);
++
+ /// Routes an SDL event to the aux window. Returns true when the aux window owned (and handled)
+ /// it; otherwise the caller hands it to the main window.
+ bool HandleEvent(Session& session, SDL_Event& event);
+diff --git a/src/yuzu_cmd/duo_cmd.cmake b/src/yuzu_cmd/duo_cmd.cmake
+index df9d9fe..ba3edaf 100644
+--- a/src/yuzu_cmd/duo_cmd.cmake
++++ b/src/yuzu_cmd/duo_cmd.cmake
+@@ -10,6 +10,8 @@ target_sources(yuzu-cmd PRIVATE
+     emu_window/emu_window_sdl3_aux.h
+     dsmod_harness.cpp
+     dsmod_harness.h
++    window_rect.cpp
++    window_rect.h
+ )
+ 
+ if (YUZU_TESTS)
+diff --git a/src/yuzu_cmd/emu_window/emu_window_sdl3_aux.cpp b/src/yuzu_cmd/emu_window/emu_window_sdl3_aux.cpp
+index 0824dd1..f97041f 100644
+--- a/src/yuzu_cmd/emu_window/emu_window_sdl3_aux.cpp
++++ b/src/yuzu_cmd/emu_window/emu_window_sdl3_aux.cpp
+@@ -10,18 +10,25 @@
+ #include "core/frontend/framebuffer_layout.h"
+ #include "video_core/dsmod/aux_routing.h"
+ #include "video_core/gpu.h"
++#include "yuzu_cmd/dsmod_harness.h"
+ #include "yuzu_cmd/emu_window/emu_window_sdl3.h"
+ #include "yuzu_cmd/emu_window/emu_window_sdl3_aux.h"
+ #include "yuzu_cmd/emu_window/emu_window_sdl3_vk.h"
+ 
+ AuxWindow_SDL3::AuxWindow_SDL3(Core::System& system_, u32 width, u32 height) : system{system_} {
++    // --aux-rect: borderless and fixed-size like --window-rect, and never focused, so a tap here
++    // leaves keyboard focus (and the foreground) with the game window.
++    const auto& rect = DSModHarness::AuxWindowRect();
+     window = SDL_CreateWindow("Eden - Screen 2 (DSMod aux)", static_cast<int>(width),
+                               static_cast<int>(height),
+-                              SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
++                              (rect ? SDL_WINDOW_BORDERLESS | SDL_WINDOW_NOT_FOCUSABLE
++                                    : SDL_WINDOW_RESIZABLE) |
++                                  SDL_WINDOW_HIGH_PIXEL_DENSITY);
+     if (window == nullptr) {
+         LOG_CRITICAL(Frontend, "Failed to create aux SDL window: {}", SDL_GetError());
+         return;
+     }
++    DSModHarness::PlaceWindow(window, rect);
+     window_id = SDL_GetWindowID(window);
+     if (!FillWindowSystemInfoFromSDL(window, window_info)) {
+         LOG_CRITICAL(Frontend, "Unable to determine native window backend for aux window");
+diff --git a/src/yuzu_cmd/emu_window/emu_window_sdl3_gl.cpp b/src/yuzu_cmd/emu_window/emu_window_sdl3_gl.cpp
+index e86858a..4ecbcd0 100644
+--- a/src/yuzu_cmd/emu_window/emu_window_sdl3_gl.cpp
++++ b/src/yuzu_cmd/emu_window/emu_window_sdl3_gl.cpp
+@@ -20,6 +20,7 @@
+ #include "core/core.h"
+ #include "input_common/main.h"
+ #include "video_core/renderer_base.h"
++#include "yuzu_cmd/dsmod_harness.h"
+ #include "yuzu_cmd/emu_window/emu_window_sdl3_gl.h"
+ 
+ namespace {
+@@ -97,16 +98,20 @@ EmuWindow_SDL3_GL::EmuWindow_SDL3_GL(InputCommon::InputSubsystem* input_subsyste
+ 
+     std::string window_title = fmt::format("{} | {}-{}", Common::g_build_fullname,
+                                            Common::g_scm_branch, Common::g_scm_desc);
++    // Duo: --window-rect makes the window borderless and fixed-size (dsmod_harness.h).
++    const auto& rect = DSModHarness::MainWindowRect();
+     render_window =
+         SDL_CreateWindow(window_title.c_str(), Layout::ScreenUndocked::Width,
+                          Layout::ScreenUndocked::Height,
+-                         SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE |
++                         SDL_WINDOW_OPENGL |
++                             (rect ? SDL_WINDOW_BORDERLESS : SDL_WINDOW_RESIZABLE) |
+                              SDL_WINDOW_HIGH_PIXEL_DENSITY);
+ 
+     if (render_window == nullptr) {
+         LOG_CRITICAL(Frontend, "Failed to create SDL3 window! {}", SDL_GetError());
+         exit(1);
+     }
++    DSModHarness::PlaceWindow(render_window, rect);
+ 
+     strict_context_required = strcmp(SDL_GetCurrentVideoDriver(), "wayland") == 0;
+ 
+diff --git a/src/yuzu_cmd/emu_window/emu_window_sdl3_null.cpp b/src/yuzu_cmd/emu_window/emu_window_sdl3_null.cpp
+index f5e4e19..804a1b7 100644
+--- a/src/yuzu_cmd/emu_window/emu_window_sdl3_null.cpp
++++ b/src/yuzu_cmd/emu_window/emu_window_sdl3_null.cpp
+@@ -13,6 +13,7 @@
+ #include "common/logging.h"
+ #include "common/scm_rev.h"
+ #include "video_core/renderer_null/renderer_null.h"
++#include "yuzu_cmd/dsmod_harness.h"
+ #include "yuzu_cmd/emu_window/emu_window_sdl3_null.h"
+ 
+ #ifdef YUZU_USE_EXTERNAL_SDL3
+@@ -28,10 +29,14 @@ EmuWindow_SDL3_Null::EmuWindow_SDL3_Null(InputCommon::InputSubsystem* input_subs
+     : EmuWindow_SDL3{input_subsystem_, system_} {
+     const std::string window_title = fmt::format("Eden {} | {}-{} (Vulkan)", Common::g_build_name,
+                                                  Common::g_scm_branch, Common::g_scm_desc);
++    // Duo: --window-rect makes the window borderless and fixed-size (dsmod_harness.h).
++    const auto& rect = DSModHarness::MainWindowRect();
+     render_window =
+         SDL_CreateWindow(window_title.c_str(), Layout::ScreenUndocked::Width,
+                          Layout::ScreenUndocked::Height,
+-                         SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
++                         (rect ? SDL_WINDOW_BORDERLESS : SDL_WINDOW_RESIZABLE) |
++                             SDL_WINDOW_HIGH_PIXEL_DENSITY);
++    DSModHarness::PlaceWindow(render_window, rect);
+ 
+     SetWindowIcon();
+ 
+diff --git a/src/yuzu_cmd/emu_window/emu_window_sdl3_vk.cpp b/src/yuzu_cmd/emu_window/emu_window_sdl3_vk.cpp
+index 7c3e2b2..f1fc91f 100644
+--- a/src/yuzu_cmd/emu_window/emu_window_sdl3_vk.cpp
++++ b/src/yuzu_cmd/emu_window/emu_window_sdl3_vk.cpp
+@@ -14,6 +14,7 @@
+ #include "common/logging.h"
+ #include "common/scm_rev.h"
+ #include "video_core/renderer_vulkan/renderer_vulkan.h"
++#include "yuzu_cmd/dsmod_harness.h"
+ #include "yuzu_cmd/emu_window/emu_window_sdl3_vk.h"
+ 
+ #include <SDL3/SDL.h>
+@@ -77,10 +78,14 @@ EmuWindow_SDL3_VK::EmuWindow_SDL3_VK(InputCommon::InputSubsystem* input_subsyste
+                                                  Common::g_build_name,
+                                                  Common::g_scm_branch,
+                                                  Common::g_scm_desc);
++    // Duo: --window-rect makes the window borderless and fixed-size (dsmod_harness.h).
++    const auto& rect = DSModHarness::MainWindowRect();
+     render_window =
+         SDL_CreateWindow(window_title.c_str(), Layout::ScreenUndocked::Width,
+                          Layout::ScreenUndocked::Height,
+-                         SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
++                         (rect ? SDL_WINDOW_BORDERLESS : SDL_WINDOW_RESIZABLE) |
++                             SDL_WINDOW_HIGH_PIXEL_DENSITY);
++    DSModHarness::PlaceWindow(render_window, rect);
+ 
+ 
+     SetWindowIcon();
+diff --git a/src/yuzu_cmd/window_rect.cpp b/src/yuzu_cmd/window_rect.cpp
+new file mode 100644
+index 0000000..ace0867
+--- /dev/null
++++ b/src/yuzu_cmd/window_rect.cpp
+@@ -0,0 +1,54 @@
++// SPDX-FileCopyrightText: Copyright 2026 Eden DSMod fork
++// SPDX-License-Identifier: GPL-3.0-or-later
++
++#include <array>
++#include <charconv>
++#include <system_error>
++
++#include "yuzu_cmd/window_rect.h"
++
++namespace DSModHarness {
++
++std::optional<WindowRect> ParseWindowRect(std::string_view text, std::string& error) {
++    std::array<int, 4> values{};
++    std::size_t count = 0;
++    for (std::size_t start = 0;;) {
++        const std::size_t comma = text.find(',', start);
++        const std::string_view field = text.substr(start, comma - start);
++        if (count == values.size()) {
++            error = "expected x,y,w,h, got more than 4 values in '" + std::string(text) + "'";
++            return std::nullopt;
++        }
++        const char* const last = field.data() + field.size();
++        const auto [end, ec] = std::from_chars(field.data(), last, values[count++]);
++        if (ec == std::errc::result_out_of_range) {
++            error = "'" + std::string(field) + "' is out of range";
++            return std::nullopt;
++        }
++        if (field.empty() || ec != std::errc{} || end != last) {
++            error = "'" + std::string(field) + "' is not a number (expected x,y,w,h)";
++            return std::nullopt;
++        }
++        if (comma == std::string_view::npos) {
++            break;
++        }
++        start = comma + 1;
++    }
++    if (count != values.size()) {
++        error = "expected x,y,w,h, got " + std::to_string(count) + " values in '" +
++                std::string(text) + "'";
++        return std::nullopt;
++    }
++    const auto [x, y, w, h] = values;
++    if (x < 0 || y < 0) {
++        error = "x and y must be 0 or more";
++        return std::nullopt;
++    }
++    if (w <= 0 || h <= 0) {
++        error = "w and h must be more than 0";
++        return std::nullopt;
++    }
++    return WindowRect{x, y, w, h};
++}
++
++} // namespace DSModHarness
+diff --git a/src/yuzu_cmd/window_rect.h b/src/yuzu_cmd/window_rect.h
+new file mode 100644
+index 0000000..4e8ceda
+--- /dev/null
++++ b/src/yuzu_cmd/window_rect.h
+@@ -0,0 +1,27 @@
++// SPDX-FileCopyrightText: Copyright 2026 Eden DSMod fork
++// SPDX-License-Identifier: GPL-3.0-or-later
++
++#pragma once
++
++#include <optional>
++#include <string>
++#include <string_view>
++
++// The `x,y,w,h` value of eden-cli's --window-rect and --aux-rect, kept to std so it builds and
++// tests without SDL or the emulator.
++
++namespace DSModHarness {
++
++/// A window's desktop position and client size, in SDL window coordinates.
++struct WindowRect {
++    int x;
++    int y;
++    int w;
++    int h;
++};
++
++/// Parses `x,y,w,h`: four decimal ints, x and y >= 0, w and h > 0. Returns the rect, or nothing
++/// with the reason in `error`.
++std::optional<WindowRect> ParseWindowRect(std::string_view text, std::string& error);
++
++} // namespace DSModHarness
+-- 
+2.43.0
+
