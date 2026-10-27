@@ -223,7 +223,7 @@ Doable in this Linux container now (no game, no Windows, no Thor):
 | 0 | Decisions: D1 host path = **C** (user, done); D2 target version | - | D1 done; D2 blocked: user |
 | H1a | Eden Duo: native modules on Windows (loader, harness compile fix, tests), as patches | - | done: `host/eden-duo/0001-0003` + `host/eden-duo-companions/0001`; loader Catch2 tests pass standalone; full eden-duo build blocked (proxy 403 on CPM fmt download), real-Windows checks in H1c; critic SATISFIED round 3 |
 | T1 | TotK package skeleton: build gate, fail-closed reader, tests; Linux `.so` and Windows DLL; `.dsmod.zip` | H1a (builder patch) | done: `2c482b6` (+ plan `911aed8`); gcc/clang/MinGW builds and ctest pass (MinGW under wine), single export, package + wine probe pass; critic SATISFIED round 3 |
-| H1b | eden-cli composite layout: `--window-rect`, `--aux-rect`, borderless, aux not focusable | H1a | doing |
+| H1b | eden-cli composite layout: `--window-rect`, `--aux-rect`, borderless, aux not focusable | H1a | done: `afe952e`, patch 0004 adds `--window-rect`/`--aux-rect` (borderless, hidden until placed), non-focusable aux, 640x360 main floor, 32767 bound, ledger rows; parser tests pass natively and under wine; SDL and harness code compile-checked only in H1c; critic SATISFIED round 3 |
 
 Needs the user, a Windows PC, the Thor or another repo:
 
@@ -440,6 +440,9 @@ failed load. On the user's Windows build of the patched fork:
    screenshots, a tap on the aux window keeps controller input. With
    `--window-rect 0,0,1920,1080 --aux-rect 0,1080,1240,1080`: both windows sit at those rects,
    borderless and not resizable (no maximize), and the aux window never takes focus.
+4. Confirm the call-site minimums: `--window-rect 0,0,639,360` and `0,0,640,359` are refused with
+   a message, `0,0,640,360` starts; `--aux-rect 0,0,0,1` is refused, `0,0,1,1` starts.
+5. Run `tools/duo/duo-touched-ledger.sh --check` in the patched tree. Must pass.
 Send logs and screenshots back.
 
 Decision point: if a failed load leaves its `module-*` staging dir behind on real Windows,
