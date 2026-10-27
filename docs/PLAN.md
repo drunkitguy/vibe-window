@@ -478,8 +478,9 @@ a helper process and paints everything else black. Findings from that code:
    owned or foreground, so the never-foreground aux window is not moved. H1b found that SDL
    3.4.8 gives borderless windows `WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX`, so both
    windows are captioned but not resizable: the main window is fixed-size and inside the display
-   (left alone), the aux window is unowned and never foreground (not moved). `UNVERIFIED` until
-   the critic's H1b check against the tracker closes; if it fails, H2b's pin covers it.
+   (left alone), the aux window is unowned, never foreground (`WS_EX_NOACTIVATE`) and fixed-size
+   inside the display, so it is never moved, and `choose_among`'s `dialog_like` rule keeps it
+   from becoming the target. Verified by reading (H1b critic); H2's checks confirm it live.
 
 So no host code is needed if H1b holds. Setup on the PC:
 1. Install the window-host MSI built from that branch.
@@ -489,6 +490,13 @@ So no host code is needed if H1b holds. Setup on the PC:
    `mode=1920x2160x60` with `virtualDisplay=1` and `windowOnly=1`; the host creates the virtual
    display at the requested mode (`src/nvhttp.cpp:2003-2013`). Whether the virtual display driver
    accepts 1920x2160 is `UNVERIFIED`.
+4. Turn on taskbar auto-hide on the PC. The virtual display is the only display, so the taskbar
+   (~48 px at 100 %) sits along its bottom edge, over the aux window's bottom strip. The stream
+   does not show it, but apollo injects touch at screen coordinates
+   (`InjectSyntheticPointerInput`), so taps there would hit the always-on-top taskbar and could
+   take focus from the game. Fallback if auto-hide still lets bottom-edge taps reveal it: mode
+   `1920x2240x60`, leaving an 80 px band below the aux window that the client never shows or
+   touches (a constant change in H3's `DualScreenLayout`).
 
 Checks (user, Windows + Thor, after H1c and H3):
 - the host log shows "Client requested window-only capture", eden-cli's main window as the
@@ -497,7 +505,9 @@ Checks (user, Windows + Thor, after H1c and H3):
 - the stream shows the game on top and the companion bottom-left, black elsewhere;
 - the target never changes after taps on the companion;
 - a touch in the bottom area moves the companion, one in the top area does not;
-- controller input reaches the game after a tap below.
+- controller input reaches the game after a tap below;
+- taps within 50 px of the bottom edge (y 2110-2159) reach the companion: it reacts, no taskbar
+  appears, and controller input still reaches the game afterwards.
 
 **H2b (code, only if a check fails)**, same repo and branch: a launch argument `dualScreen=1`,
 parsed next to `windowOnly` (`src/nvhttp.cpp:2114`) into the launch session and passed to the
