@@ -1,6 +1,6 @@
 # TotK dual-screen companion: plan
 
-Owner: `manager` agent. Packets flow planner -> creator -> critic. Status: `todo`, `doing`, `done`, `blocked: user`.
+Owner: `manager` agent. Packets flow planner -> coder -> critic (loop until SATISFIED). Status: `todo`, `doing`, `done`, `blocked: user`.
 
 ## Goal
 
