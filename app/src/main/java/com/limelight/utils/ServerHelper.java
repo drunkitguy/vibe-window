@@ -90,6 +90,17 @@ public class ServerHelper {
         return display;
     }
 
+    // First display that is not displayId (Dual screen's other display), or null
+    public static Display getOtherDisplay(Context context, int displayId) {
+        DisplayManager displayManager = (DisplayManager) context.getSystemService(Context.DISPLAY_SERVICE);
+        for (Display display : displayManager.getDisplays()) {
+            if (display.getDisplayId() != displayId) {
+                return display;
+            }
+        }
+        return null;
+    }
+
     public static Intent createStartIntent(Activity parent, NvApp app, ComputerDetails computer,
                                            ComputerManagerService.ComputerManagerBinder managerBinder,
                                            boolean withVDisplay) {

@@ -286,6 +286,8 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
     private String uniqueId;
     private X509Certificate serverCert;
     private boolean vDisplay;
+    // Dual screen: the display that shows the other crop (null when the mode is off)
+    private Display dualScreenDisplay;
     private ArrayList<String> serverCommands;
 
     private ViewParent rootView;
@@ -402,14 +404,30 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
         com.limelight.preferences.AutoResolutionAndroid.resolveInto(this, prefConfig); // Auto resolution/FPS from this display; no-op for explicit values
 
         if (prefConfig.dualScreen) {
-            // Request the composite mode; readPreferences already turned off full external display, 3D and PiP
-            DualScreenLayout.Mode mode = DualScreenLayout.mode(true, prefConfig.width, prefConfig.height, prefConfig.fps);
-            prefConfig.width = mode.width;
-            prefConfig.height = mode.height;
-            prefConfig.fps = mode.fps;
-            prefConfig.windowOnly = true;
-            prefConfig.autoInvertVideoResolution = false;
-            prefConfig.videoScaleMode = PreferenceConfiguration.ScaleMode.STRETCH;
+            // readPreferences already turned off full external display, 3D and PiP
+            dualScreenDisplay = ServerHelper.getOtherDisplay(this, currentDisplay.getDisplayId());
+            if (dualScreenDisplay == null) {
+                LimeLog.warning("Dual screen: no second display; streaming normally");
+                prefConfig.dualScreen = false;
+            } else {
+                // Request the composite mode
+                DualScreenLayout.Mode mode = DualScreenLayout.mode(true, prefConfig.width, prefConfig.height, prefConfig.fps);
+                prefConfig.width = mode.width;
+                prefConfig.height = mode.height;
+                prefConfig.fps = mode.fps;
+                if (prefConfig.bitrateFollowsResolution) {
+                    int bitrate = Math.min(PreferenceConfiguration.MAX_BITRATE_KBPS,
+                            PreferenceConfiguration.getDefaultBitrate(mode.width, mode.height, mode.fps));
+                    prefConfig.bitrate = bitrate;
+                    if (prefConfig.meteredBitrateDerived) {
+                        prefConfig.meteredBitrate = bitrate / 4;
+                    }
+                }
+                prefConfig.windowOnly = true;
+                prefConfig.enableHdr = false;
+                prefConfig.autoInvertVideoResolution = false;
+                prefConfig.videoScaleMode = PreferenceConfiguration.ScaleMode.STRETCH;
+            }
         }
 
         boolean shouldInvertDecoderResolution = false;
@@ -2696,6 +2714,12 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
         contactAreaMajorCartesian[1] = Math.min(Math.abs(contactAreaMajorCartesian[1]), streamContainer.getHeight()) / streamContainer.getHeight();
         contactAreaMinorCartesian[1] = Math.min(Math.abs(contactAreaMinorCartesian[1]), streamContainer.getHeight()) / streamContainer.getHeight();
 
+        if (prefConfig.dualScreen) {
+            // The view shows the top crop, a smaller share of the video
+            contactAreaMajorCartesian = DualScreenLayout.sizeToVideo(DualScreenLayout.TOP_CROP, contactAreaMajorCartesian[0], contactAreaMajorCartesian[1]);
+            contactAreaMinorCartesian = DualScreenLayout.sizeToVideo(DualScreenLayout.TOP_CROP, contactAreaMinorCartesian[0], contactAreaMinorCartesian[1]);
+        }
+
         // Convert the normalized values back into polar coordinates
         return new float[] { cartesianToR(contactAreaMajorCartesian), cartesianToR(contactAreaMinorCartesian) };
     }
@@ -2784,7 +2808,15 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
     private boolean sendTouchEventForPointer(View view, MotionEvent event, byte eventType, int pointerIndex) {
         float[] normalizedCoords = getStreamViewRelativeNormalizedXY(view, event, pointerIndex);
         float[] normalizedContactArea = getStreamViewNormalizedContactArea(event, pointerIndex);
-        return conn.sendTouchEvent(eventType, event.getPointerId(pointerIndex),
+        int pointerId = event.getPointerId(pointerIndex);
+        if (prefConfig.dualScreen) {
+            // Keep the top display's ids in its share of the host's touch slots
+            pointerId = DualScreenLayout.pointerId(false, pointerId);
+            if (pointerId < 0) {
+                return true;
+            }
+        }
+        return conn.sendTouchEvent(eventType, pointerId,
                 normalizedCoords[0], normalizedCoords[1],
                 getPressureOrDistance(event, pointerIndex),
                 normalizedContactArea[0], normalizedContactArea[1],
@@ -2807,6 +2839,15 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
             return true;
         }
         else if (event.getActionMasked() == MotionEvent.ACTION_CANCEL) {
+            if (prefConfig.dualScreen) {
+                // CANCEL_ALL would also drop the bottom display's touches
+                for (int i = 0; i < event.getPointerCount(); i++) {
+                    if (!sendTouchEventForPointer(view, event, DualScreenLayout.touchType(eventType), i)) {
+                        return false;
+                    }
+                }
+                return true;
+            }
             // Cancel impacts all active pointers
             return conn.sendTouchEvent(MoonBridge.LI_TOUCH_EVENT_CANCEL_ALL, 0,
                     0, 0, 0, 0, 0,
@@ -3468,7 +3509,7 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
 
         if (prefConfig.dualScreen) {
             int[] p = DualScreenLayout.mousePosition(DualScreenLayout.TOP_CROP, eventX, eventY, streamContainer.getWidth(), streamContainer.getHeight());
-            conn.sendMousePosition((short)p[0], (short)p[1], (short)p[2], (short)p[3]);
+            conn.sendMousePosition((short)p[0], (short)p[1], (short)DualScreenLayout.VIDEO_W, (short)DualScreenLayout.VIDEO_H);
             return;
         }
         conn.sendMousePosition((short)eventX, (short)eventY, (short) streamContainer.getWidth(), (short) streamContainer.getHeight());
@@ -3496,8 +3537,15 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
         return handleMotionEvent(view, event);
     }
 
+    public Display getDualScreenDisplay() {
+        return dualScreenDisplay;
+    }
+
     // Dual screen: touches on the display without the user's touch mode go out as direct touch
     public boolean sendDualScreenTouch(MotionEvent event, boolean bottom, View view) {
+        if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+            view.requestUnbufferedDispatch(event);
+        }
         if (conn == null || !grabbedInput || view.getWidth() <= 0 || view.getHeight() <= 0) {
             return false;
         }
@@ -3505,19 +3553,15 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
         if (eventType < 0) {
             return false;
         }
-        // CANCEL_ALL would also drop the other display's touches, so cancel this display's pointers one by one
-        if (eventType == MoonBridge.LI_TOUCH_EVENT_CANCEL_ALL) {
-            eventType = MoonBridge.LI_TOUCH_EVENT_CANCEL;
-        }
-        int action = event.getActionMasked();
-        boolean allPointers = action == MotionEvent.ACTION_MOVE || action == MotionEvent.ACTION_CANCEL;
-        int first = allPointers ? 0 : event.getActionIndex();
-        int end = allPointers ? event.getPointerCount() : first + 1;
+        eventType = DualScreenLayout.touchType(eventType);
+        int[] range = DualScreenLayout.pointerRange(event.getActionMasked(), event.getActionIndex(), event.getPointerCount());
         int[] crop = bottom ? DualScreenLayout.BOTTOM_CROP : DualScreenLayout.TOP_CROP;
-        for (int i = first; i < end; i++) {
+        for (int i = range[0]; i < range[1]; i++) {
+            int pointerId = DualScreenLayout.pointerId(bottom, event.getPointerId(i));
+            if (pointerId < 0) {
+                continue;
+            }
             float[] xy = DualScreenLayout.toVideo(crop, event.getX(i) / view.getWidth(), event.getY(i) / view.getHeight());
-            int pointerId = bottom ? DualScreenLayout.bottomPointerId(event.getPointerId(i))
-                    : DualScreenLayout.topPointerId(event.getPointerId(i));
             conn.sendTouchEvent(eventType, pointerId, xy[0], xy[1],
                     getPressureOrDistance(event, i), 0, 0, getRotationDegrees(event, i));
         }

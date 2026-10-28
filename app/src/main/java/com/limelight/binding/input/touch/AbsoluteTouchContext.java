@@ -132,7 +132,7 @@ public class AbsoluteTouchContext implements TouchContext {
         if (dualScreenTop) {
             // The view shows only the top crop of the composite stream
             int[] p = DualScreenLayout.mousePosition(DualScreenLayout.TOP_CROP, eventX, eventY, targetView.getWidth(), targetView.getHeight());
-            conn.sendMousePosition((short)p[0], (short)p[1], (short)p[2], (short)p[3]);
+            conn.sendMousePosition((short)p[0], (short)p[1], (short)DualScreenLayout.VIDEO_W, (short)DualScreenLayout.VIDEO_H);
             return;
         }
         conn.sendMousePosition((short)eventX, (short)eventY, (short)targetView.getWidth(), (short)targetView.getHeight());

@@ -17,44 +17,65 @@ import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.microedition.khronos.opengles.GL10;
 
 /**
  * Dual screen: the decoder writes one SurfaceTexture; the GLSurfaceView's single context draws
  * one crop to the GLSurfaceView and the other crop to a second EGL window surface (the
- * Presentation's SurfaceView on the other display), both from the same texture update, 1:1.
+ * Presentation's SurfaceView on the other display), both from the same latched frame, 1:1.
  */
 public class DualScreenRenderer implements GLSurfaceView.Renderer, SurfaceTexture.OnFrameAvailableListener {
     private static final int GL_TEXTURE_EXTERNAL_OES = 0x8D65;
     private static final float[] QUAD_VERTICES = {-1.0f, -1.0f, 1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 1.0f};
 
+    // The SurfaceTexture matrix handles decoder padding (e.g. 2160 rows padded to 2176) and the flip
+    private static final String VERTEX_SHADER =
+            "attribute vec4 a_Position;\n" +
+                    "attribute vec2 a_TexCoord;\n" +
+                    "uniform mat4 u_TexMatrix;\n" +
+                    "varying vec2 v_TexCoord;\n" +
+                    "void main() {\n" +
+                    "    gl_Position = a_Position;\n" +
+                    "    v_TexCoord = (u_TexMatrix * vec4(a_TexCoord, 0.0, 1.0)).xy;\n" +
+                    "}\n";
+
     private final GLSurfaceView glSurfaceView;
     private final Stereo3DRenderer.OnSurfaceReadyListener onSurfaceReadyListener;
     private final int[] mainCrop;
+    private final int[] secondCrop;
     private final FloatBuffer quadBuffer = floats(QUAD_VERTICES);
     private final FloatBuffer mainTexBuffer;
     private final FloatBuffer secondTexBuffer;
-    private final AtomicBoolean frameAvailable = new AtomicBoolean(false);
+    private final AtomicInteger pendingFrames = new AtomicInteger();
 
-    private int program;
+    // GL thread only
+    private final float[] texMatrix = new float[16];
+    private int program, positionHandle, texCoordHandle, texMatrixHandle;
     private int videoTextureId;
-    private volatile SurfaceTexture videoSurfaceTexture;
+    private SurfaceTexture videoSurfaceTexture;
     private Surface videoSurface;
+    private boolean frameLatched;
     private int mainWidth, mainHeight;
-
-    // The second display's Surface, set from the UI thread; the EGL side lives on the GL thread
-    private volatile Surface secondSurface;
+    private EGLDisplay eglDisplay = EGL14.EGL_NO_DISPLAY;
+    private EGLContext eglContext = EGL14.EGL_NO_CONTEXT;
+    private EGLSurface mainDrawSurface = EGL14.EGL_NO_SURFACE;
+    private EGLSurface mainReadSurface = EGL14.EGL_NO_SURFACE;
     private Surface secondEglFor;
     private EGLDisplay secondEglDisplay = EGL14.EGL_NO_DISPLAY;
     private EGLSurface secondEglSurface = EGL14.EGL_NO_SURFACE;
+
+    // The second display's Surface and size, set from the UI thread
+    private volatile Surface secondSurface;
+    private volatile int secondWidth, secondHeight;
 
     public DualScreenRenderer(GLSurfaceView view, Stereo3DRenderer.OnSurfaceReadyListener listener,
                               int[] mainCrop, int[] secondCrop) {
         this.glSurfaceView = view;
         this.onSurfaceReadyListener = listener;
         this.mainCrop = mainCrop;
+        this.secondCrop = secondCrop;
         this.mainTexBuffer = floats(DualScreenLayout.texCoords(mainCrop));
         this.secondTexBuffer = floats(DualScreenLayout.texCoords(secondCrop));
     }
@@ -66,7 +87,9 @@ public class DualScreenRenderer implements GLSurfaceView.Renderer, SurfaceTextur
     }
 
     /** UI thread: the Presentation's surface changed (null when it is destroyed). */
-    public void setSecondSurface(Surface surface) {
+    public void setSecondSurface(Surface surface, int width, int height) {
+        secondWidth = width;
+        secondHeight = height;
         secondSurface = surface;
         if (surface != null) {
             glSurfaceView.requestRender();
@@ -85,7 +108,13 @@ public class DualScreenRenderer implements GLSurfaceView.Renderer, SurfaceTextur
         }
     }
 
+    /** Any thread; safe to call more than once. Everything is released on the GL thread. */
     public void onSurfaceDestroyed() {
+        glSurfaceView.queueEvent(this::releaseGl);
+    }
+
+    private void releaseGl() {
+        releaseSecondEglSurface();
         if (videoSurface != null) {
             videoSurface.release();
             videoSurface = null;
@@ -94,16 +123,20 @@ public class DualScreenRenderer implements GLSurfaceView.Renderer, SurfaceTextur
             videoSurfaceTexture.release();
             videoSurfaceTexture = null;
         }
-        glSurfaceView.queueEvent(() -> {
-            releaseSecondEglSurface();
+        if (program != 0) {
             GLES20.glDeleteProgram(program);
+            program = 0;
+        }
+        if (videoTextureId != 0) {
             GLES20.glDeleteTextures(1, new int[] {videoTextureId}, 0);
-        });
+            videoTextureId = 0;
+        }
+        frameLatched = false;
     }
 
     @Override
     public void onFrameAvailable(SurfaceTexture surfaceTexture) {
-        frameAvailable.set(true);
+        pendingFrames.incrementAndGet();
         glSurfaceView.requestRender();
     }
 
@@ -111,6 +144,8 @@ public class DualScreenRenderer implements GLSurfaceView.Renderer, SurfaceTextur
     public void onSurfaceCreated(GL10 gl, javax.microedition.khronos.egl.EGLConfig config) {
         // A new context may come after eglTerminate; drop the old second surface (best effort) and rebuild it
         releaseSecondEglSurface();
+        frameLatched = false;
+        pendingFrames.set(0);
 
         int[] textures = new int[1];
         GLES20.glGenTextures(1, textures, 0);
@@ -125,7 +160,10 @@ public class DualScreenRenderer implements GLSurfaceView.Renderer, SurfaceTextur
         videoSurfaceTexture.setOnFrameAvailableListener(this);
         videoSurface = new Surface(videoSurfaceTexture);
 
-        program = createProgram(ShaderUtils.SIMPLE_VERTEX_SHADER, ShaderUtils.SIMPLE_FRAGMENT_SHADER);
+        program = createProgram(VERTEX_SHADER, ShaderUtils.SIMPLE_FRAGMENT_SHADER);
+        positionHandle = GLES20.glGetAttribLocation(program, "a_Position");
+        texCoordHandle = GLES20.glGetAttribLocation(program, "a_TexCoord");
+        texMatrixHandle = GLES20.glGetUniformLocation(program, "u_TexMatrix");
 
         if (onSurfaceReadyListener != null) {
             onSurfaceReadyListener.onStereo3DSurfaceReady(videoSurface);
@@ -136,6 +174,11 @@ public class DualScreenRenderer implements GLSurfaceView.Renderer, SurfaceTextur
     public void onSurfaceChanged(GL10 gl, int width, int height) {
         mainWidth = width;
         mainHeight = height;
+        // GLSurfaceView calls this after every new EGL surface, so the cached handles stay current
+        eglDisplay = EGL14.eglGetCurrentDisplay();
+        eglContext = EGL14.eglGetCurrentContext();
+        mainDrawSurface = EGL14.eglGetCurrentSurface(EGL14.EGL_DRAW);
+        mainReadSurface = EGL14.eglGetCurrentSurface(EGL14.EGL_READ);
         if (width != mainCrop[2] || height != mainCrop[3]) {
             LimeLog.warning("Dual screen: main surface " + width + "x" + height + " is not 1:1 with its crop; scaling");
         }
@@ -144,41 +187,35 @@ public class DualScreenRenderer implements GLSurfaceView.Renderer, SurfaceTextur
     @Override
     public void onDrawFrame(GL10 gl) {
         SurfaceTexture texture = videoSurfaceTexture;
-        if (texture == null) {
-            return;
-        }
-        if (frameAvailable.getAndSet(false)) {
+        int pending = pendingFrames.getAndSet(0);
+        if (texture != null && pending > 0) {
             try {
-                texture.updateTexImage();
-            } catch (Exception e) {
+                // Drain the queue so the newest frame is latched, not the oldest of a burst
+                for (int i = 0; i < pending; i++) {
+                    texture.updateTexImage();
+                }
+                texture.getTransformMatrix(texMatrix);
+                frameLatched = true;
+            } catch (RuntimeException e) {
+                // Keep drawing the last latched frame
                 LimeLog.warning("Dual screen: updateTexImage failed: " + e);
-                return;
             }
         }
 
-        EGLDisplay display = EGL14.eglGetCurrentDisplay();
-        EGLContext context = EGL14.eglGetCurrentContext();
-        updateSecondEglSurface(display, context);
+        updateSecondEglSurface();
         if (secondEglSurface != EGL14.EGL_NO_SURFACE) {
-            EGLSurface draw = EGL14.eglGetCurrentSurface(EGL14.EGL_DRAW);
-            EGLSurface read = EGL14.eglGetCurrentSurface(EGL14.EGL_READ);
-            if (EGL14.eglMakeCurrent(display, secondEglSurface, secondEglSurface, context)) {
-                // Never block the main display's frame on the second display's vsync
-                EGL14.eglSwapInterval(display, 0);
-                int[] size = new int[2];
-                EGL14.eglQuerySurface(display, secondEglSurface, EGL14.EGL_WIDTH, size, 0);
-                EGL14.eglQuerySurface(display, secondEglSurface, EGL14.EGL_HEIGHT, size, 1);
-                drawCrop(secondTexBuffer, size[0], size[1]);
-                EGL14.eglSwapBuffers(display, secondEglSurface);
+            if (EGL14.eglMakeCurrent(eglDisplay, secondEglSurface, secondEglSurface, eglContext)) {
+                drawCrop(secondTexBuffer, secondWidth, secondHeight);
+                EGL14.eglSwapBuffers(eglDisplay, secondEglSurface);
             }
             // GLSurfaceView swaps its own surface after this returns, so it must be current again
-            EGL14.eglMakeCurrent(display, draw, read, context);
+            EGL14.eglMakeCurrent(eglDisplay, mainDrawSurface, mainReadSurface, eglContext);
         }
 
         drawCrop(mainTexBuffer, mainWidth, mainHeight);
     }
 
-    private void updateSecondEglSurface(EGLDisplay display, EGLContext context) {
+    private void updateSecondEglSurface() {
         Surface wanted = secondSurface;
         if (wanted == secondEglFor) {
             return;
@@ -189,22 +226,32 @@ public class DualScreenRenderer implements GLSurfaceView.Renderer, SurfaceTextur
         }
         // Same config as the GLSurfaceView's context, so one context can draw both surfaces
         int[] configId = new int[1];
-        EGL14.eglQueryContext(display, context, EGL14.EGL_CONFIG_ID, configId, 0);
+        EGL14.eglQueryContext(eglDisplay, eglContext, EGL14.EGL_CONFIG_ID, configId, 0);
         EGLConfig[] configs = new EGLConfig[1];
         int[] count = new int[1];
-        if (!EGL14.eglChooseConfig(display, new int[] {EGL14.EGL_CONFIG_ID, configId[0], EGL14.EGL_NONE}, 0,
+        if (!EGL14.eglChooseConfig(eglDisplay, new int[] {EGL14.EGL_CONFIG_ID, configId[0], EGL14.EGL_NONE}, 0,
                 configs, 0, 1, count, 0) || count[0] < 1) {
             LimeLog.warning("Dual screen: no EGL config for the second display");
             return;
         }
-        EGLSurface surface = EGL14.eglCreateWindowSurface(display, configs[0], wanted, new int[] {EGL14.EGL_NONE}, 0);
+        EGLSurface surface = EGL14.eglCreateWindowSurface(eglDisplay, configs[0], wanted, new int[] {EGL14.EGL_NONE}, 0);
         if (surface == null || surface == EGL14.EGL_NO_SURFACE) {
             LimeLog.warning("Dual screen: eglCreateWindowSurface failed: 0x" + Integer.toHexString(EGL14.eglGetError()));
             return;
         }
-        secondEglDisplay = display;
+        secondEglDisplay = eglDisplay;
         secondEglSurface = surface;
         secondEglFor = wanted;
+
+        // Never block the main display's frame on the second display's vsync (set once, per surface)
+        if (EGL14.eglMakeCurrent(eglDisplay, surface, surface, eglContext)) {
+            EGL14.eglSwapInterval(eglDisplay, 0);
+        }
+        EGL14.eglMakeCurrent(eglDisplay, mainDrawSurface, mainReadSurface, eglContext);
+
+        if (secondWidth != secondCrop[2] || secondHeight != secondCrop[3]) {
+            LimeLog.warning("Dual screen: second surface " + secondWidth + "x" + secondHeight + " is not 1:1 with its crop; scaling");
+        }
     }
 
     // GL thread only
@@ -218,14 +265,18 @@ public class DualScreenRenderer implements GLSurfaceView.Renderer, SurfaceTextur
 
     private void drawCrop(FloatBuffer texCoords, int width, int height) {
         GLES20.glViewport(0, 0, width, height);
+        if (!frameLatched) {
+            // Nothing decoded yet: show black, not whatever the buffer held
+            GLES20.glClearColor(0f, 0f, 0f, 1f);
+            GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
+            return;
+        }
         GLES20.glUseProgram(program);
-
-        int posHandle = GLES20.glGetAttribLocation(program, "a_Position");
-        int texHandle = GLES20.glGetAttribLocation(program, "a_TexCoord");
-        GLES20.glVertexAttribPointer(posHandle, 2, GLES20.GL_FLOAT, false, 0, quadBuffer);
-        GLES20.glVertexAttribPointer(texHandle, 2, GLES20.GL_FLOAT, false, 0, texCoords);
-        GLES20.glEnableVertexAttribArray(posHandle);
-        GLES20.glEnableVertexAttribArray(texHandle);
+        GLES20.glVertexAttribPointer(positionHandle, 2, GLES20.GL_FLOAT, false, 0, quadBuffer);
+        GLES20.glVertexAttribPointer(texCoordHandle, 2, GLES20.GL_FLOAT, false, 0, texCoords);
+        GLES20.glEnableVertexAttribArray(positionHandle);
+        GLES20.glEnableVertexAttribArray(texCoordHandle);
+        GLES20.glUniformMatrix4fv(texMatrixHandle, 1, false, texMatrix, 0);
 
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         GLES20.glBindTexture(GL_TEXTURE_EXTERNAL_OES, videoTextureId);

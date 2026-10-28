@@ -11,7 +11,6 @@ import android.view.KeyEvent;
 import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
-import android.view.View;
 import android.view.WindowManager;
 import android.view.inputmethod.BaseInputConnection;
 import android.view.inputmethod.EditorInfo;
@@ -23,7 +22,6 @@ import com.limelight.LimeLog;
 import com.limelight.preferences.PreferenceConfiguration;
 import com.limelight.utils.DualScreenLayout;
 import com.limelight.utils.DualScreenRenderer;
-import com.limelight.utils.ServerHelper;
 import com.limelight.utils.Stereo3DRenderer;
 
 /**
@@ -116,13 +114,12 @@ public class StreamContainer extends FrameLayout implements SurfaceHolder.Callba
 
     // One GL context draws the main display's crop here and the other crop into a Presentation
     private void initDualScreen(Context context, LayoutParams childParams) {
-        Display secondDisplay = ServerHelper.getSecondaryDisplay(context);
+        // Game.onCreate picked a display other than its own and turns the mode off without one
+        Display secondDisplay = game.getDualScreenDisplay();
         Point mainSize = new Point();
         Point secondSize = new Point();
-        ((WindowManager) context.getSystemService(Context.WINDOW_SERVICE)).getDefaultDisplay().getRealSize(mainSize);
-        if (secondDisplay != null) {
-            secondDisplay.getRealSize(secondSize);
-        }
+        game.getWindowManager().getDefaultDisplay().getRealSize(mainSize);
+        secondDisplay.getRealSize(secondSize);
         // The larger display shows the top crop
         dualScreenMainTop = DualScreenLayout.isTopDisplay(mainSize.x, mainSize.y, secondSize.x, secondSize.y);
         int[] mainCrop = dualScreenMainTop ? DualScreenLayout.TOP_CROP : DualScreenLayout.BOTTOM_CROP;
@@ -136,36 +133,29 @@ public class StreamContainer extends FrameLayout implements SurfaceHolder.Callba
         mSurfaceView = glSurfaceView;
         addView(mSurfaceView, childParams);
 
-        if (secondDisplay == null) {
-            LimeLog.warning("Dual screen: second display is gone; showing the main crop only");
-            return;
-        }
-        SurfaceView secondView = new SurfaceView(context);
+        mDualPresentation = new Presentation(context, secondDisplay);
+        // Not focusable: a tap below must not take key (controller) focus away from Game.
+        // Immersive flags are not honoured on a non-focusable window, so none are set.
+        mDualPresentation.getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN |
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE);
+        SurfaceView secondView = new SurfaceView(mDualPresentation.getContext());
         secondView.getHolder().addCallback(new SurfaceHolder.Callback() {
             @Override
             public void surfaceCreated(SurfaceHolder holder) {
             }
             @Override
             public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
-                mDualRenderer.setSecondSurface(holder.getSurface());
+                mDualRenderer.setSecondSurface(holder.getSurface(), width, height);
             }
             @Override
             public void surfaceDestroyed(SurfaceHolder holder) {
-                mDualRenderer.setSecondSurface(null);
+                mDualRenderer.setSecondSurface(null, 0, 0);
             }
         });
         // The second display never gets the user's touch mode: its touches go out as direct touch
         secondView.setOnTouchListener((view, event) -> game.sendDualScreenTouch(event, dualScreenMainTop, view));
 
-        mDualPresentation = new Presentation(context, secondDisplay);
-        // Not focusable: a tap below must not take key (controller) focus away from Game
-        mDualPresentation.getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN |
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE);
         mDualPresentation.setContentView(secondView);
-        mDualPresentation.getWindow().getDecorView().setSystemUiVisibility(
-                View.SYSTEM_UI_FLAG_FULLSCREEN |
-                        View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
-                        View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
         try {
             mDualPresentation.show();
         } catch (WindowManager.InvalidDisplayException e) {
@@ -332,7 +322,10 @@ public class StreamContainer extends FrameLayout implements SurfaceHolder.Callba
         } else if (mStereoRenderer != null) {
             mStereoRenderer.onSurfaceDestroyed();
         } else if (mDualRenderer != null) {
+            // Stop the decoder before its SurfaceTexture goes away
+            game.surfaceDestroyed(holder);
             mDualRenderer.onSurfaceDestroyed();
+            return;
         }
 
         game.surfaceDestroyed(holder);

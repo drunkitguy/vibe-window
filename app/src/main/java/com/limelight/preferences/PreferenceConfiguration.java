@@ -10,7 +10,6 @@ import androidx.preference.PreferenceManager;
 
 import com.limelight.nvstream.jni.MoonBridge;
 import com.limelight.profiles.ProfilesManager;
-import com.limelight.utils.ServerHelper;
 
 public class PreferenceConfiguration {
 
@@ -1445,8 +1444,9 @@ private static int getFramePacingValue(Context context) {
 
         config.enableFullExDisplay=prefs.getBoolean("checkbox_enable_fullexdisplay",false);
 
-        // Read here, not in Game, because ServerHelper picks full external display before Game starts
-        config.dualScreen = prefs.getBoolean("checkbox_dual_screen", false) && ServerHelper.getSecondaryDisplay(context) != null;
+        // Read here, not in Game, because ServerHelper picks full external display before Game starts.
+        // No display lookup here (this runs on draw paths); Game.onCreate checks for a second display.
+        config.dualScreen = prefs.getBoolean("checkbox_dual_screen", false);
         if (config.dualScreen) {
             // Dual screen owns both displays and the GL path
             config.enableFullExDisplay = false;
