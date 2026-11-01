@@ -61,6 +61,9 @@ namespace {
 const EdenDsmodModuleApi* M() {
     return eden_dsmod_get_module(EDEN_DSMOD_MODULE_ABI_VERSION, EDEN_DSMOD_MODULE_ABI_HASH);
 }
+const EdenDsmodModuleExtensions* Ext() {
+    return eden_dsmod_get_extensions(EDEN_DSMOD_EXT_VERSION, EDEN_DSMOD_EXT_HASH);
+}
 const EdenDsmodModuleSaveExtensions* SaveExt() {
     return eden_dsmod_get_save_extensions(EDEN_DSMOD_SAVE_EXT_VERSION, EDEN_DSMOD_SAVE_EXT_HASH);
 }
@@ -133,7 +136,7 @@ int main() {
     assert(m->abi_hash == EDEN_DSMOD_MODULE_ABI_HASH);
     assert(m->struct_size == sizeof(EdenDsmodModuleApi));
     assert(m->title_id == 0x0100F2C0115B6000ULL);
-    assert(m->capabilities == 0);
+    assert(m->capabilities == EDEN_DSMOD_CAP_EXTENSIONS);
     assert(m->name && *m->name);
     assert(m->supports_build && m->create && m->destroy && m->sample && m->tick);
 
@@ -144,6 +147,16 @@ int main() {
     assert(se && se->version == EDEN_DSMOD_SAVE_EXT_VERSION &&
            se->struct_size == sizeof(EdenDsmodModuleSaveExtensions) &&
            se->abi_hash == EDEN_DSMOD_SAVE_EXT_HASH && se->configure);
+
+    // eden_dsmod_get_extensions: version and hash gate; every callback present (the host requires
+    // configure, and a module with EDEN_DSMOD_CAP_EXTENSIONS must export the table).
+    assert(!eden_dsmod_get_extensions(EDEN_DSMOD_EXT_VERSION + 1, EDEN_DSMOD_EXT_HASH));
+    assert(!eden_dsmod_get_extensions(EDEN_DSMOD_EXT_VERSION, EDEN_DSMOD_EXT_HASH ^ 1));
+    const EdenDsmodModuleExtensions* ext = Ext();
+    assert(ext && ext->version == EDEN_DSMOD_EXT_VERSION &&
+           ext->struct_size == sizeof(EdenDsmodModuleExtensions) &&
+           ext->abi_hash == EDEN_DSMOD_EXT_HASH && ext->configure && ext->on_action &&
+           ext->load_image);
 
     // supports_build: only the exact target string.
     assert(m->supports_build(totk::kTargetBuild));
@@ -182,7 +195,8 @@ int main() {
     assert(h.MemoryCalls() == 0);
     const Host::Ints empty{
         {"totk.ready", 1},        {"totk.ui.page", 0},       {"totk.inv.tab", 0},
-        {"totk.inv.sel", 0},      {"totk.status.valid", 0},  {"totk.map.valid", 0},
+        {"totk.inv.sel", 0},      {"totk.map.layer", 0},     {"totk.status.valid", 0},
+        {"totk.map.valid", 0},
         {"totk.gear.valid", 0},   {"totk.ability.valid", 0}, {"totk.inv.valid", 0}};
     assert(h.ints == empty && h.texts.empty() && h.floats.empty());
 
@@ -228,6 +242,7 @@ int main() {
         {"totk.ui.page", 0},
         {"totk.inv.tab", 0},
         {"totk.inv.sel", 0},
+        {"totk.map.layer", 0},
         {"totk.status.valid", 1},
         {"totk.status.source", 1},
         {"totk.status.hearts", 12},
@@ -363,7 +378,7 @@ int main() {
     SampleClean(m, instance, h);
     assert(h.ints.at("totk.status.hearts") == 33 && !h.ints.contains("totk.status.max_hearts"));
     // No Pouch.<P>.EquipIndex in this save: equipped is not known, so .present is absent.
-    for (const char* slot : kGearSlotNames)
+    for (const char* slot : totk::pub::kGearSlotNames)
         assert(!h.ints.contains(std::string("totk.gear.") + slot + ".present"));
     assert(h.ints.at("totk.gear.valid") == 1 && h.ints.at("totk.map.valid") == 0);
     assert(h.ints.at("totk.inv.tab0.count") == 0 && h.texts.empty() && h.floats.empty());
@@ -429,9 +444,146 @@ int main() {
     SampleClean(m, instance, h);
     assert(h.ints == page0 && h.texts == page0_text);
 
+    // Base extensions: configure keeps only a matching host table.
+    {
+        EdenDsmodHostExtensions hx{};
+        hx.version = EDEN_DSMOD_EXT_VERSION;
+        hx.struct_size = sizeof hx;
+        hx.abi_hash = EDEN_DSMOD_EXT_HASH;
+        ext->configure(nullptr, &hx);
+        ext->configure(instance, nullptr);
+        for (int i = 0; i < 3; ++i) {
+            EdenDsmodHostExtensions bad = hx;
+            if (i == 0)
+                bad.version += 1;
+            if (i == 1)
+                bad.abi_hash ^= 1;
+            if (i == 2)
+                bad.struct_size -= 1;
+            ext->configure(instance, &bad);
+        }
+        assert(!in.extensions);
+        ext->configure(instance, &hx);
+        assert(in.extensions && in.extensions->abi_hash == EDEN_DSMOD_EXT_HASH);
+    }
+
+    // load_image: false for every key until T3a, without a host call or a sink call.
+    {
+        bool sunk = false;
+        const EdenDsmodImageSink sink = [](void* r, std::uint32_t, std::uint32_t,
+                                           const std::uint8_t*, std::size_t) {
+            *static_cast<bool*>(r) = true;
+        };
+        for (const char* key : {"module:totk:icon/Weapon_Sword_001", "module:totk:map/G/00-00/2",
+                                "", static_cast<const char*>(nullptr)})
+            assert(!ext->load_image(instance, &h.api, key, &sunk, sink));
+        assert(!ext->load_image(nullptr, nullptr, nullptr, nullptr, nullptr));
+        assert(!sunk && h.MemoryCalls() == 0);
+    }
+
+    // Module actions [docs/PLAN.md "Actions"] on the fixture save.
+    const auto act = [&](const char* name, std::int64_t arg) {
+        return ext->on_action(instance, name, arg) == EDEN_DSMOD_TRUE;
+    };
+    constexpr std::int64_t kMin = INT64_MIN, kMax = INT64_MAX;
+    // totk.ui.page: 0-3 accepted and published; anything else refused, the page unchanged.
+    for (int p = 0; p < 4; ++p) {
+        assert(act("totk.ui.page", p));
+        SampleClean(m, instance, h);
+        assert(h.ints.at("totk.ui.page") == p);
+    }
+    for (std::int64_t bad : {std::int64_t(-1), std::int64_t(4), kMin, kMax, std::int64_t(1) << 32})
+        assert(!act("totk.ui.page", bad));
+    SampleClean(m, instance, h);
+    assert(h.ints.at("totk.ui.page") == 3);
+    // totk.inv.tab 0-7 resets the selection; totk.inv.select accepted only below totk.inv.count.
+    assert(act("totk.ui.page", kPageInventory));
+    assert(act("totk.inv.tab", 1));
+    assert(act("totk.inv.select", 2));
+    SampleClean(m, instance, h);
+    assert(h.ints.at("totk.inv.tab") == 1 && h.ints.at("totk.inv.sel") == 2 &&
+           h.ints.at("totk.inv.count") == 3 && h.texts.at("totk.inv.sel.name") == "FireArrow");
+    for (std::int64_t bad : {std::int64_t(3), std::int64_t(-1), kMin, kMax})
+        assert(!act("totk.inv.select", bad));
+    assert(act("totk.inv.tab", 7));
+    SampleClean(m, instance, h);
+    assert(h.ints.at("totk.inv.tab") == 7 && h.ints.at("totk.inv.sel") == 0);
+    for (std::int64_t bad : {std::int64_t(-1), std::int64_t(8), kMin, kMax})
+        assert(!act("totk.inv.tab", bad));
+    // totk.inv.tab_next wraps 7 -> 0 whatever its argument, and resets the selection.
+    assert(act("totk.inv.tab_next", 12345));
+    assert(act("totk.inv.select", 1));
+    SampleClean(m, instance, h);
+    assert(h.ints.at("totk.inv.tab") == 0 && h.ints.at("totk.inv.sel") == 1);
+    assert(act("totk.inv.tab_next", kMin));
+    SampleClean(m, instance, h);
+    assert(h.ints.at("totk.inv.tab") == 1 && h.ints.at("totk.inv.sel") == 0);
+    for (int t = 2; t <= 8; ++t)
+        assert(act("totk.inv.tab_next", 0));
+    SampleClean(m, instance, h);
+    assert(h.ints.at("totk.inv.tab") == 0);
+    // totk.map.layer 0-2.
+    for (int l = 0; l < 3; ++l) {
+        assert(act("totk.map.layer", l));
+        SampleClean(m, instance, h);
+        assert(h.ints.at("totk.map.layer") == l);
+    }
+    for (std::int64_t bad : {std::int64_t(-1), std::int64_t(3), kMin, kMax})
+        assert(!act("totk.map.layer", bad));
+    // Game actions are refused for every argument, valid or not (CA7d).
+    for (std::int64_t k : {std::int64_t(-1), std::int64_t(0), std::int64_t(1), std::int64_t(2),
+                           std::int64_t(3), std::int64_t(4), kMin, kMax})
+        assert(!act("totk.gear.swap", k) && !act("totk.inv.use", k));
+    for (std::int64_t k = -1; k <= 7; ++k)
+        assert(!act("totk.ability.select", k));
+    // Unknown names, null name or instance.
+    assert(!act("totk.bogus", 0) && !act("", 0) && !act("totk.ui.pagex", 0));
+    assert(!ext->on_action(instance, nullptr, 0) && !ext->on_action(nullptr, "totk.ui.page", 0));
+    // Refusals changed nothing.
+    SampleClean(m, instance, h);
+    assert(h.ints.at("totk.ui.page") == kPageInventory && h.ints.at("totk.inv.tab") == 0 &&
+           h.ints.at("totk.inv.sel") == 0 && h.ints.at("totk.map.layer") == 2);
+    // One log line per refused action name, written by the next tick; never again.
+    h.logs.clear();
+    m->tick(instance, &h.api);
+    const std::vector<std::string> lines{
+        "totk: totk.ui.page refused: argument out of range",
+        "totk: totk.inv.tab refused: argument out of range",
+        "totk: totk.inv.select refused: argument out of range",
+        "totk: totk.map.layer refused: argument out of range",
+        "totk: totk.gear.swap disabled: no verified offsets",
+        "totk: totk.inv.use disabled: no verified offsets",
+        "totk: totk.ability.select disabled: no verified offsets",
+        "totk: unknown action 'totk.bogus' refused"};
+    assert(h.logs == lines);
+    assert(!act("totk.gear.swap", 0) && !act("totk.other", 0) && !act("totk.ui.page", 9));
+    m->tick(instance, &h.api);
+    m->tick(instance, &h.api);
+    assert(h.logs == lines);
+
+    // Every key published on the full fixture, each page and tab selected, is listed in
+    // totk_keys.h (the checker holds the manifest to the same list).
+    for (int p = 0; p < 4; ++p) {
+        assert(act("totk.ui.page", p));
+        for (int t = 0; t < totk::kTabs; ++t) {
+            assert(act("totk.inv.tab", t));
+            act("totk.inv.select", 0); // refused on an empty tab
+            SampleClean(m, instance, h);
+            for (const auto& [key, value] : h.ints)
+                assert(totk::pub::Listed(key));
+            for (const auto& [key, value] : h.texts)
+                assert(totk::pub::Listed(key));
+            for (const auto& [key, value] : h.floats)
+                assert(totk::pub::Listed(key));
+        }
+    }
+    assert(act("totk.ui.page", 0) && act("totk.inv.tab", 0) && act("totk.map.layer", 0));
+    SampleClean(m, instance, h);
+    assert(h.ints == page0 && h.texts == page0_text);
+
     // CA10: no allocation in 1000 samples on each page with the full fixture snapshot.
     for (int page = 0; page < 4; ++page) {
-        in.page = page;
+        assert(act("totk.ui.page", page));
         in.tab = 1;
         in.sel = 1;
         m->sample(instance, &h.api); // the host's maps already hold every key
@@ -474,6 +626,8 @@ int main() {
             {"totk.status.rupees", 4321}, {"totk.status.max_battery", 150}};
         for (const auto& [key, value] : live)
             assert(v.ints.at(key) == value);
+        for (const auto& [key, value] : v.ints)
+            assert(totk::pub::Listed(key));
         assert(v.write_calls == 0);
         in.offsets = {};
     }

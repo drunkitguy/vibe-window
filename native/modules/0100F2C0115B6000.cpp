@@ -4,11 +4,14 @@
 // Every callback catches all exceptions: nothing may unwind into the host.
 // Data: the last save through the save extension (a worker thread polls it every 2 s) and the
 // live status reader, whose offsets stay UNKNOWN (0) so it never touches guest memory yet.
+// Base extensions: module actions drive the UI state (page, tab, selection, map layer); game
+// actions are refused; load_image fails until T3a.
 
 #include <array>
 #include <chrono>
 #include <condition_variable>
 #include <cstdint>
+#include <cstdio>
 #include <memory>
 #include <mutex>
 #include <new>
@@ -19,6 +22,7 @@
 
 #include "core/mods/modules/dsmod_module_sdk.h"
 #include "totk_build.h"
+#include "totk_keys.h"
 #include "totk_offsets.h"
 #include "totk_save.h"
 #include "totk_status.h"
@@ -26,52 +30,51 @@
 namespace {
 
 constexpr auto kPollInterval = std::chrono::seconds(2);
-constexpr const char* kGearSlotNames[totk::kGearSlots] = {"weapon", "bow", "shield", "arrow"};
-constexpr const char* kAbilityNames[totk::kAbilities] = {"ultrahand", "fuse",   "ascend", "recall",
-                                                         "autobuild", "camera", "travel"};
-constexpr const char* kTabCountKeys[totk::kTabs] = {
-    "totk.inv.tab0.count", "totk.inv.tab1.count", "totk.inv.tab2.count", "totk.inv.tab3.count",
-    "totk.inv.tab4.count", "totk.inv.tab5.count", "totk.inv.tab6.count", "totk.inv.tab7.count"};
+namespace pub = totk::pub;
+static_assert(std::size(pub::kGearSlotNames) == totk::kGearSlots);
+static_assert(std::size(pub::kAbilityNames) == totk::kAbilities);
 constexpr int kPageInventory = 2;
-
-enum GearField { kPresent, kId, kName, kIcon, kLife, kCount, kFuse, kFuseName, kFuseIcon, kEffect,
-                 kGearFields };
-constexpr const char* kGearFieldNames[kGearFields] = {
-    "present", "id", "name", "icon", "life", "count", "fuse", "fuse_name", "fuse_icon", "effect"};
-enum ItemField { kItemIcon, kItemName, kItemValue, kItemKind, kItemEquipped, kItemFuseIcon,
-                 kItemFields };
-constexpr const char* kItemFieldNames[kItemFields] = {"icon", "name", "value", "kind",
-                                                      "equipped", "fuse_icon"};
 
 // Every key sample publishes with a computed name, built once in create so sample never allocates.
 struct Keys {
-    std::array<std::array<std::string, kGearFields>, totk::kGearSlots> gear;
+    std::array<std::array<std::string, pub::kGearFields>, totk::kGearSlots> gear;
     std::array<std::string, totk::kAbilities> owned;
-    std::vector<std::array<std::string, kItemFields>> items;
+    std::array<std::string, totk::kTabs> tab_count;
+    std::vector<std::array<std::string, pub::kItemFields>> items;
 
     Keys() : items(totk::kMaxItems) {
         for (int s = 0; s < totk::kGearSlots; ++s)
-            for (int f = 0; f < kGearFields; ++f)
-                gear[s][f] = std::string("totk.gear.") + kGearSlotNames[s] + "." + kGearFieldNames[f];
+            for (int f = 0; f < pub::kGearFields; ++f)
+                gear[s][f] = pub::Expand(pub::kGearKeys[f], pub::kGearSlotNames[s]);
         for (int a = 0; a < totk::kAbilities; ++a)
-            owned[a] = std::string("totk.ability.") + kAbilityNames[a] + ".owned";
+            owned[a] = pub::Expand(pub::kAbilityOwned, pub::kAbilityNames[a]);
+        for (int t = 0; t < totk::kTabs; ++t)
+            tab_count[t] = pub::Expand(pub::kTabCount, std::to_string(t));
         for (std::size_t i = 0; i < items.size(); ++i)
-            for (int f = 0; f < kItemFields; ++f)
-                items[i][f] = "totk.inv." + std::to_string(i) + "." + kItemFieldNames[f];
+            for (int f = 0; f < pub::kItemFields; ++f)
+                items[i][f] = pub::Expand(pub::kItemKeys[f], std::to_string(i));
     }
 };
 
 struct Instance {
     totk::Offsets offsets; // all 0 (UNKNOWN) until T3
     Keys keys;
-    // UI state; T4's module actions set it. on_action runs serialized with sample.
-    int page = 0, tab = 0, sel = 0;
+    // UI state, set by on_action. on_action "runs serialized with sample/tick on the timing
+    // thread" [S1 dsmod_module_extensions.h:75]: ModRuntime::Tick runs sample, the module tick,
+    // then the taps' actions [S1 mod_runtime.cpp:9-14, mod_actions.cpp:539]. So these and the log
+    // bits below need no lock; the worker never touches them.
+    int page = 0, tab = 0, sel = 0, layer = 0;
+    // Refused actions: one log line per action name per session, written by the next tick (the
+    // host struct is borrowed per call, and on_action gets none). Bit kActions: an unknown name.
+    std::uint32_t refused = 0, logged = 0;
+    char unknown[64] = {}; // the first unknown action name, for its log line
 
     std::mutex mutex; // guards everything below; sample holds it only to copy `snapshot`
     std::condition_variable wake;
     bool stop = false;
     std::uint64_t requested = 0, completed = 0; // poll generations (configure asks for one)
     std::optional<EdenDsmodHostSaveApi> save;
+    std::optional<EdenDsmodHostExtensions> extensions; // decode_astc, for T3a's load_image
     std::shared_ptr<const totk::Snapshot> snapshot;
     // The snapshot replaced last time: kept one more poll so the worker, not a sample still
     // holding its copy, frees it.
@@ -238,97 +241,97 @@ struct Out {
 void PublishStatus(const Out& o, const totk::Status& live, const totk::Snapshot* s) {
     // A valid live value beats the save; with every offset 0 the save is the only source.
     if (live.valid) {
-        o.I("totk.status.valid", 1);
-        o.I("totk.status.source", 2);
-        o.I("totk.status.hearts", live.hearts);
-        o.I("totk.status.max_hearts", live.max_hearts);
-        o.I("totk.status.stamina", live.stamina);
-        o.I("totk.status.max_stamina", live.max_stamina);
-        o.I("totk.status.rupees", live.rupees);
+        o.I(pub::kStatusValid, 1);
+        o.I(pub::kStatusSource, 2);
+        o.I(pub::kStatusHearts, live.hearts);
+        o.I(pub::kStatusMaxHearts, live.max_hearts);
+        o.I(pub::kStatusStamina, live.stamina);
+        o.I(pub::kStatusMaxStamina, live.max_stamina);
+        o.I(pub::kStatusRupees, live.rupees);
         if (s && s->max_battery)
-            o.I("totk.status.max_battery", *s->max_battery);
+            o.I(pub::kStatusMaxBattery, *s->max_battery);
         return;
     }
-    o.I("totk.status.valid", s ? 1 : 0);
+    o.I(pub::kStatusValid, s ? 1 : 0);
     if (!s)
         return;
-    o.I("totk.status.source", 1);
+    o.I(pub::kStatusSource, 1);
     const std::pair<const char*, const std::optional<std::int64_t>&> fields[] = {
-        {"totk.status.hearts", s->hearts},
-        {"totk.status.max_hearts", s->max_hearts},
-        {"totk.status.max_stamina", s->max_stamina},
-        {"totk.status.rupees", s->rupees},
-        {"totk.status.max_battery", s->max_battery}};
+        {pub::kStatusHearts, s->hearts},
+        {pub::kStatusMaxHearts, s->max_hearts},
+        {pub::kStatusMaxStamina, s->max_stamina},
+        {pub::kStatusRupees, s->rupees},
+        {pub::kStatusMaxBattery, s->max_battery}};
     for (const auto& [key, value] : fields)
         if (value)
             o.I(key, *value);
 }
 
 void PublishGear(const Out& o, const Keys& k, const totk::Snapshot& s) {
-    o.I("totk.gear.valid", 1);
-    o.I("totk.gear.source", 1);
+    o.I(pub::kGearValid, 1);
+    o.I(pub::kGearSource, 1);
     for (int i = 0; i < totk::kGearSlots; ++i) {
         const auto& key = k.gear[i];
         const auto& item = s.gear[i];
         if (s.gear_known[i]) // EquipIndex read: 1 equipped, 0 nothing (-1 or out of range)
-            o.I(key[kPresent].c_str(), item ? 1 : 0);
+            o.I(key[pub::kPresent].c_str(), item ? 1 : 0);
         if (!item)
             continue;
-        o.T(key[kId], item->id);
-        o.T(key[kName], item->id); // the name table is T3a; until then the id
-        o.T(key[kIcon], item->icon);
+        o.T(key[pub::kId], item->id);
+        o.T(key[pub::kName], item->id); // the name table is T3a; until then the id
+        o.T(key[pub::kIcon], item->icon);
         if (item->kind == 1)
-            o.I(key[kLife].c_str(), item->value);
+            o.I(key[pub::kLife].c_str(), item->value);
         if (item->kind == 2)
-            o.I(key[kCount].c_str(), item->value);
+            o.I(key[pub::kCount].c_str(), item->value);
         if (i == 0 || i == 2) { // only weapons and shields fuse
-            o.I(key[kFuse].c_str(), item->fuse_id.empty() ? 0 : 1);
+            o.I(key[pub::kFuse].c_str(), item->fuse_id.empty() ? 0 : 1);
             if (!item->fuse_id.empty()) {
-                o.T(key[kFuseName], item->fuse_id);
-                o.T(key[kFuseIcon], item->fuse_icon);
+                o.T(key[pub::kFuseName], item->fuse_id);
+                o.T(key[pub::kFuseIcon], item->fuse_icon);
             }
         }
-        o.T(key[kEffect].c_str(), item->effect);
+        o.T(key[pub::kEffect].c_str(), item->effect);
     }
 }
 
 void PublishInventory(const Out& o, const Instance& in, const totk::Snapshot& s) {
-    o.I("totk.inv.valid", 1);
-    o.I("totk.inv.source", 1);
+    o.I(pub::kInvValid, 1);
+    o.I(pub::kInvSource, 1);
     for (int t = 0; t < totk::kTabs; ++t)
-        o.I(kTabCountKeys[t], std::int64_t(s.tabs[t].size()));
+        o.I(in.keys.tab_count[t].c_str(), std::int64_t(s.tabs[t].size()));
     if (in.tab < 0 || in.tab >= totk::kTabs)
         return;
     const auto& items = s.tabs[in.tab];
-    o.I("totk.inv.count", std::int64_t(items.size()));
+    o.I(pub::kInvCount, std::int64_t(items.size()));
     if (in.page != kPageInventory)
         return; // the list is heavy: only while its page is open
     for (std::size_t i = 0; i < items.size() && i < in.keys.items.size(); ++i) {
         const auto& key = in.keys.items[i];
         const auto& it = items[i];
-        o.T(key[kItemIcon], it.icon);
-        o.T(key[kItemName], it.id);
-        o.I(key[kItemKind].c_str(), it.kind);
+        o.T(key[pub::kItemIcon], it.icon);
+        o.T(key[pub::kItemName], it.id);
+        o.I(key[pub::kItemKind].c_str(), it.kind);
         if (it.kind)
-            o.I(key[kItemValue].c_str(), it.value);
+            o.I(key[pub::kItemValue].c_str(), it.value);
         if (it.equipped)
-            o.I(key[kItemEquipped].c_str(), *it.equipped ? 1 : 0);
+            o.I(key[pub::kItemEquipped].c_str(), *it.equipped ? 1 : 0);
         if (!it.fuse_id.empty())
-            o.T(key[kItemFuseIcon], it.fuse_icon);
+            o.T(key[pub::kItemFuseIcon], it.fuse_icon);
     }
     if (in.sel < 0 || std::size_t(in.sel) >= items.size())
         return;
     const auto& it = items[std::size_t(in.sel)];
-    o.T("totk.inv.sel.icon", it.icon.c_str());
-    o.T("totk.inv.sel.name", it.id.c_str());
-    o.I("totk.inv.sel.kind", it.kind);
+    o.T(pub::kInvSelIcon, it.icon.c_str());
+    o.T(pub::kInvSelName, it.id.c_str());
+    o.I(pub::kInvSelKind, it.kind);
     if (it.kind)
-        o.I("totk.inv.sel.value", it.value);
+        o.I(pub::kInvSelValue, it.value);
     if (!it.fuse_id.empty())
-        o.T("totk.inv.sel.fuse_name", it.fuse_id.c_str());
-    o.T("totk.inv.sel.effect", it.effect);
+        o.T(pub::kInvSelFuseName, it.fuse_id.c_str());
+    o.T(pub::kInvSelEffect, it.effect);
     if (it.hearts)
-        o.I("totk.inv.sel.hearts", *it.hearts);
+        o.I(pub::kInvSelHearts, *it.hearts);
 }
 
 void Sample(void* instance, const EdenDsmodHostApi* host) {
@@ -343,34 +346,132 @@ void Sample(void* instance, const EdenDsmodHostApi* host) {
             snap = in.snapshot;
         }
         const Out o{*host};
-        o.I("totk.ready", 1);
-        o.I("totk.ui.page", in.page);
-        o.I("totk.inv.tab", in.tab);
-        o.I("totk.inv.sel", in.sel);
+        o.I(pub::kReady, 1);
+        o.I(pub::kUiPage, in.page);
+        o.I(pub::kInvTab, in.tab);
+        o.I(pub::kInvSel, in.sel);
+        o.I(pub::kMapLayer, in.layer);
         PublishStatus(o, live, snap.get());
-        o.I("totk.map.valid", snap && snap->position ? 1 : 0);
+        o.I(pub::kMapValid, snap && snap->position ? 1 : 0);
         if (!snap) { // no save read yet: every save domain is empty
-            o.I("totk.gear.valid", 0);
-            o.I("totk.ability.valid", 0);
-            o.I("totk.inv.valid", 0);
+            o.I(pub::kGearValid, 0);
+            o.I(pub::kAbilityValid, 0);
+            o.I(pub::kInvValid, 0);
             return;
         }
         PublishGear(o, in.keys, *snap);
-        o.I("totk.ability.valid", 1);
-        o.I("totk.ability.source", 1);
+        o.I(pub::kAbilityValid, 1);
+        o.I(pub::kAbilitySource, 1);
         for (int a = 0; a < totk::kAbilities; ++a)
             o.I(in.keys.owned[a].c_str(), snap->owned[a] ? 1 : 0);
         PublishInventory(o, in, *snap);
         if (snap->position) {
-            o.I("totk.map.source", 1);
-            o.F("totk.map.x", (*snap->position)[0]);
-            o.F("totk.map.y", (*snap->position)[1]);
+            o.I(pub::kMapSource, 1);
+            o.F(pub::kMapX, (*snap->position)[0]);
+            o.F(pub::kMapY, (*snap->position)[1]);
         }
     } catch (...) {
     }
 }
 
-void Tick(void*, const EdenDsmodHostApi*) {}
+// Writes the log line of each action refused since the last tick, once per action name.
+void Tick(void* instance, const EdenDsmodHostApi* host) {
+    try {
+        auto* in = static_cast<Instance*>(instance);
+        if (!in || !host || !host->log || !(in->refused & ~in->logged))
+            return;
+        for (int a = 0; a <= pub::kActions; ++a) {
+            const std::uint32_t bit = 1u << a;
+            if (!(in->refused & bit) || (in->logged & bit))
+                continue;
+            in->logged |= bit;
+            char line[160];
+            if (a == pub::kActions)
+                std::snprintf(line, sizeof line, "totk: unknown action '%s' refused", in->unknown);
+            else if (a >= pub::kActGearSwap)
+                std::snprintf(line, sizeof line, "totk: %s disabled: no verified offsets",
+                              pub::kActionNames[a]);
+            else
+                std::snprintf(line, sizeof line, "totk: %s refused: argument out of range",
+                              pub::kActionNames[a]);
+            host->log(host->userdata, 1u, line);
+        }
+    } catch (...) {
+    }
+}
+
+void Configure(void* instance, const EdenDsmodHostExtensions* host) {
+    try {
+        auto* in = static_cast<Instance*>(instance);
+        if (!in || !host || host->version != EDEN_DSMOD_EXT_VERSION ||
+            host->struct_size < sizeof(EdenDsmodHostExtensions) ||
+            host->abi_hash != EDEN_DSMOD_EXT_HASH)
+            return;
+        std::scoped_lock lock{in->mutex};
+        in->extensions = *host;
+    } catch (...) {
+    }
+}
+
+// The action table [docs/PLAN.md "Actions"]: UI actions within range are accepted and change
+// only module state; game actions, unknown names and out-of-range arguments return false (the
+// runtime plays the refused haptic). Nothing here reads or writes guest memory.
+EdenDsmodBool OnAction(void* instance, const char* action, std::int64_t arg) {
+    try {
+        auto* in = static_cast<Instance*>(instance);
+        if (!in || !action)
+            return false;
+        const int a = pub::ActionIndex(action);
+        switch (a) {
+        case pub::kActPage:
+            if (arg < 0 || arg >= pub::kPages)
+                break;
+            in->page = int(arg);
+            return true;
+        case pub::kActInvTab:
+            if (arg < 0 || arg >= totk::kTabs)
+                break;
+            in->tab = int(arg);
+            in->sel = 0;
+            return true;
+        case pub::kActInvTabNext: // the argument is ignored
+            in->tab = in->tab >= 0 && in->tab < totk::kTabs - 1 ? in->tab + 1 : 0;
+            in->sel = 0;
+            return true;
+        case pub::kActInvSelect: {
+            std::shared_ptr<const totk::Snapshot> snap;
+            {
+                std::scoped_lock lock{in->mutex};
+                snap = in->snapshot;
+            }
+            if (!snap || in->tab < 0 || in->tab >= totk::kTabs || arg < 0 ||
+                std::uint64_t(arg) >= snap->tabs[in->tab].size()) // < totk.inv.count
+                break;
+            in->sel = int(arg);
+            return true;
+        }
+        case pub::kActMapLayer:
+            if (arg < 0 || arg >= pub::kLayers)
+                break;
+            in->layer = int(arg);
+            return true;
+        default: // kActGearSwap, kActInvUse, kActAbilitySelect: no verified offsets; or unknown
+            if (a == pub::kActions && !(in->refused & (1u << a)))
+                std::snprintf(in->unknown, sizeof in->unknown, "%s", action);
+            break;
+        }
+        in->refused |= 1u << a;
+        return false;
+    } catch (...) {
+        return false;
+    }
+}
+
+// T3a reads icons and map tiles from the player's romfs; until then every picture fails and the
+// host gives up after its retries [S3 MODULE_GUIDE §1.4].
+EdenDsmodBool LoadImage(void*, const EdenDsmodHostApi*, const char*, void*, EdenDsmodImageSink) {
+    return false;
+}
 
 const EdenDsmodModuleApi kModule{
     EDEN_DSMOD_MODULE_ABI_VERSION,
@@ -379,12 +480,17 @@ const EdenDsmodModuleApi kModule{
     EDEN_DSMOD_MODULE_ABI_HASH,
     totk::kTitleId,
     "Tears of the Kingdom companion",
-    0,
+    EDEN_DSMOD_CAP_EXTENSIONS,
     SupportsBuild,
     Create,
     Destroy,
     Sample,
     Tick,
+};
+
+const EdenDsmodModuleExtensions kExtensions{
+    EDEN_DSMOD_EXT_VERSION, sizeof(EdenDsmodModuleExtensions), EDEN_DSMOD_EXT_HASH,
+    Configure,              OnAction,                          LoadImage,
 };
 
 const EdenDsmodModuleSaveExtensions kSaveExtensions{
@@ -397,6 +503,7 @@ const EdenDsmodModuleSaveExtensions kSaveExtensions{
 } // namespace
 
 DSMOD_SDK_EXPORT_MODULE(kModule)
+DSMOD_SDK_EXPORT_EXTENSIONS(kExtensions)
 // The SDK has no save macro [S3 MODULE_GUIDE §1.5]; this is the generic getter the macros expand
 // to, as the SMO module does [S2 native/modules/0100000000010000.cpp:1499].
 DSMOD_SDK_DEFINE_GETTER(eden_dsmod_get_save_extensions, EdenDsmodModuleSaveExtensions,

@@ -1,0 +1,9 @@
+{
+ "format": 1,
+ "files": {
+  "assets/map-blank.png": {
+   "origin": "generated",
+   "source": "tools/totk/gen_manifest.py -- 1x1 transparent"
+  }
+ }
+}

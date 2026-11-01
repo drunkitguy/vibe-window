@@ -43,6 +43,7 @@ struct Host {
     Ints ints;
     Texts texts;
     Floats floats;
+    std::vector<std::string> logs;
     EdenDsmodHostApi api{};
 
     Host() {
@@ -90,6 +91,9 @@ struct Host {
         };
         api.publish_f64 = [](void* u, const char* name, double value) {
             Set(static_cast<Host*>(u)->floats, name, value);
+        };
+        api.log = [](void* u, std::uint32_t, const char* message) {
+            static_cast<Host*>(u)->logs.emplace_back(message);
         };
     }
     template <class Map, class V>

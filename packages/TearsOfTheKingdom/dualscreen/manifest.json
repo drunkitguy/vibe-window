@@ -7,15 +7,1287 @@
  "canvas_w": 1240,
  "canvas_h": 1080,
  "background": "#FF101418",
+ "haptics": {
+  "enabled": true,
+  "respect_system": true,
+  "tap": "click",
+  "drop": "confirm",
+  "refused": "reject"
+ },
  "pages": [
   {
-   "id": "main",
+   "id": "gear",
    "widgets": [
-    {"type": "rect", "rect": [0, 0, 1240, 1080], "bg": "#FF101418", "color": "#00000000", "hide_bind": "totk.ready", "hide_eq": 1},
-    {"type": "label", "rect": [100, 350, 1040, 150], "text": "Companion unavailable", "text_scale": 5, "color": "#FFE6ECF2", "wrap_width": 1040, "hide_bind": "totk.ready", "hide_eq": 1},
-    {"type": "label", "rect": [100, 550, 1040, 220], "bind_text": "module_error_message", "text_scale": 3, "color": "#FFA8B2BC", "wrap_width": 1040, "max_lines": 4, "hide_bind": "totk.ready", "hide_eq": 1},
-    {"type": "label", "rect": [100, 450, 1040, 150], "text": "Ready", "text_scale": 5, "color": "#FFE6ECF2", "need_bind": "totk.ready"}
+    {
+     "type": "rect",
+     "rect": [
+      0,
+      0,
+      1240,
+      120
+     ],
+     "bg": "#FF1A2028",
+     "color": "#00000000",
+     "need_bind": "totk.status.valid"
+    },
+    {
+     "type": "label",
+     "rect": [
+      24,
+      16,
+      270,
+      30
+     ],
+     "text": "Hearts",
+     "color": "#FFA8B2BC",
+     "need_bind": "totk.status.valid"
+    },
+    {
+     "type": "value",
+     "rect": [
+      24,
+      56,
+      270,
+      50
+     ],
+     "bind": "totk.status.hearts",
+     "text_scale": 5,
+     "color": "#FFE6ECF2",
+     "need_bind": "ui.has.status.hearts",
+     "max_bind": "totk.status.max_hearts",
+     "max_sep": " / "
+    },
+    {
+     "type": "label",
+     "rect": [
+      334,
+      16,
+      270,
+      30
+     ],
+     "text": "Max stamina",
+     "color": "#FFA8B2BC",
+     "need_bind": "totk.status.valid"
+    },
+    {
+     "type": "value",
+     "rect": [
+      334,
+      56,
+      270,
+      50
+     ],
+     "bind": "totk.status.max_stamina",
+     "text_scale": 5,
+     "color": "#FFE6ECF2",
+     "need_bind": "ui.has.status.max_stamina"
+    },
+    {
+     "type": "label",
+     "rect": [
+      644,
+      16,
+      270,
+      30
+     ],
+     "text": "Rupees",
+     "color": "#FFA8B2BC",
+     "need_bind": "totk.status.valid"
+    },
+    {
+     "type": "value",
+     "rect": [
+      644,
+      56,
+      270,
+      50
+     ],
+     "bind": "totk.status.rupees",
+     "text_scale": 5,
+     "color": "#FFE6ECF2",
+     "need_bind": "ui.has.status.rupees",
+     "group": true
+    },
+    {
+     "type": "label",
+     "rect": [
+      954,
+      16,
+      270,
+      30
+     ],
+     "text": "Max battery",
+     "color": "#FFA8B2BC",
+     "need_bind": "totk.status.valid"
+    },
+    {
+     "type": "value",
+     "rect": [
+      954,
+      56,
+      270,
+      50
+     ],
+     "bind": "totk.status.max_battery",
+     "text_scale": 5,
+     "color": "#FFE6ECF2",
+     "need_bind": "ui.has.status.max_battery"
+    },
+    {
+     "type": "label",
+     "rect": [
+      28,
+      124,
+      276,
+      16
+     ],
+     "text": "WEAPON",
+     "color": "#FFA8B2BC",
+     "need_bind": "ui.gear.weapon.known"
+    },
+    {
+     "type": "rect",
+     "rect": [
+      24,
+      140,
+      284,
+      380
+     ],
+     "bg": "#FF1A2028",
+     "color": "#FF2E3842",
+     "on_hold": "gear_swap_0",
+     "need_bind": "ui.gear.weapon.known"
+    },
+    {
+     "type": "image",
+     "rect": [
+      86,
+      160,
+      160,
+      160
+     ],
+     "src_bind": "totk.gear.weapon.icon",
+     "need_bind": "totk.gear.weapon.present"
+    },
+    {
+     "type": "label",
+     "rect": [
+      36,
+      330,
+      260,
+      90
+     ],
+     "bind_text": "totk.gear.weapon.name",
+     "color": "#FFE6ECF2",
+     "wrap_width": 260,
+     "max_lines": 2,
+     "need_bind": "totk.gear.weapon.present"
+    },
+    {
+     "type": "value",
+     "rect": [
+      36,
+      430,
+      260,
+      40
+     ],
+     "bind": "totk.gear.weapon.life",
+     "text": "Durability ",
+     "color": "#FFE6ECF2",
+     "need_bind": "ui.gear.weapon.has_value"
+    },
+    {
+     "type": "label",
+     "rect": [
+      36,
+      300,
+      260,
+      40
+     ],
+     "text": "None",
+     "text_scale": 4,
+     "align": "center",
+     "color": "#FFA8B2BC",
+     "need_bind": "ui.gear.weapon.none"
+    },
+    {
+     "type": "image",
+     "rect": [
+      214,
+      160,
+      64,
+      64
+     ],
+     "src_bind": "totk.gear.weapon.fuse_icon",
+     "need_bind": "totk.gear.weapon.fuse"
+    },
+    {
+     "type": "label",
+     "rect": [
+      36,
+      476,
+      260,
+      36
+     ],
+     "bind_text": "totk.gear.weapon.fuse_name",
+     "color": "#FFA8B2BC",
+     "wrap_width": 260,
+     "max_lines": 1,
+     "need_bind": "totk.gear.weapon.fuse"
+    },
+    {
+     "type": "label",
+     "rect": [
+      36,
+      528,
+      260,
+      36
+     ],
+     "bind_text": "totk.gear.weapon.effect",
+     "color": "#FFE8C46A",
+     "wrap_width": 260,
+     "max_lines": 1,
+     "need_bind": "totk.gear.weapon.present"
+    },
+    {
+     "type": "label",
+     "rect": [
+      328,
+      124,
+      276,
+      16
+     ],
+     "text": "BOW",
+     "color": "#FFA8B2BC",
+     "need_bind": "ui.gear.bow.known"
+    },
+    {
+     "type": "rect",
+     "rect": [
+      324,
+      140,
+      284,
+      380
+     ],
+     "bg": "#FF1A2028",
+     "color": "#FF2E3842",
+     "on_hold": "gear_swap_1",
+     "need_bind": "ui.gear.bow.known"
+    },
+    {
+     "type": "image",
+     "rect": [
+      386,
+      160,
+      160,
+      160
+     ],
+     "src_bind": "totk.gear.bow.icon",
+     "need_bind": "totk.gear.bow.present"
+    },
+    {
+     "type": "label",
+     "rect": [
+      336,
+      330,
+      260,
+      90
+     ],
+     "bind_text": "totk.gear.bow.name",
+     "color": "#FFE6ECF2",
+     "wrap_width": 260,
+     "max_lines": 2,
+     "need_bind": "totk.gear.bow.present"
+    },
+    {
+     "type": "value",
+     "rect": [
+      336,
+      430,
+      260,
+      40
+     ],
+     "bind": "totk.gear.bow.life",
+     "text": "Durability ",
+     "color": "#FFE6ECF2",
+     "need_bind": "ui.gear.bow.has_value"
+    },
+    {
+     "type": "label",
+     "rect": [
+      336,
+      300,
+      260,
+      40
+     ],
+     "text": "None",
+     "text_scale": 4,
+     "align": "center",
+     "color": "#FFA8B2BC",
+     "need_bind": "ui.gear.bow.none"
+    },
+    {
+     "type": "label",
+     "rect": [
+      336,
+      528,
+      260,
+      36
+     ],
+     "bind_text": "totk.gear.bow.effect",
+     "color": "#FFE8C46A",
+     "wrap_width": 260,
+     "max_lines": 1,
+     "need_bind": "totk.gear.bow.present"
+    },
+    {
+     "type": "label",
+     "rect": [
+      628,
+      124,
+      276,
+      16
+     ],
+     "text": "SHIELD",
+     "color": "#FFA8B2BC",
+     "need_bind": "ui.gear.shield.known"
+    },
+    {
+     "type": "rect",
+     "rect": [
+      624,
+      140,
+      284,
+      380
+     ],
+     "bg": "#FF1A2028",
+     "color": "#FF2E3842",
+     "on_hold": "gear_swap_2",
+     "need_bind": "ui.gear.shield.known"
+    },
+    {
+     "type": "image",
+     "rect": [
+      686,
+      160,
+      160,
+      160
+     ],
+     "src_bind": "totk.gear.shield.icon",
+     "need_bind": "totk.gear.shield.present"
+    },
+    {
+     "type": "label",
+     "rect": [
+      636,
+      330,
+      260,
+      90
+     ],
+     "bind_text": "totk.gear.shield.name",
+     "color": "#FFE6ECF2",
+     "wrap_width": 260,
+     "max_lines": 2,
+     "need_bind": "totk.gear.shield.present"
+    },
+    {
+     "type": "value",
+     "rect": [
+      636,
+      430,
+      260,
+      40
+     ],
+     "bind": "totk.gear.shield.life",
+     "text": "Durability ",
+     "color": "#FFE6ECF2",
+     "need_bind": "ui.gear.shield.has_value"
+    },
+    {
+     "type": "label",
+     "rect": [
+      636,
+      300,
+      260,
+      40
+     ],
+     "text": "None",
+     "text_scale": 4,
+     "align": "center",
+     "color": "#FFA8B2BC",
+     "need_bind": "ui.gear.shield.none"
+    },
+    {
+     "type": "image",
+     "rect": [
+      814,
+      160,
+      64,
+      64
+     ],
+     "src_bind": "totk.gear.shield.fuse_icon",
+     "need_bind": "totk.gear.shield.fuse"
+    },
+    {
+     "type": "label",
+     "rect": [
+      636,
+      476,
+      260,
+      36
+     ],
+     "bind_text": "totk.gear.shield.fuse_name",
+     "color": "#FFA8B2BC",
+     "wrap_width": 260,
+     "max_lines": 1,
+     "need_bind": "totk.gear.shield.fuse"
+    },
+    {
+     "type": "label",
+     "rect": [
+      636,
+      528,
+      260,
+      36
+     ],
+     "bind_text": "totk.gear.shield.effect",
+     "color": "#FFE8C46A",
+     "wrap_width": 260,
+     "max_lines": 1,
+     "need_bind": "totk.gear.shield.present"
+    },
+    {
+     "type": "label",
+     "rect": [
+      928,
+      124,
+      276,
+      16
+     ],
+     "text": "ARROWS",
+     "color": "#FFA8B2BC",
+     "need_bind": "ui.gear.arrow.known"
+    },
+    {
+     "type": "rect",
+     "rect": [
+      924,
+      140,
+      284,
+      380
+     ],
+     "bg": "#FF1A2028",
+     "color": "#FF2E3842",
+     "on_hold": "gear_swap_3",
+     "need_bind": "ui.gear.arrow.known"
+    },
+    {
+     "type": "image",
+     "rect": [
+      986,
+      160,
+      160,
+      160
+     ],
+     "src_bind": "totk.gear.arrow.icon",
+     "need_bind": "totk.gear.arrow.present"
+    },
+    {
+     "type": "label",
+     "rect": [
+      936,
+      330,
+      260,
+      90
+     ],
+     "bind_text": "totk.gear.arrow.name",
+     "color": "#FFE6ECF2",
+     "wrap_width": 260,
+     "max_lines": 2,
+     "need_bind": "totk.gear.arrow.present"
+    },
+    {
+     "type": "value",
+     "rect": [
+      936,
+      430,
+      260,
+      40
+     ],
+     "bind": "totk.gear.arrow.count",
+     "text": "x",
+     "color": "#FFE6ECF2",
+     "need_bind": "ui.gear.arrow.has_value"
+    },
+    {
+     "type": "label",
+     "rect": [
+      936,
+      300,
+      260,
+      40
+     ],
+     "text": "None",
+     "text_scale": 4,
+     "align": "center",
+     "color": "#FFA8B2BC",
+     "need_bind": "ui.gear.arrow.none"
+    },
+    {
+     "type": "label",
+     "rect": [
+      24,
+      400,
+      1192,
+      60
+     ],
+     "text": "No save data yet",
+     "text_scale": 5,
+     "align": "center",
+     "color": "#FFA8B2BC",
+     "need_bind": "!totk.gear.valid"
+    },
+    {
+     "type": "label",
+     "rect": [
+      24,
+      920,
+      1192,
+      40
+     ],
+     "text_bind": "totk.gear.source",
+     "text_map": {
+      "1": "From last save",
+      "2": "Live"
+     },
+     "color": "#FFA8B2BC",
+     "need_bind": "totk.gear.valid"
+    },
+    {
+     "type": "rect",
+     "rect": [
+      0,
+      968,
+      1240,
+      112
+     ],
+     "bg": "#FF0C1014",
+     "color": "#00000000"
+    },
+    {
+     "type": "button",
+     "rect": [
+      0,
+      968,
+      310,
+      112
+     ],
+     "text": "Gear",
+     "text_scale": 4,
+     "align": "center",
+     "on_tap": "ui_page_0",
+     "bg": "#FF2E3842",
+     "color": "#FFE6ECF2"
+    },
+    {
+     "type": "button",
+     "rect": [
+      310,
+      968,
+      310,
+      112
+     ],
+     "text": "Abilities",
+     "text_scale": 4,
+     "align": "center",
+     "on_tap": "ui_page_1",
+     "bg": "#FF161B21",
+     "color": "#FF8A96A3"
+    },
+    {
+     "type": "button",
+     "rect": [
+      620,
+      968,
+      310,
+      112
+     ],
+     "text": "Inventory",
+     "text_scale": 4,
+     "align": "center",
+     "on_tap": "ui_page_2",
+     "bg": "#FF161B21",
+     "color": "#FF8A96A3"
+    },
+    {
+     "type": "button",
+     "rect": [
+      930,
+      968,
+      310,
+      112
+     ],
+     "text": "Map",
+     "text_scale": 4,
+     "align": "center",
+     "on_tap": "ui_page_3",
+     "bg": "#FF161B21",
+     "color": "#FF8A96A3"
+    },
+    {
+     "type": "rect",
+     "rect": [
+      0,
+      0,
+      1240,
+      1080
+     ],
+     "bg": "#FF101418",
+     "color": "#00000000",
+     "input_block": true,
+     "hide_bind": "totk.ready",
+     "hide_eq": 1
+    },
+    {
+     "type": "label",
+     "rect": [
+      100,
+      350,
+      1040,
+      150
+     ],
+     "text": "Companion unavailable",
+     "text_scale": 5,
+     "color": "#FFE6ECF2",
+     "wrap_width": 1040,
+     "hide_bind": "totk.ready",
+     "hide_eq": 1
+    },
+    {
+     "type": "label",
+     "rect": [
+      100,
+      550,
+      1040,
+      220
+     ],
+     "bind_text": "module_error_message",
+     "text_scale": 3,
+     "color": "#FFA8B2BC",
+     "wrap_width": 1040,
+     "max_lines": 4,
+     "hide_bind": "totk.ready",
+     "hide_eq": 1
+    }
    ]
+  },
+  {
+   "id": "abilities",
+   "widgets": [
+    {
+     "type": "label",
+     "rect": [
+      24,
+      400,
+      1192,
+      60
+     ],
+     "text": "Coming in a later update",
+     "text_scale": 5,
+     "align": "center",
+     "color": "#FFA8B2BC"
+    },
+    {
+     "type": "label",
+     "rect": [
+      24,
+      920,
+      1192,
+      40
+     ],
+     "text_bind": "totk.ability.source",
+     "text_map": {
+      "1": "From last save",
+      "2": "Live"
+     },
+     "color": "#FFA8B2BC",
+     "need_bind": "totk.ability.valid"
+    },
+    {
+     "type": "rect",
+     "rect": [
+      0,
+      968,
+      1240,
+      112
+     ],
+     "bg": "#FF0C1014",
+     "color": "#00000000"
+    },
+    {
+     "type": "button",
+     "rect": [
+      0,
+      968,
+      310,
+      112
+     ],
+     "text": "Gear",
+     "text_scale": 4,
+     "align": "center",
+     "on_tap": "ui_page_0",
+     "bg": "#FF161B21",
+     "color": "#FF8A96A3"
+    },
+    {
+     "type": "button",
+     "rect": [
+      310,
+      968,
+      310,
+      112
+     ],
+     "text": "Abilities",
+     "text_scale": 4,
+     "align": "center",
+     "on_tap": "ui_page_1",
+     "bg": "#FF2E3842",
+     "color": "#FFE6ECF2"
+    },
+    {
+     "type": "button",
+     "rect": [
+      620,
+      968,
+      310,
+      112
+     ],
+     "text": "Inventory",
+     "text_scale": 4,
+     "align": "center",
+     "on_tap": "ui_page_2",
+     "bg": "#FF161B21",
+     "color": "#FF8A96A3"
+    },
+    {
+     "type": "button",
+     "rect": [
+      930,
+      968,
+      310,
+      112
+     ],
+     "text": "Map",
+     "text_scale": 4,
+     "align": "center",
+     "on_tap": "ui_page_3",
+     "bg": "#FF161B21",
+     "color": "#FF8A96A3"
+    },
+    {
+     "type": "rect",
+     "rect": [
+      0,
+      0,
+      1240,
+      1080
+     ],
+     "bg": "#FF101418",
+     "color": "#00000000",
+     "input_block": true,
+     "hide_bind": "totk.ready",
+     "hide_eq": 1
+    },
+    {
+     "type": "label",
+     "rect": [
+      100,
+      350,
+      1040,
+      150
+     ],
+     "text": "Companion unavailable",
+     "text_scale": 5,
+     "color": "#FFE6ECF2",
+     "wrap_width": 1040,
+     "hide_bind": "totk.ready",
+     "hide_eq": 1
+    },
+    {
+     "type": "label",
+     "rect": [
+      100,
+      550,
+      1040,
+      220
+     ],
+     "bind_text": "module_error_message",
+     "text_scale": 3,
+     "color": "#FFA8B2BC",
+     "wrap_width": 1040,
+     "max_lines": 4,
+     "hide_bind": "totk.ready",
+     "hide_eq": 1
+    }
+   ]
+  },
+  {
+   "id": "inventory",
+   "widgets": [
+    {
+     "type": "label",
+     "rect": [
+      24,
+      400,
+      1192,
+      60
+     ],
+     "text": "Coming in a later update",
+     "text_scale": 5,
+     "align": "center",
+     "color": "#FFA8B2BC"
+    },
+    {
+     "type": "label",
+     "rect": [
+      24,
+      920,
+      1192,
+      40
+     ],
+     "text_bind": "totk.inv.source",
+     "text_map": {
+      "1": "From last save",
+      "2": "Live"
+     },
+     "color": "#FFA8B2BC",
+     "need_bind": "totk.inv.valid"
+    },
+    {
+     "type": "rect",
+     "rect": [
+      0,
+      968,
+      1240,
+      112
+     ],
+     "bg": "#FF0C1014",
+     "color": "#00000000"
+    },
+    {
+     "type": "button",
+     "rect": [
+      0,
+      968,
+      310,
+      112
+     ],
+     "text": "Gear",
+     "text_scale": 4,
+     "align": "center",
+     "on_tap": "ui_page_0",
+     "bg": "#FF161B21",
+     "color": "#FF8A96A3"
+    },
+    {
+     "type": "button",
+     "rect": [
+      310,
+      968,
+      310,
+      112
+     ],
+     "text": "Abilities",
+     "text_scale": 4,
+     "align": "center",
+     "on_tap": "ui_page_1",
+     "bg": "#FF161B21",
+     "color": "#FF8A96A3"
+    },
+    {
+     "type": "button",
+     "rect": [
+      620,
+      968,
+      310,
+      112
+     ],
+     "text": "Inventory",
+     "text_scale": 4,
+     "align": "center",
+     "on_tap": "ui_page_2",
+     "bg": "#FF2E3842",
+     "color": "#FFE6ECF2"
+    },
+    {
+     "type": "button",
+     "rect": [
+      930,
+      968,
+      310,
+      112
+     ],
+     "text": "Map",
+     "text_scale": 4,
+     "align": "center",
+     "on_tap": "ui_page_3",
+     "bg": "#FF161B21",
+     "color": "#FF8A96A3"
+    },
+    {
+     "type": "rect",
+     "rect": [
+      0,
+      0,
+      1240,
+      1080
+     ],
+     "bg": "#FF101418",
+     "color": "#00000000",
+     "input_block": true,
+     "hide_bind": "totk.ready",
+     "hide_eq": 1
+    },
+    {
+     "type": "label",
+     "rect": [
+      100,
+      350,
+      1040,
+      150
+     ],
+     "text": "Companion unavailable",
+     "text_scale": 5,
+     "color": "#FFE6ECF2",
+     "wrap_width": 1040,
+     "hide_bind": "totk.ready",
+     "hide_eq": 1
+    },
+    {
+     "type": "label",
+     "rect": [
+      100,
+      550,
+      1040,
+      220
+     ],
+     "bind_text": "module_error_message",
+     "text_scale": 3,
+     "color": "#FFA8B2BC",
+     "wrap_width": 1040,
+     "max_lines": 4,
+     "hide_bind": "totk.ready",
+     "hide_eq": 1
+    }
+   ]
+  },
+  {
+   "id": "map",
+   "widgets": [
+    {
+     "type": "label",
+     "rect": [
+      24,
+      400,
+      1192,
+      60
+     ],
+     "text": "Coming in a later update",
+     "text_scale": 5,
+     "align": "center",
+     "color": "#FFA8B2BC"
+    },
+    {
+     "type": "label",
+     "rect": [
+      24,
+      920,
+      1192,
+      40
+     ],
+     "text_bind": "totk.map.source",
+     "text_map": {
+      "1": "From last save",
+      "2": "Live"
+     },
+     "color": "#FFA8B2BC",
+     "need_bind": "totk.map.valid"
+    },
+    {
+     "type": "rect",
+     "rect": [
+      0,
+      968,
+      1240,
+      112
+     ],
+     "bg": "#FF0C1014",
+     "color": "#00000000"
+    },
+    {
+     "type": "button",
+     "rect": [
+      0,
+      968,
+      310,
+      112
+     ],
+     "text": "Gear",
+     "text_scale": 4,
+     "align": "center",
+     "on_tap": "ui_page_0",
+     "bg": "#FF161B21",
+     "color": "#FF8A96A3"
+    },
+    {
+     "type": "button",
+     "rect": [
+      310,
+      968,
+      310,
+      112
+     ],
+     "text": "Abilities",
+     "text_scale": 4,
+     "align": "center",
+     "on_tap": "ui_page_1",
+     "bg": "#FF161B21",
+     "color": "#FF8A96A3"
+    },
+    {
+     "type": "button",
+     "rect": [
+      620,
+      968,
+      310,
+      112
+     ],
+     "text": "Inventory",
+     "text_scale": 4,
+     "align": "center",
+     "on_tap": "ui_page_2",
+     "bg": "#FF161B21",
+     "color": "#FF8A96A3"
+    },
+    {
+     "type": "button",
+     "rect": [
+      930,
+      968,
+      310,
+      112
+     ],
+     "text": "Map",
+     "text_scale": 4,
+     "align": "center",
+     "on_tap": "ui_page_3",
+     "bg": "#FF2E3842",
+     "color": "#FFE6ECF2"
+    },
+    {
+     "type": "rect",
+     "rect": [
+      0,
+      0,
+      1240,
+      1080
+     ],
+     "bg": "#FF101418",
+     "color": "#00000000",
+     "input_block": true,
+     "hide_bind": "totk.ready",
+     "hide_eq": 1
+    },
+    {
+     "type": "label",
+     "rect": [
+      100,
+      350,
+      1040,
+      150
+     ],
+     "text": "Companion unavailable",
+     "text_scale": 5,
+     "color": "#FFE6ECF2",
+     "wrap_width": 1040,
+     "hide_bind": "totk.ready",
+     "hide_eq": 1
+    },
+    {
+     "type": "label",
+     "rect": [
+      100,
+      550,
+      1040,
+      220
+     ],
+     "bind_text": "module_error_message",
+     "text_scale": 3,
+     "color": "#FFA8B2BC",
+     "wrap_width": 1040,
+     "max_lines": 4,
+     "hide_bind": "totk.ready",
+     "hide_eq": 1
+    }
+   ]
+  }
+ ],
+ "actions": {
+  "ui_page_0": {
+   "kind": "module",
+   "action": "totk.ui.page",
+   "argument": 0
+  },
+  "ui_page_1": {
+   "kind": "module",
+   "action": "totk.ui.page",
+   "argument": 1
+  },
+  "ui_page_2": {
+   "kind": "module",
+   "action": "totk.ui.page",
+   "argument": 2
+  },
+  "ui_page_3": {
+   "kind": "module",
+   "action": "totk.ui.page",
+   "argument": 3
+  },
+  "gear_swap_0": {
+   "kind": "module",
+   "action": "totk.gear.swap",
+   "argument": 0
+  },
+  "gear_swap_1": {
+   "kind": "module",
+   "action": "totk.gear.swap",
+   "argument": 1
+  },
+  "gear_swap_2": {
+   "kind": "module",
+   "action": "totk.gear.swap",
+   "argument": 2
+  },
+  "gear_swap_3": {
+   "kind": "module",
+   "action": "totk.gear.swap",
+   "argument": 3
+  }
+ },
+ "derived": [
+  {
+   "name": "ui.has.status.hearts",
+   "expr": "totk.status.hearts * 0 + totk.status.max_hearts * 0 + 1"
+  },
+  {
+   "name": "ui.has.status.max_stamina",
+   "expr": "totk.status.max_stamina * 0 + 1"
+  },
+  {
+   "name": "ui.has.status.rupees",
+   "expr": "totk.status.rupees * 0 + 1"
+  },
+  {
+   "name": "ui.has.status.max_battery",
+   "expr": "totk.status.max_battery * 0 + 1"
+  },
+  {
+   "name": "ui.gear.weapon.known",
+   "expr": "totk.gear.weapon.present * 0 + 1"
+  },
+  {
+   "name": "ui.gear.weapon.none",
+   "cmp": "eq",
+   "a": "totk.gear.weapon.present",
+   "b": 0
+  },
+  {
+   "name": "ui.gear.weapon.has_value",
+   "expr": "totk.gear.weapon.life * 0 + 1"
+  },
+  {
+   "name": "ui.gear.bow.known",
+   "expr": "totk.gear.bow.present * 0 + 1"
+  },
+  {
+   "name": "ui.gear.bow.none",
+   "cmp": "eq",
+   "a": "totk.gear.bow.present",
+   "b": 0
+  },
+  {
+   "name": "ui.gear.bow.has_value",
+   "expr": "totk.gear.bow.life * 0 + 1"
+  },
+  {
+   "name": "ui.gear.shield.known",
+   "expr": "totk.gear.shield.present * 0 + 1"
+  },
+  {
+   "name": "ui.gear.shield.none",
+   "cmp": "eq",
+   "a": "totk.gear.shield.present",
+   "b": 0
+  },
+  {
+   "name": "ui.gear.shield.has_value",
+   "expr": "totk.gear.shield.life * 0 + 1"
+  },
+  {
+   "name": "ui.gear.arrow.known",
+   "expr": "totk.gear.arrow.present * 0 + 1"
+  },
+  {
+   "name": "ui.gear.arrow.none",
+   "cmp": "eq",
+   "a": "totk.gear.arrow.present",
+   "b": 0
+  },
+  {
+   "name": "ui.gear.arrow.has_value",
+   "expr": "totk.gear.arrow.count * 0 + 1"
+  }
+ ],
+ "page_binds": [
+  {
+   "point": "totk.ui.page",
+   "equals": 0,
+   "when_equal": {
+    "page": "gear",
+    "transition": "fade",
+    "duration_ms": 130,
+    "easing": "ease_in_out"
+   }
+  },
+  {
+   "point": "totk.ui.page",
+   "equals": 1,
+   "when_equal": {
+    "page": "abilities",
+    "transition": "fade",
+    "duration_ms": 130,
+    "easing": "ease_in_out"
+   }
+  },
+  {
+   "point": "totk.ui.page",
+   "equals": 2,
+   "when_equal": {
+    "page": "inventory",
+    "transition": "fade",
+    "duration_ms": 130,
+    "easing": "ease_in_out"
+   }
+  },
+  {
+   "point": "totk.ui.page",
+   "equals": 3,
+   "when_equal": {
+    "page": "map",
+    "transition": "fade",
+    "duration_ms": 130,
+    "easing": "ease_in_out"
+   }
   }
  ]
 }

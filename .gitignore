@@ -49,3 +49,4 @@ app/.externalNativeBuild/
 AGENTS.md
 # TotK companion package output
 dist/
+__pycache__/
