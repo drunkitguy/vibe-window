@@ -303,10 +303,10 @@ Doable in this Linux container now (no game, no Windows, no Thor):
 | H1a | Eden Duo: native modules on Windows (loader, harness compile fix, tests), as patches | - | done: `host/eden-duo/0001-0003` + `host/eden-duo-companions/0001`; loader Catch2 tests pass standalone; full eden-duo build blocked (proxy 403 on CPM fmt download), real-Windows checks in H1c; critic SATISFIED round 3 |
 | T1 | TotK package skeleton: build gate, fail-closed reader, tests; Linux `.so` and Windows DLL; `.dsmod.zip` | H1a (builder patch) | done: `2c482b6` (+ plan `911aed8`); gcc/clang/MinGW builds and ctest pass (MinGW under wine), single export, package + wine probe pass; critic SATISFIED round 3 |
 | H1b | eden-cli composite layout: `--window-rect`, `--aux-rect`, borderless, aux not focusable | H1a | done: `afe952e`, patch 0004 adds `--window-rect`/`--aux-rect` (borderless, hidden until placed), non-focusable aux, 640x360 main floor, 32767 bound, ledger rows; parser tests pass natively and under wine; SDL and harness code compile-checked only in H1c; critic SATISFIED round 3 |
-| T2a | Retarget the skeleton to 1.2.0 (`kTargetBuild`, data file name, tests) | T1 | doing |
+| T2a | Retarget the skeleton to 1.2.0 (`kTargetBuild`, data file name, tests) | T1 | done: `d175a18`; 1.2.0 build id and data file; critic SATISFIED (with T3s) |
 | T3a | Romfs assets in the module: vendored zstd + `ZsDic` dictionaries, SARC, BNTX + deswizzle + host ASTC, MSBT names; `load_image` in T4's base extensions | T2a, T4 (zstd approved by the user) | todo |
-| T3s | Save reader: newest `slot_0N`, `progress.sav` GameData by murmur3 hash, domain snapshots (status, gear, pouches, abilities, position); save extension export; module worker thread | T2a | doing |
-| T4 | Shell + Gear page (status strip = Ready v1, 4 equipped cards, 3 armor cards), tab bar, notice overlay, base extensions (`configure`, `on_action`), manifest generator + checker; names fall back to ids and icons stay blank until T3a | T3s | todo |
+| T3s | Save reader: newest `slot_0N`, `progress.sav` GameData by murmur3 hash, domain snapshots (status, gear, pouches, abilities, position); save extension export; module worker thread | T2a | done: `6edf1ef`, `f4b1527`, `b535fca`; two-read stability gate, unknowns published as absent, gives up after 8 reads; 3 toolchains + wine + TSan/ASan + fuzz pass; real saves untested (T8); critic SATISFIED round 3 |
+| T4 | Shell + Gear page (status strip = Ready v1, 4 equipped cards; armor row deferred, no armor equip key), tab bar, notice overlay, base extensions (`configure`, `on_action`), manifest generator + checker; names fall back to ids and icons stay blank until T3a | T3s | doing |
 | T5 | Abilities page: 7 ability tiles from owned flags, battery, refused select action | T4 | todo |
 | T6 | Inventory page: 8 tabs in game order, icon grid, detail pane, hold and drag to a refused Use zone | T4 | todo |
 | T7 | Map page: Surface/Sky/Depths tiles from romfs, layer pills, last-save marker, pan/zoom | T4, T3a | todo |
@@ -935,7 +935,17 @@ Base extensions move here from T3a: export `eden_dsmod_get_extensions`
 `EDEN_DSMOD_CAP_EXTENSIONS` [S1 `dsmod_module_extensions.h:31,44`], `configure` stores the host
 extensions, `on_action` implements the action table (UI actions accepted, game actions refused),
 `load_image` returns false (T3a fills it). Without T3a, names show the item id and icons stay
-blank; `totk.names.valid` stays 0.
+blank; `totk.names.valid` is not published.
+
+What T3s publishes (read from the code, `0100F2C0115B6000.cpp` `PublishGear`/`PublishInventory`):
+gear slots are only `weapon`, `bow`, `shield`, `arrow`; `.present` is 1/0 when `EquipIndex` was
+read and **absent** otherwise; `.name` = id; `.effect` only for weapon/bow/shield; no armor equip
+keys exist (armor equip key `UNKNOWN`), and food has no effect key. Unknown values are absent,
+never 0.
+
+New `native/modules/totk_keys.h`: the single list of fixed keys, key families (`<s>`, `<a>`,
+`{i}`) and module action names. The module builds its key strings and checks action names from
+it (replacing the literals now in `0100F2C0115B6000.cpp`), and the checker parses it.
 
 **Generator** `tools/totk/gen_manifest.py` (Python std-lib, run with `python3 -I`, like
 `tools/echoes-of-wisdom/gen_manifest.py` [S2]): writes `manifest.json` (stable key order, 1-space
@@ -977,14 +987,20 @@ page is `gear`; the T1 page `main` goes away.
   `image` `[x+62,160,160,160]` `src_bind totk.gear.<s>.icon`; name `label` `[x+12,330,260,90]`
   `bind_text .name`, `wrap_width 260`, `max_lines 2`; `value` `.life` (or `.count`)
   `[x+12,430,260,40]`; fuse badge `image` `[x+190,160,64,64]` `src_bind .fuse_icon`,
-  `need_bind .fuse`, fuse name `[x+12,476,260,36]`; effect text under it. "None" label when
-  `!.present`. Each card `on_hold` -> `gear_swap_k` (`module` `totk.gear.swap` k, refused).
-- Armor row, three cards at x = 24 + 400k, y 540, 384x360 (head, upper, lower), same widgets
-  without life; "Not in save" while `.present` is missing (armor equip key UNKNOWN).
+  `need_bind .fuse`, fuse name `[x+12,476,260,36]`; effect text under it. Three states from
+  `.present`: 1 the item widgets; 0 a "None" label; absent nothing (use the hide/need rules of
+  [S3 PACKAGE_FORMAT §3.5] as written for an absent key, and say which in the report). Each card
+  `on_hold` -> `gear_swap_k` (`module` `totk.gear.swap` k, refused).
+- No armor row in T4: no armor equip key is known, so it would always be empty. It comes back as
+  its own packet once T8 verifies an armor equip key on a real save.
 - Empty state "No save data yet" `need_bind !totk.gear.valid`.
 Tests: `totk_module_test`: `totk.ui.page` accepted for 0-3 and refused otherwise, gear keys from a
-fixture save, `totk.gear.swap` refused; CA10 with page 0. The checker covers the manifest (CA4).
-Acceptance: CA1-CA10.
+fixture save, `totk.gear.swap` refused; CA10 with page 0; every key published on a full fixture
+(each page selected) matches an entry of `totk_keys.h`. The checker covers the manifest (CA4)
+and has its own test `tools/totk/test_check_manifest.py` (std-lib `unittest`): one mutated copy
+per rule above (unknown object key, bad action kind, unknown module action, rect off canvas,
+string `hide_eq`, `totk.` bind not in `totk_keys.h`) must fail, the committed manifest passes.
+Acceptance: CA1-CA10 (three getters), and `python3 -I -m unittest discover -s tools/totk` passes.
 
 ### T5 (coder, after T4): Abilities page
 
