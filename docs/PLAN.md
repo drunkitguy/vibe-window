@@ -303,13 +303,13 @@ Doable in this Linux container now (no game, no Windows, no Thor):
 | H1a | Eden Duo: native modules on Windows (loader, harness compile fix, tests), as patches | - | done: `host/eden-duo/0001-0003` + `host/eden-duo-companions/0001`; loader Catch2 tests pass standalone; full eden-duo build blocked (proxy 403 on CPM fmt download), real-Windows checks in H1c; critic SATISFIED round 3 |
 | T1 | TotK package skeleton: build gate, fail-closed reader, tests; Linux `.so` and Windows DLL; `.dsmod.zip` | H1a (builder patch) | done: `2c482b6` (+ plan `911aed8`); gcc/clang/MinGW builds and ctest pass (MinGW under wine), single export, package + wine probe pass; critic SATISFIED round 3 |
 | H1b | eden-cli composite layout: `--window-rect`, `--aux-rect`, borderless, aux not focusable | H1a | done: `afe952e`, patch 0004 adds `--window-rect`/`--aux-rect` (borderless, hidden until placed), non-focusable aux, 640x360 main floor, 32767 bound, ledger rows; parser tests pass natively and under wine; SDL and harness code compile-checked only in H1c; critic SATISFIED round 3 |
-| T2a | Retarget the skeleton to 1.2.0 (`kTargetBuild`, data file name, tests) | T1 | todo |
-| T3a | Romfs assets in the module: vendored zstd + `ZsDic` dictionaries, SARC, BNTX + deswizzle + host ASTC, MSBT names; base extensions (`on_action`, `load_image`); module worker thread | T2a | todo |
-| T3s | Save reader: newest `slot_0N`, `progress.sav` GameData by murmur3 hash, domain snapshots (status, gear, pouches, abilities, position); save extension export | T2a | todo |
-| T4 | Shell + Gear page (status strip = Ready v1, 4 equipped cards, 3 armor cards), tab bar, notice overlay, manifest generator + checker | T3a, T3s | todo |
+| T2a | Retarget the skeleton to 1.2.0 (`kTargetBuild`, data file name, tests) | T1 | doing |
+| T3a | Romfs assets in the module: vendored zstd + `ZsDic` dictionaries, SARC, BNTX + deswizzle + host ASTC, MSBT names; `load_image` in T4's base extensions | T2a, T4, zstd decision (user) | todo |
+| T3s | Save reader: newest `slot_0N`, `progress.sav` GameData by murmur3 hash, domain snapshots (status, gear, pouches, abilities, position); save extension export; module worker thread | T2a | doing |
+| T4 | Shell + Gear page (status strip = Ready v1, 4 equipped cards, 3 armor cards), tab bar, notice overlay, base extensions (`configure`, `on_action`), manifest generator + checker; names fall back to ids and icons stay blank until T3a | T3s | todo |
 | T5 | Abilities page: 7 ability tiles from owned flags, battery, refused select action | T4 | todo |
 | T6 | Inventory page: 8 tabs in game order, icon grid, detail pane, hold and drag to a refused Use zone | T4 | todo |
-| T7 | Map page: Surface/Sky/Depths tiles from romfs, layer pills, last-save marker, pan/zoom | T4 | todo |
+| T7 | Map page: Surface/Sky/Depths tiles from romfs, layer pills, last-save marker, pan/zoom | T4, T3a | todo |
 
 Needs the user, a Windows PC, the Thor or another repo:
 
@@ -781,8 +781,8 @@ Tabs in game order (user's list): 0 Weapons (`Pouch.Weapon`), 1 Bows (`Pouch.Bow
 - CA2. `ctest --output-on-failure` in all three build dirs: 100 % pass (`build/win` under wine with
   `LC_ALL=C.UTF-8 WINEDEBUG=-all`). Test count grows with each packet.
 - CA3. Exports: `nm -D --defined-only build/gcc/0100F2C0115B6000.so` prints exactly the module's
-  getters (T2a: `eden_dsmod_get_module`; from T3a also `eden_dsmod_get_extensions`; from T3s also
-  `eden_dsmod_get_save_extensions`); `x86_64-w64-mingw32-objdump -p` of the DLL exports the same
+  getters (T2a: `eden_dsmod_get_module`; from T3s also `eden_dsmod_get_save_extensions`; from T4
+  also `eden_dsmod_get_extensions`); `x86_64-w64-mingw32-objdump -p` of the DLL exports the same
   names and imports no `libstdc++`/`libgcc`/`libwinpthread`/`libzstd` DLL.
 - CA4. From T4: `python3 -I tools/totk/gen_manifest.py --check` exits 0 (the committed
   `manifest.json`, `assets/map-blank.png` and `ASSETS.provenance.json` equal the generator's
@@ -820,7 +820,7 @@ a "false" case next to 1.4.3 and BotW), `totk_offsets.h` (each lead comment says
 Acceptance: CA1-CA3, CA5, CA6, CA8, CA9; `grep -rn 9B4E4365 native packages` finds only the
 1.2.1 "false" case in `totk_build_test.cpp`.
 
-### T3a (coder, after T2a): romfs assets in the module
+### T3a (coder, after T4 and the user's zstd decision): romfs assets in the module
 
 **zstd.** The runtime has none (fact 15) and the proxy blocks GitHub downloads (T1). Vendor zstd
 1.5.6's single-file library from the PyPI sdist `zstandard-0.23.0.tar.gz` (sha256
@@ -837,9 +837,7 @@ Ubuntu's `libzstd-dev` (1.5.5, apt candidate checked), and the Windows DLL waits
   `ZSTD_MULTITHREAD` off, `ZSTD_DISABLE_ASM=1` (as the companions build zstd [S2
   `native/modules/CMakeLists.txt:182-183`]), `-w` and no `-Werror`, PIC; the module and the tests
   link it; module link adds `-ffunction-sections -fdata-sections -Wl,--gc-sections`.
-- Exports: version script and `.def` gain `eden_dsmod_get_extensions`; module `capabilities` =
-  `EDEN_DSMOD_CAP_EXTENSIONS` [S1 `dsmod_module_extensions.h:31,44`]; `DSMOD_SDK_EXPORT_EXTENSIONS`
-  [S3 MODULE_GUIDE §1.5].
+- Exports: none new; T4 already exports the base extensions. T3a fills their `load_image`.
 
 New headers (each with a test; all reads bounds-checked, fail closed, no exceptions across the
 ABI):
@@ -872,8 +870,7 @@ ABI):
      state without a save rule; T10+). `U` (Depths) tiles are channel masks: drawn as grey from
      luma, as S28's first version did [S28 §2]. Name grammar `UNVERIFIED` on 1.2.0.
    - Every miss is logged once per kind with the path tried (T8 reads these lines).
-6. `0100F2C0115B6000.cpp` — base extensions: `configure` (store the host extensions),
-   `on_action` (table above; UI actions only here, game actions refused), `load_image` for keys
+6. `0100F2C0115B6000.cpp` — `load_image` (T4 left it returning false) for keys
    `module:totk:icon/<id>` (`<id>` must match `[A-Za-z0-9_]{1,63}`, else refused: nothing from a
    key reaches `read_romfs` unchecked) and `module:totk:map/<G|S|U>/<cc>-<rr>/<0-4>`
    (cc 00-11, rr 00-09). The worker thread loads `EnsureZs` and `Names` at start; `load_image`
@@ -891,7 +888,7 @@ tags stripped, a surrogate pair, bad section sizes. Assets: a fake `read_romfs` 
 path map (extend `totk_test_host.h`): Mals probe order picks the highest n, icon and tile keys
 through the module table's `load_image`, invalid keys refused without any `read_romfs` call, the
 tile suffix probe order, a missing file gives false.
-Acceptance: CA1-CA3 (two getters), CA5-CA9, the tests above.
+Acceptance: CA1-CA10 (three getters), the tests above.
 
 ### T3s (coder, after T2a; may run beside T3a): save reader
 
@@ -912,15 +909,13 @@ New headers:
    save beats an autosave on a tie [S29 `:1144-1149`]. Then `progress.sav`: size query, one read,
    size must match, parse. Builds an immutable `Snapshot` (status, gear, 8 tabs, abilities,
    position) per the data model; keys built once with `Murmur3`.
-3. `totk_live.h` — the live reader stubs, one per domain (`ReadLiveGameData`, `ReadLivePosition`,
-   `ReadLiveAbility`), each taking `Offsets` and returning invalid with zero host calls while its
-   offsets are 0. New `totk_offsets.h` fields, all `0` with `UNKNOWN:` comments:
-   `game_data_object` (lead: 1.4.3 `main+0x3ad66b0`, vtable `main+0x39403b0`, 0x60-byte
-   per-type containers [S28 §3]; nothing for 1.2.0), `player_actor` (leads: 1.2.1 resident
-   actors [S7]), `current_ability` (no lead).
+3. No live reader stubs (user: "don't worry about memory locations"). T1's `ReadStatus` stays the
+   only live reader; T3 adds the others behind the same keys. Leads for T3: GameData object
+   1.4.3 `main+0x3ad66b0`, vtable `main+0x39403b0` [S28 §3]; resident actors 1.2.1 [S7].
 4. `0100F2C0115B6000.cpp` — `eden_dsmod_get_save_extensions` defined by hand (no SDK macro
    [S3 MODULE_GUIDE §1.5]), `configure` copies the struct [S1 `dsmod_module_extensions.h:170-176`];
-   the worker polls captions every 2 s and re-reads `progress.sav` only when the newest
+   the module worker thread (Shared rules: Threads) starts in `create`, is joined in `destroy`
+   (test: create/destroy 100 times, no hang, no leak), and polls captions every 2 s and re-reads `progress.sav` only when the newest
    (slot, date) changes; a failed read keeps the previous snapshot. `sample` publishes status,
    gear, abilities, and the current page's lists.
 
@@ -931,9 +926,16 @@ tie -> manual, unreadable slot skipped, no slots -> nothing published); a progre
 between the size query and the read keeps the old snapshot; gear from `EquipIndex` (-1 and out of
 range -> not present); fuse and effect labels; abilities need both flags; position published as
 (x, -z).
-Acceptance: CA1-CA3 (three getters), CA5-CA10, the tests above.
+Acceptance: CA1-CA3 (two getters), CA5-CA10, the tests above. No zstd, no romfs reads.
 
-### T4 (coder, after T3a and T3s): shell, Gear page, generator and checker
+### T4 (coder, after T3s; does not wait for T3a): shell, Gear page, generator and checker
+
+Base extensions move here from T3a: export `eden_dsmod_get_extensions`
+(`DSMOD_SDK_EXPORT_EXTENSIONS`, version script and `.def`), `capabilities` =
+`EDEN_DSMOD_CAP_EXTENSIONS` [S1 `dsmod_module_extensions.h:31,44`], `configure` stores the host
+extensions, `on_action` implements the action table (UI actions accepted, game actions refused),
+`load_image` returns false (T3a fills it). Without T3a, names show the item id and icons stay
+blank; `totk.names.valid` stays 0.
 
 **Generator** `tools/totk/gen_manifest.py` (Python std-lib, run with `python3 -I`, like
 `tools/echoes-of-wisdom/gen_manifest.py` [S2]): writes `manifest.json` (stable key order, 1-space
@@ -1023,7 +1025,7 @@ pouches (arrows after bows), equipped flags, `totk.inv.select` bounds, tab chang
 selection, `tab_next` wraps, only the current tab's `{i}` keys are published, 400-item cap.
 Acceptance: CA1-CA10.
 
-### T7 (coder, after T4): Map page
+### T7 (coder, after T4 and T3a): Map page
 
 `map`:
 - Area `MainField` in `map.areas`: `min [-6000,-5000]`, `max [6000,5000]`, `image
