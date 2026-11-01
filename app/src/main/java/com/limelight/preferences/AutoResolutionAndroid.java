@@ -101,14 +101,7 @@ public final class AutoResolutionAndroid {
         prefConfig.height = result.height;
         prefConfig.fps = result.fps;
 
-        if (prefConfig.bitrateFollowsResolution) {
-            int bitrate = Math.min(PreferenceConfiguration.MAX_BITRATE_KBPS,
-                    PreferenceConfiguration.getDefaultBitrate(result.width, result.height, result.fps));
-            prefConfig.bitrate = bitrate;
-            if (prefConfig.meteredBitrateDerived) {
-                prefConfig.meteredBitrate = bitrate / 4;
-            }
-        }
+        PreferenceConfiguration.applyDefaultBitrate(prefConfig, result.width, result.height, result.fps);
 
         LimeLog.info("Auto resolution: " + result.width + "x" + result.height + " at " +
                 AutoResolution.formatFps(result.fps) + " FPS, bitrate " + prefConfig.bitrate +

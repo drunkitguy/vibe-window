@@ -51,7 +51,8 @@ public class AbsoluteTouchContext implements TouchContext {
     private final int actionIndex;
     private final View targetView;
     private final Handler handler;
-    private final boolean dualScreenTop;
+    // Dual screen: the crop the view shows, or null when the mode is off
+    private final int[] dualScreenCrop;
 
     private final Runnable leftButtonUpRunnable = new Runnable() {
         @Override
@@ -71,10 +72,10 @@ public class AbsoluteTouchContext implements TouchContext {
     private static final int TOUCH_DOWN_DEAD_ZONE_TIME_THRESHOLD = 100;
     private static final int TOUCH_DOWN_DEAD_ZONE_DISTANCE_THRESHOLD = 20;
 
-    public AbsoluteTouchContext(NvConnection conn, int actionIndex, View view, boolean swapped, boolean dualScreenTop)
+    public AbsoluteTouchContext(NvConnection conn, int actionIndex, View view, boolean swapped, int[] dualScreenCrop)
     {
         this.conn = conn;
-        this.dualScreenTop = dualScreenTop;
+        this.dualScreenCrop = dualScreenCrop;
         this.actionIndex = actionIndex;
         this.targetView = view;
         this.handler = new Handler(Looper.getMainLooper());
@@ -129,9 +130,9 @@ public class AbsoluteTouchContext implements TouchContext {
         eventX = Math.min(Math.max(eventX, 0), targetView.getWidth());
         eventY = Math.min(Math.max(eventY, 0), targetView.getHeight());
 
-        if (dualScreenTop) {
-            // The view shows only the top crop of the composite stream
-            int[] p = DualScreenLayout.mousePosition(DualScreenLayout.TOP_CROP, eventX, eventY, targetView.getWidth(), targetView.getHeight());
+        if (dualScreenCrop != null) {
+            // The view shows only one crop of the composite stream
+            int[] p = DualScreenLayout.mousePosition(dualScreenCrop, eventX, eventY, targetView.getWidth(), targetView.getHeight());
             conn.sendMousePosition((short)p[0], (short)p[1], (short)DualScreenLayout.VIDEO_W, (short)DualScreenLayout.VIDEO_H);
             return;
         }

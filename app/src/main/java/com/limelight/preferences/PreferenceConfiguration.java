@@ -573,6 +573,17 @@ public class PreferenceConfiguration {
         return getDefaultBitrate(width, height, fps);
     }
 
+    // When the bitrate follows the resolution, set it (and a derived metered bitrate) for this mode
+    public static void applyDefaultBitrate(PreferenceConfiguration prefConfig, int width, int height, float fps) {
+        if (prefConfig.bitrateFollowsResolution) {
+            int bitrate = Math.min(MAX_BITRATE_KBPS, getDefaultBitrate(width, height, fps));
+            prefConfig.bitrate = bitrate;
+            if (prefConfig.meteredBitrateDerived) {
+                prefConfig.meteredBitrate = bitrate / 4;
+            }
+        }
+    }
+
     public static int getDefaultBitrate(int width, int height, float fpsValue) {
         int fps = Math.round(fpsValue);
 

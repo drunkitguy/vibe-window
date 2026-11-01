@@ -176,14 +176,19 @@ public class DualScreenLayoutTest {
                 0, 1 - ty, 0, 1};
     }
 
+    // DualScreenRenderer's vertex shader: (m * vec4(u, v, 0, 1)).xy for a column-major 4x4 matrix m
+    private static float[] applyTexMatrix(float[] m, float u, float v) {
+        return new float[] {m[0] * u + m[4] * v + m[12], m[1] * u + m[5] * v + m[13]};
+    }
+
     private static void assertCropRows(int bufH, int[] crop, float topRow, float bottomRow, float rightCol) {
         float[] m = paddedMatrix(bufH);
         float[] tc = DualScreenLayout.texCoords(crop);
         // BL, BR, TL, TR
-        float[] bl = DualScreenLayout.applyTexMatrix(m, tc[0], tc[1]);
-        float[] br = DualScreenLayout.applyTexMatrix(m, tc[2], tc[3]);
-        float[] tl = DualScreenLayout.applyTexMatrix(m, tc[4], tc[5]);
-        float[] tr = DualScreenLayout.applyTexMatrix(m, tc[6], tc[7]);
+        float[] bl = applyTexMatrix(m, tc[0], tc[1]);
+        float[] br = applyTexMatrix(m, tc[2], tc[3]);
+        float[] tl = applyTexMatrix(m, tc[4], tc[5]);
+        float[] tr = applyTexMatrix(m, tc[6], tc[7]);
         assertEquals(bottomRow, bl[1] * bufH, 1e-3f);
         assertEquals(bottomRow, br[1] * bufH, 1e-3f);
         assertEquals(topRow, tl[1] * bufH, 1e-3f);

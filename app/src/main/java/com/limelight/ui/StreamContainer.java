@@ -122,12 +122,12 @@ public class StreamContainer extends FrameLayout implements SurfaceHolder.Callba
         secondDisplay.getRealSize(secondSize);
         // The larger display shows the top crop
         dualScreenMainTop = DualScreenLayout.isTopDisplay(mainSize.x, mainSize.y, secondSize.x, secondSize.y);
-        int[] mainCrop = dualScreenMainTop ? DualScreenLayout.TOP_CROP : DualScreenLayout.BOTTOM_CROP;
+        int[] mainCrop = getDualScreenMainCrop();
         int[] secondCrop = dualScreenMainTop ? DualScreenLayout.BOTTOM_CROP : DualScreenLayout.TOP_CROP;
 
         GLSurfaceView glSurfaceView = new GLSurfaceView(context);
         glSurfaceView.setEGLContextClientVersion(2);
-        mDualRenderer = new DualScreenRenderer(glSurfaceView, this, mainCrop, secondCrop);
+        mDualRenderer = new DualScreenRenderer(glSurfaceView, this, game::onDualScreenVideoLost, mainCrop, secondCrop);
         glSurfaceView.setRenderer(mDualRenderer);
         glSurfaceView.setRenderMode(GLSurfaceView.RENDERMODE_WHEN_DIRTY);
         mSurfaceView = glSurfaceView;
@@ -166,6 +166,11 @@ public class StreamContainer extends FrameLayout implements SurfaceHolder.Callba
 
     public boolean isDualScreenMainTop() {
         return dualScreenMainTop;
+    }
+
+    // The crop the main display shows (dual screen only)
+    public int[] getDualScreenMainCrop() {
+        return dualScreenMainTop ? DualScreenLayout.TOP_CROP : DualScreenLayout.BOTTOM_CROP;
     }
 
     // --- Aspect Ratio and Scaling Logic ---

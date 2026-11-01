@@ -111,11 +111,6 @@ public final class DualScreenLayout {
         return new float[] {u0, vBottom, u1, vBottom, u0, vTop, u1, vTop};
     }
 
-    /** The vertex shader's (m * vec4(u, v, 0, 1)).xy for a column-major 4x4 matrix m. */
-    public static float[] applyTexMatrix(float[] m, float u, float v) {
-        return new float[] {m[0] * u + m[4] * v + m[12], m[1] * u + m[5] * v + m[13]};
-    }
-
     private static float clamp01(float f) {
         return Math.max(0f, Math.min(1f, f));
     }

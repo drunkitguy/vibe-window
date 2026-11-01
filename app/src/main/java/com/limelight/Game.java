@@ -405,7 +405,8 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
 
         if (prefConfig.dualScreen) {
             // readPreferences already turned off full external display, 3D and PiP
-            dualScreenDisplay = ServerHelper.getOtherDisplay(this, currentDisplay.getDisplayId());
+            // The display Game is really on (the intent extra defaults to 0 even when launched elsewhere)
+            dualScreenDisplay = ServerHelper.getOtherDisplay(this, getWindowManager().getDefaultDisplay().getDisplayId());
             if (dualScreenDisplay == null) {
                 LimeLog.warning("Dual screen: no second display; streaming normally");
                 prefConfig.dualScreen = false;
@@ -415,14 +416,7 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
                 prefConfig.width = mode.width;
                 prefConfig.height = mode.height;
                 prefConfig.fps = mode.fps;
-                if (prefConfig.bitrateFollowsResolution) {
-                    int bitrate = Math.min(PreferenceConfiguration.MAX_BITRATE_KBPS,
-                            PreferenceConfiguration.getDefaultBitrate(mode.width, mode.height, mode.fps));
-                    prefConfig.bitrate = bitrate;
-                    if (prefConfig.meteredBitrateDerived) {
-                        prefConfig.meteredBitrate = bitrate / 4;
-                    }
-                }
+                PreferenceConfiguration.applyDefaultBitrate(prefConfig, mode.width, mode.height, mode.fps);
                 prefConfig.windowOnly = true;
                 prefConfig.enableHdr = false;
                 prefConfig.autoInvertVideoResolution = false;
@@ -2608,8 +2602,8 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
         normalizedY /= streamContainer.getHeight();
 
         if (prefConfig.dualScreen) {
-            // The main view shows the top crop (when it shows the bottom one, onTouch never gets here)
-            return DualScreenLayout.toVideo(DualScreenLayout.TOP_CROP, normalizedX, normalizedY);
+            // The main view shows one crop of the composite (pen and hover get here even when it is the bottom one)
+            return DualScreenLayout.toVideo(streamContainer.getDualScreenMainCrop(), normalizedX, normalizedY);
         }
         return new float[] { normalizedX, normalizedY };
     }
@@ -2715,9 +2709,10 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
         contactAreaMinorCartesian[1] = Math.min(Math.abs(contactAreaMinorCartesian[1]), streamContainer.getHeight()) / streamContainer.getHeight();
 
         if (prefConfig.dualScreen) {
-            // The view shows the top crop, a smaller share of the video
-            contactAreaMajorCartesian = DualScreenLayout.sizeToVideo(DualScreenLayout.TOP_CROP, contactAreaMajorCartesian[0], contactAreaMajorCartesian[1]);
-            contactAreaMinorCartesian = DualScreenLayout.sizeToVideo(DualScreenLayout.TOP_CROP, contactAreaMinorCartesian[0], contactAreaMinorCartesian[1]);
+            // The view shows one crop, a smaller share of the video
+            int[] crop = streamContainer.getDualScreenMainCrop();
+            contactAreaMajorCartesian = DualScreenLayout.sizeToVideo(crop, contactAreaMajorCartesian[0], contactAreaMajorCartesian[1]);
+            contactAreaMinorCartesian = DualScreenLayout.sizeToVideo(crop, contactAreaMinorCartesian[0], contactAreaMinorCartesian[1]);
         }
 
         // Convert the normalized values back into polar coordinates
@@ -3508,7 +3503,7 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
         eventY = Math.min(Math.max(eventY, 0), streamContainer.getHeight());
 
         if (prefConfig.dualScreen) {
-            int[] p = DualScreenLayout.mousePosition(DualScreenLayout.TOP_CROP, eventX, eventY, streamContainer.getWidth(), streamContainer.getHeight());
+            int[] p = DualScreenLayout.mousePosition(streamContainer.getDualScreenMainCrop(), eventX, eventY, streamContainer.getWidth(), streamContainer.getHeight());
             conn.sendMousePosition((short)p[0], (short)p[1], (short)DualScreenLayout.VIDEO_W, (short)DualScreenLayout.VIDEO_H);
             return;
         }
@@ -3539,6 +3534,13 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
 
     public Display getDualScreenDisplay() {
         return dualScreenDisplay;
+    }
+
+    // Dual screen: the GL context was recreated and the decoder cannot move to the new Surface, so end the stream
+    public void onDualScreenVideoLost() {
+        runOnUiThread(this::stopConnection);
+        Dialog.displayDialog(this, getResources().getString(R.string.conn_terminated_title),
+                getResources().getString(R.string.dual_screen_video_lost), true);
     }
 
     // Dual screen: touches on the display without the user's touch mode go out as direct touch
@@ -4341,7 +4343,8 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
                 // Touch mouse disabled
                 touchContextMap[i] = null;
             } else if (!prefConfig.touchscreenTrackpad) {
-                touchContextMap[i] = new AbsoluteTouchContext(conn, i, streamContainer, mode == 5, prefConfig.dualScreen);
+                touchContextMap[i] = new AbsoluteTouchContext(conn, i, streamContainer, mode == 5,
+                        prefConfig.dualScreen ? streamContainer.getDualScreenMainCrop() : null);
             } else if (mode == 3) {
                 touchContextMap[i] = new RelativeTouchContext(conn, i, REFERENCE_HORIZ_RES, REFERENCE_VERT_RES, streamContainer, prefConfig);
             } else {

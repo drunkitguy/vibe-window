@@ -43,6 +43,7 @@ public class DualScreenRenderer implements GLSurfaceView.Renderer, SurfaceTextur
 
     private final GLSurfaceView glSurfaceView;
     private final Stereo3DRenderer.OnSurfaceReadyListener onSurfaceReadyListener;
+    private final Runnable onVideoSurfaceLost;
     private final int[] mainCrop;
     private final int[] secondCrop;
     private final FloatBuffer quadBuffer = floats(QUAD_VERTICES);
@@ -57,12 +58,15 @@ public class DualScreenRenderer implements GLSurfaceView.Renderer, SurfaceTextur
     private SurfaceTexture videoSurfaceTexture;
     private Surface videoSurface;
     private boolean frameLatched;
+    private boolean videoSurfaceHandedOut;
     private int mainWidth, mainHeight;
     private EGLDisplay eglDisplay = EGL14.EGL_NO_DISPLAY;
     private EGLContext eglContext = EGL14.EGL_NO_CONTEXT;
     private EGLSurface mainDrawSurface = EGL14.EGL_NO_SURFACE;
     private EGLSurface mainReadSurface = EGL14.EGL_NO_SURFACE;
     private Surface secondEglFor;
+    // A Surface the EGL surface could not be made for; not retried every frame
+    private Surface secondEglFailedFor;
     private EGLDisplay secondEglDisplay = EGL14.EGL_NO_DISPLAY;
     private EGLSurface secondEglSurface = EGL14.EGL_NO_SURFACE;
 
@@ -71,9 +75,10 @@ public class DualScreenRenderer implements GLSurfaceView.Renderer, SurfaceTextur
     private volatile int secondWidth, secondHeight;
 
     public DualScreenRenderer(GLSurfaceView view, Stereo3DRenderer.OnSurfaceReadyListener listener,
-                              int[] mainCrop, int[] secondCrop) {
+                              Runnable onVideoSurfaceLost, int[] mainCrop, int[] secondCrop) {
         this.glSurfaceView = view;
         this.onSurfaceReadyListener = listener;
+        this.onVideoSurfaceLost = onVideoSurfaceLost;
         this.mainCrop = mainCrop;
         this.secondCrop = secondCrop;
         this.mainTexBuffer = floats(DualScreenLayout.texCoords(mainCrop));
@@ -99,6 +104,7 @@ public class DualScreenRenderer implements GLSurfaceView.Renderer, SurfaceTextur
         CountDownLatch released = new CountDownLatch(1);
         glSurfaceView.queueEvent(() -> {
             releaseSecondEglSurface();
+            secondEglFailedFor = null;
             released.countDown();
         });
         try {
@@ -144,8 +150,20 @@ public class DualScreenRenderer implements GLSurfaceView.Renderer, SurfaceTextur
     public void onSurfaceCreated(GL10 gl, javax.microedition.khronos.egl.EGLConfig config) {
         // A new context may come after eglTerminate; drop the old second surface (best effort) and rebuild it
         releaseSecondEglSurface();
+        secondEglFailedFor = null;
         frameLatched = false;
         pendingFrames.set(0);
+
+        if (videoSurfaceHandedOut) {
+            // Context loss: the decoder still writes to the old Surface and cannot be moved to a new one,
+            // so release the old objects and end the stream instead of staying black
+            releaseGl();
+            LimeLog.warning("Dual screen: GL context recreated; ending the stream");
+            if (onVideoSurfaceLost != null) {
+                onVideoSurfaceLost.run();
+            }
+            return;
+        }
 
         int[] textures = new int[1];
         GLES20.glGenTextures(1, textures, 0);
@@ -165,6 +183,7 @@ public class DualScreenRenderer implements GLSurfaceView.Renderer, SurfaceTextur
         texCoordHandle = GLES20.glGetAttribLocation(program, "a_TexCoord");
         texMatrixHandle = GLES20.glGetUniformLocation(program, "u_TexMatrix");
 
+        videoSurfaceHandedOut = true;
         if (onSurfaceReadyListener != null) {
             onSurfaceReadyListener.onStereo3DSurfaceReady(videoSurface);
         }
@@ -217,7 +236,7 @@ public class DualScreenRenderer implements GLSurfaceView.Renderer, SurfaceTextur
 
     private void updateSecondEglSurface() {
         Surface wanted = secondSurface;
-        if (wanted == secondEglFor) {
+        if (wanted == secondEglFor || (wanted != null && wanted == secondEglFailedFor)) {
             return;
         }
         releaseSecondEglSurface();
@@ -232,11 +251,13 @@ public class DualScreenRenderer implements GLSurfaceView.Renderer, SurfaceTextur
         if (!EGL14.eglChooseConfig(eglDisplay, new int[] {EGL14.EGL_CONFIG_ID, configId[0], EGL14.EGL_NONE}, 0,
                 configs, 0, 1, count, 0) || count[0] < 1) {
             LimeLog.warning("Dual screen: no EGL config for the second display");
+            secondEglFailedFor = wanted;
             return;
         }
         EGLSurface surface = EGL14.eglCreateWindowSurface(eglDisplay, configs[0], wanted, new int[] {EGL14.EGL_NONE}, 0);
         if (surface == null || surface == EGL14.EGL_NO_SURFACE) {
             LimeLog.warning("Dual screen: eglCreateWindowSurface failed: 0x" + Integer.toHexString(EGL14.eglGetError()));
+            secondEglFailedFor = wanted;
             return;
         }
         secondEglDisplay = eglDisplay;
