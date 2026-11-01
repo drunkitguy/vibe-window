@@ -1,0 +1,27 @@
+From 4c4c2f1e6c07f5aa46c4177ed99e6364323005bb Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 1 Nov 2026 18:47:41 +0000
+Subject: [PATCH] common: build sparse_large_vector with MSVC
+
+ExceptionInformation is an array of ULONG_PTR, an integer, so MSVC refuses
+reinterpret_cast to u64 (C2440); static_cast is the conversion it names.
+---
+ src/common/sparse_large_vector.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/common/sparse_large_vector.cpp b/src/common/sparse_large_vector.cpp
+index eee8ff6..b963409 100644
+--- a/src/common/sparse_large_vector.cpp
++++ b/src/common/sparse_large_vector.cpp
+@@ -26,7 +26,7 @@ static std::mutex vector_regions_mutex {};
+ // Workaround for handling non-commited memory accessed by Dynarmic; usually result of an error
+ static LONG WINAPI FakePageFaultHandler(PEXCEPTION_POINTERS info) {
+     DWORD code = info->ExceptionRecord->ExceptionCode;
+-    u64 exception_addr = reinterpret_cast<u64>(info->ExceptionRecord->ExceptionInformation[1]);
++    u64 exception_addr = static_cast<u64>(info->ExceptionRecord->ExceptionInformation[1]);
+ 
+     if (code != EXCEPTION_ACCESS_VIOLATION || info->ExceptionRecord->ExceptionInformation[0] == 1) {
+         // Not our problem
+-- 
+2.43.0
+
