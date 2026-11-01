@@ -407,6 +407,28 @@ int main() {
     SampleClean(m, instance, h);
     assert(h.ints == page0 && h.texts == page0_text);
 
+    // A failed read between two matching ones (same size): the match does not count, because
+    // the failed read sits between them; the next matching read is taken.
+    const std::string p2 = Slot(2, "progress.sav");
+    d.Put(p2, SaveBuilder().Int("PlayerStatus.Life", 44).Build());
+    d.Put(Slot(2, "caption.sav"), Caption(2024, 3, 1, 8, 0, false));
+    PollNow(instance); // read 1: ok
+    d.FailNextRead(p2);
+    PollNow(instance); // read 2: fails
+    PollNow(instance); // read 3: ok, equals read 1, but not consecutive
+    assert(d.Reads(p2) == 3);
+    SampleClean(m, instance, h);
+    assert(h.ints == page0);
+    PollNow(instance); // read 4: equals read 3
+    SampleClean(m, instance, h);
+    assert(h.ints.at("totk.status.hearts") == 44);
+    // Back to the fixture.
+    d.Put(Slot(1, "caption.sav"), Caption(2024, 3, 1, 8, 1, false));
+    PollNow(instance);
+    PollNow(instance);
+    SampleClean(m, instance, h);
+    assert(h.ints == page0 && h.texts == page0_text);
+
     // CA10: no allocation in 1000 samples on each page with the full fixture snapshot.
     for (int page = 0; page < 4; ++page) {
         in.page = page;

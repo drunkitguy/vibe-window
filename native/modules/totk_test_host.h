@@ -131,6 +131,8 @@ struct SaveDir {
     std::map<std::string, std::size_t> last_request; // size asked for by the last read
     // Appended to this file right after its next size query (it changes under the reader).
     std::string grow_after_query;
+    // The next data read of this file returns 0 (fails) once; its size stays the same.
+    std::string fail_next_read;
     EdenDsmodHostSaveApi api{};
 
     SaveDir() {
@@ -157,6 +159,10 @@ struct SaveDir {
             }
             ++d.reads[path];
             d.last_request[path] = size;
+            if (d.fail_next_read == path) {
+                d.fail_next_read.clear();
+                return 0;
+            }
             if (offset >= bytes.size())
                 return 0;
             const std::size_t n = std::min<std::size_t>(size, bytes.size() - offset);
@@ -178,6 +184,10 @@ struct SaveDir {
     void GrowAfterQuery(const std::string& path) {
         std::scoped_lock lock{mutex};
         grow_after_query = path;
+    }
+    void FailNextRead(const std::string& path) {
+        std::scoped_lock lock{mutex};
+        fail_next_read = path;
     }
 };
 
