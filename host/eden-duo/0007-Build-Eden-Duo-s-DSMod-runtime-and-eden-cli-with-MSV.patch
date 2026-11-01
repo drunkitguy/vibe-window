@@ -1,0 +1,118 @@
+From 96cb29bbc03d35a73cbd1644d00e8c83e134ec48 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 1 Nov 2026 20:55:02 +0000
+Subject: [PATCH] Build Eden Duo's DSMod runtime and eden-cli with MSVC
+
+- mod_input_swipe.h: windef.h defines far, so the local is far_enough.
+- launch_params.cpp, mod_module_services.cpp: compare int and EdenDsmodBool
+  results with 0 instead of converting them to bool (C4800 is an error).
+- firmware_version_nca_path.cpp: mallinfo2 is glibc-only; compile the heap
+  probe there only.
+- duo_cmd.cmake: link Eden's bundled getopt into eden-cli under MSVC.
+- duo_core.cmake: under MSVC, keep C4456/C4458/C4244 warnings, not errors,
+  for the eight runtime files that trip them.
+---
+ src/core/launch_params.cpp                        | 2 +-
+ src/core/mods/duo_core.cmake                      | 9 +++++++++
+ src/core/mods/mod_input_swipe.h                   | 4 ++--
+ src/core/mods/mod_module_services.cpp             | 2 +-
+ src/tests/core/mods/firmware_version_nca_path.cpp | 3 +++
+ src/yuzu_cmd/duo_cmd.cmake                        | 5 +++++
+ 6 files changed, 21 insertions(+), 4 deletions(-)
+
+diff --git a/src/core/launch_params.cpp b/src/core/launch_params.cpp
+index a048322..25fdd45 100644
+--- a/src/core/launch_params.cpp
++++ b/src/core/launch_params.cpp
+@@ -94,7 +94,7 @@ LaunchParams ParseLaunchParams(Core::System& system, int argc, char *argv[], wch
+                 break;
+             case 'u': {
+                 // Launch game with a specific user
+-                bool argument_ok = isdigit(optarg[0]);
++                bool argument_ok = isdigit(optarg[0]) != 0;
+                 p.selected_user = atoi(optarg);
+                 if (!argument_ok) {
+                     // try to look it up by username, only finds the first username that matches.
+diff --git a/src/core/mods/duo_core.cmake b/src/core/mods/duo_core.cmake
+index c433ce2..3287d62 100644
+--- a/src/core/mods/duo_core.cmake
++++ b/src/core/mods/duo_core.cmake
+@@ -122,3 +122,12 @@ unset(DUO_HLE_STATIC_DISPATCH)
+ # only the release build turns it OFF: one option, default chosen for the common (dev) case,
+ # flipped for the one build that ships.
+ # The option is declared at the root and propagated by common to all consumers.
++
++# Duo's runtime is written against GCC/Clang warnings; Eden's MSVC flags make shadowing (C4456,
++# C4458) and narrowing (C4244) errors, which these files trip without being wrong.
++if (MSVC)
++    set_source_files_properties(
++        mods/mod_console.cpp mods/mod_input.cpp mods/mod_load_plan.cpp mods/mod_nx_assets.cpp
++        mods/mod_nx_runtime.cpp mods/mod_ui_map_widget.cpp mods/mod_ui_scroll.cpp mods/mod_ui_text.cpp
++        PROPERTIES COMPILE_OPTIONS "/wd4456;/wd4458;/wd4244")
++endif()
+diff --git a/src/core/mods/mod_input_swipe.h b/src/core/mods/mod_input_swipe.h
+index e5b3217..1ede25e 100644
+--- a/src/core/mods/mod_input_swipe.h
++++ b/src/core/mods/mod_input_swipe.h
+@@ -105,9 +105,9 @@ public:
+                 return;
+             }
+         }
+-        const bool far = horizontal ? std::llabs(dx) >= need_px && Dominant(dx, dy)
++        const bool far_enough = horizontal ? std::llabs(dx) >= need_px && Dominant(dx, dy)
+                                     : std::llabs(dy) >= need_px && Dominant(dy, dx);
+-        if (!reached && far) {
++        if (!reached && far_enough) {
+             if (now_ms - lock_ms > SwipeMaxMs) {
+                 armed = false; // too slow: a drag, not a swipe
+                 return;
+diff --git a/src/core/mods/mod_module_services.cpp b/src/core/mods/mod_module_services.cpp
+index 6d340f9..4ba4add 100644
+--- a/src/core/mods/mod_module_services.cpp
++++ b/src/core/mods/mod_module_services.cpp
+@@ -545,7 +545,7 @@ std::vector<u8> ModRuntime::LoadModuleData(const std::string& key) {
+     const auto host = module_worker_host; // off the tick thread: see InitializeGameModule
+     std::vector<u8> result;
+     try {
+-        const bool ok = game_module->DataExtensions()->load_data(
++        const bool ok = 0 != game_module->DataExtensions()->load_data(
+             game_module_instance, &host, key.c_str(), &result,
+             [](void* receiver, const u8* bytes, size_t size) {
+                 if ((bytes == nullptr && size != 0) || size > MaxModuleData) {
+diff --git a/src/tests/core/mods/firmware_version_nca_path.cpp b/src/tests/core/mods/firmware_version_nca_path.cpp
+index 298460d..4ebfb2d 100644
+--- a/src/tests/core/mods/firmware_version_nca_path.cpp
++++ b/src/tests/core/mods/firmware_version_nca_path.cpp
+@@ -5,6 +5,7 @@
+ // readable firmware takes. Needs installed firmware + keys in the host eden data dir; skips
+ // otherwise.
+ #include <cstdlib>
++#if defined(__GLIBC__)
+ #include <malloc.h>
+ #include <memory>
+ #include <string>
+@@ -95,3 +96,5 @@ TEST_CASE("firmware version: real firmware NCA path (what a device with readable
+     WARN("NCA path: " << per_round << " heap bytes retained per call");
+     CHECK(per_round < 8.0);
+ }
++
++#endif // __GLIBC__
+diff --git a/src/yuzu_cmd/duo_cmd.cmake b/src/yuzu_cmd/duo_cmd.cmake
+index ba3edaf..7286905 100644
+--- a/src/yuzu_cmd/duo_cmd.cmake
++++ b/src/yuzu_cmd/duo_cmd.cmake
+@@ -14,6 +14,11 @@ target_sources(yuzu-cmd PRIVATE
+     window_rect.h
+ )
+ 
++# MSVC has no getopt; Eden builds its bundled copy (externals/getopt) only there.
++if (MSVC)
++    target_link_libraries(yuzu-cmd PRIVATE getopt)
++endif()
++
+ if (YUZU_TESTS)
+     # These return before the kernel exists; SDL still invokes the quit callback.
+     foreach(option IN ITEMS version help)
+-- 
+2.43.0
+
