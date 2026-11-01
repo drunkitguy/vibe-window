@@ -14,6 +14,7 @@
 #include <cstring>
 #include <map>
 #include <mutex>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -127,6 +128,7 @@ struct SaveDir {
     std::mutex mutex;
     std::map<std::string, std::vector<std::uint8_t>> files;
     std::map<std::string, unsigned> size_queries, reads;
+    std::map<std::string, std::size_t> last_request; // size asked for by the last read
     // Appended to this file right after its next size query (it changes under the reader).
     std::string grow_after_query;
     EdenDsmodHostSaveApi api{};
@@ -154,6 +156,7 @@ struct SaveDir {
                 return n;
             }
             ++d.reads[path];
+            d.last_request[path] = size;
             if (offset >= bytes.size())
                 return 0;
             const std::size_t n = std::min<std::size_t>(size, bytes.size() - offset);
@@ -171,6 +174,10 @@ struct SaveDir {
     unsigned Reads(const std::string& path) {
         std::scoped_lock lock{mutex};
         return reads[path];
+    }
+    void GrowAfterQuery(const std::string& path) {
+        std::scoped_lock lock{mutex};
+        grow_after_query = path;
     }
 };
 
@@ -301,9 +308,11 @@ private:
 };
 
 // The full fixture save the save and module tests share (see totk_save_test for the expected
-// snapshot). `weapon_equip` is Pouch.Weapon.EquipIndex[0].
-inline SaveBuilder FixtureSave(std::int32_t weapon_equip = 2) {
+// snapshot). `weapon_equip` is Pouch.Weapon.EquipIndex[0]; nullopt leaves the key out.
+inline SaveBuilder FixtureSave(std::optional<std::int32_t> weapon_equip = 2) {
     SaveBuilder b;
+    if (weapon_equip)
+        b.IntArray("Pouch.Weapon.EquipIndex", {*weapon_equip});
     b.Int("PlayerStatus.Life", 12)
         .UInt("PlayerStatus.MaxLife", 40)
         .Int("PlayerStatus.MaxStamina", 1000)
@@ -314,7 +323,6 @@ inline SaveBuilder FixtureSave(std::int32_t weapon_equip = 2) {
         .IntArray("Pouch.Weapon.Content.Life", {30, 0, 12})
         .String64Array("Pouch.Weapon.Content.Combined.Name", {"", "", "Item_Ruby"})
         .EnumArray("Pouch.Weapon.Content.Effect.Type", {"None", "None", "AttackUpPlus"})
-        .IntArray("Pouch.Weapon.EquipIndex", {weapon_equip})
         .String64Array("Pouch.Bow.Content.Name", {"Weapon_Bow_001"})
         .IntArray("Pouch.Bow.Content.Life", {40})
         .EnumArray("Pouch.Bow.Content.Effect.Type", {"RapidFire"})
@@ -325,7 +333,8 @@ inline SaveBuilder FixtureSave(std::int32_t weapon_equip = 2) {
         .String64Array("Pouch.Shield.Content.Combined.Name", {""})
         .IntArray("Pouch.Shield.EquipIndex", {-1})
         .String64Array("Pouch.Armor.Content.Name", {"Armor_001_Head", "Armor_001_Upper"})
-        .IntArray("Pouch.Armor.EquipIndex", {0})
+        .IntArray("Pouch.Armor.EquipIndex", {0})       // not read: armor's equip key is UNKNOWN
+        .IntArray("Pouch.Armor.Content.StockNum", {1, 1}) // not read: armor has no value
         .String64Array("Pouch.Arrow.Content.Name", {"NormalArrow", "FireArrow"})
         .IntArray("Pouch.Arrow.Content.StockNum", {50, 7})
         .IntArray("Pouch.Arrow.EquipIndex", {1})
@@ -334,6 +343,7 @@ inline SaveBuilder FixtureSave(std::int32_t weapon_equip = 2) {
         .String64Array("Pouch.Food.Content.Name", {"Item_Cook_A"})
         .IntArray("Pouch.Food.Content.StockNum", {1})
         .IntArray("Pouch.Food.Content.LifeRecover", {20})
+        .EnumArray("Pouch.Food.Content.Effect.Type", {"AttackUp"}) // food effects get no label yet
         .String64Array("Pouch.SpecialParts.Content.Name", {"SpecialParts_Fan"})
         .IntArray("Pouch.SpecialParts.Content.StockNum", {3})
         .String64Array("Pouch.KeyItem.Content.Name", {"Obj_KeyItem_X"})

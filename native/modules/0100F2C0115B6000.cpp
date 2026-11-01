@@ -79,26 +79,60 @@ struct Instance {
     std::thread worker; // started last in Create, joined in Destroy
 };
 
-// One poll: re-read progress.sav only when the newest (slot, date) changed. A failed read keeps
-// the previous snapshot and is retried next poll.
-void Poll(Instance& in, const EdenDsmodHostSaveApi& api, std::optional<totk::SlotStamp>& shown) {
+// The worker's view of the save between polls.
+struct Watch {
+    std::optional<totk::SlotStamp> shown; // the (slot, date) the published snapshot came from
+    totk::SlotStamp stamp;                // a newer (slot, date) being read, and its file size
+    std::size_t size = 0;
+    std::optional<std::uint64_t> last; // FNV-1a of that progress.sav at the previous read
+    int reads = 0;                     // reads of (stamp, size) so far
+};
+// A newer save that never reads twice the same and parses is dropped until its caption date or
+// its progress.sav size changes (8 reads = 16 s).
+constexpr int kMaxReads = 8;
+
+// One poll. progress.sav is re-read only while the newest (slot, date) differs from the shown
+// one. Eden writes saves in place (no commit), and progress.sav has a fixed size, so a read can
+// catch a half-written file: a save is taken only when two consecutive reads match and it parses.
+// Until then the previous snapshot stays.
+// shortcut: a progress.sav that stays old for a whole poll (2 s) after its caption is newer is
+// taken as is; T8 checks the game's write order.
+void Poll(Instance& in, const EdenDsmodHostSaveApi& api, Watch& w) {
     const auto newest = totk::NewestSlot(api);
-    if (!newest || newest == shown)
+    if (!newest || newest == w.shown)
         return;
-    const auto data = totk::ReadProgress(api, newest->slot);
+    const std::size_t size = totk::ProgressSize(api, newest->slot);
+    if (*newest != w.stamp || size != w.size)
+        w = Watch{w.shown, *newest, size, std::nullopt, 0};
+    if (w.reads >= kMaxReads)
+        return;
+    ++w.reads;
+    auto bytes = totk::ReadProgress(api, newest->slot, size);
+    if (!bytes) {
+        w.last.reset();
+        return;
+    }
+    const std::uint64_t hash = dsmod_sdk::Fnv1a64(bytes->data(), bytes->size());
+    if (w.last != hash) {
+        w.last = hash;
+        return;
+    }
+    const auto data = totk::GameData::Parse(std::move(*bytes));
     if (!data)
         return;
     auto next = std::make_shared<const totk::Snapshot>(totk::BuildSnapshot(*data));
+    std::shared_ptr<const totk::Snapshot> freed; // released below, after the lock
     {
         std::scoped_lock lock{in.mutex};
+        freed = std::move(in.retired);
         in.retired = std::move(in.snapshot);
         in.snapshot = std::move(next);
     }
-    shown = newest;
+    w = Watch{newest, {}, 0, std::nullopt, 0};
 }
 
 void Worker(Instance& in) {
-    std::optional<totk::SlotStamp> shown;
+    Watch watch;
     std::unique_lock lock{in.mutex};
     while (!in.stop) {
         const std::uint64_t generation = in.requested;
@@ -106,7 +140,7 @@ void Worker(Instance& in) {
         lock.unlock();
         try {
             if (api)
-                Poll(in, *api, shown);
+                Poll(in, *api, watch);
         } catch (...) {
         }
         lock.lock();
@@ -148,13 +182,20 @@ void Destroy(void* instance) {
     auto* in = static_cast<Instance*>(instance);
     if (!in)
         return;
-    {
-        std::scoped_lock lock{in->mutex};
-        in->stop = true;
+    try {
+        {
+            std::scoped_lock lock{in->mutex};
+            in->stop = true;
+        }
+        in->wake.notify_all();
+        if (in->worker.joinable())
+            in->worker.join();
+    } catch (...) {
+        // The worker may still run and use `in`: freeing it would be a use after free, and
+        // destroying a joinable std::thread calls std::terminate. Leak it instead.
+        if (in->worker.joinable())
+            return;
     }
-    in->wake.notify_all();
-    if (in->worker.joinable())
-        in->worker.join();
     delete in;
 }
 
@@ -229,7 +270,8 @@ void PublishGear(const Out& o, const Keys& k, const totk::Snapshot& s) {
     for (int i = 0; i < totk::kGearSlots; ++i) {
         const auto& key = k.gear[i];
         const auto& item = s.gear[i];
-        o.I(key[kPresent].c_str(), item ? 1 : 0);
+        if (s.gear_known[i]) // EquipIndex read: 1 equipped, 0 nothing (-1 or out of range)
+            o.I(key[kPresent].c_str(), item ? 1 : 0);
         if (!item)
             continue;
         o.T(key[kId], item->id);
@@ -269,7 +311,8 @@ void PublishInventory(const Out& o, const Instance& in, const totk::Snapshot& s)
         o.I(key[kItemKind].c_str(), it.kind);
         if (it.kind)
             o.I(key[kItemValue].c_str(), it.value);
-        o.I(key[kItemEquipped].c_str(), it.equipped ? 1 : 0);
+        if (it.equipped)
+            o.I(key[kItemEquipped].c_str(), *it.equipped ? 1 : 0);
         if (!it.fuse_id.empty())
             o.T(key[kItemFuseIcon], it.fuse_icon);
     }

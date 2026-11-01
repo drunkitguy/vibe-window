@@ -41,7 +41,6 @@ int main() {
     const auto bytes = Full().Build();
     auto g = GameData::Parse(bytes);
     assert(g);
-    assert(g->size() == 11);
     assert(g->Bool(Murmur3("Flag.On")) == true && g->Bool(Murmur3("Flag.Off")) == false);
     assert(g->Int(Murmur3("Some.Int")) == -7);
     assert(g->UInt(Murmur3("Some.UInt")) == 0xFFFFFFF0u);
@@ -80,7 +79,7 @@ int main() {
     // Data offset at exactly 0x20: no entries, still a file.
     bad = bytes;
     PutU32(bad, 8, 0x20);
-    assert(GameData::Parse(bad) && GameData::Parse(bad)->size() == 0);
+    assert(GameData::Parse(bad) && !GameData::Parse(bad)->Bool(Murmur3("Flag.On")));
     // Over the 64 MiB cap.
     std::vector<std::uint8_t> huge(GameData::kMaxBytes + 1);
     PutU32(huge, 0, GameData::kMagic);
@@ -92,7 +91,7 @@ int main() {
         auto b = bytes;
         PutU32(b, EntryAt(b, k) + 4, value);
         auto p = GameData::Parse(b);
-        assert(p && p->size() == 10 && p->Int(Murmur3("Some.Int")) == -7);
+        assert(p && p->Int(Murmur3("Some.Int")) == -7 && p->Bool(Murmur3("Flag.On")) == true);
         return p;
     };
     const auto size = std::uint32_t(bytes.size());
@@ -130,7 +129,7 @@ int main() {
         const std::uint32_t data = GetU32(b, EntryAt(b, "Some.Names") + 4) + 4;
         b[data + 64 * 2 + 63] = 'y';
         auto p = GameData::Parse(b);
-        assert(p && !p->String64Array(Murmur3("Some.Names")) && p->size() == 10);
+        assert(p && !p->String64Array(Murmur3("Some.Names")) && p->IntArray(Murmur3("Some.Ints")));
     }
 
     // Unknown type sections are skipped; entries before the first section header have no type.
@@ -138,7 +137,7 @@ int main() {
         SaveBuilder b = Full();
         b.Unread(0x05, "A.FloatArray", 0xFFFFFFFF).Unread(0x77, "A.Weird", 1);
         auto p = GameData::Parse(b.Build());
-        assert(p && p->size() == 11 && !p->Int(Murmur3("A.Weird")) &&
+        assert(p && !p->Int(Murmur3("A.Weird")) && p->Int(Murmur3("Some.Int")) == -7 &&
                p->Bool(Murmur3("Flag.On")) == true);
         auto raw = bytes;
         PutU32(raw, 0x20, Murmur3("Flag.On")); // first section header replaced by an entry

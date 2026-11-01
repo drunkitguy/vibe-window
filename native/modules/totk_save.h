@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The last save, read through the runtime's read-only save extension: the newest slot from the
-// caption.sav dates, then one progress.sav read, parsed into an immutable Snapshot (status, gear,
+// caption.sav dates, then progress.sav (size query, one read), parsed into an immutable Snapshot (status, gear,
 // the 8 inventory tabs, abilities, position) with the published keys' data [docs/PLAN.md
 // "Data model"]. Everything fails closed: an unreadable slot is skipped, a bad file gives nothing.
 #pragma once
@@ -8,7 +8,6 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
-#include <cstring>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -47,9 +46,7 @@ inline std::optional<SlotStamp> ReadCaption(const EdenDsmodHostSaveApi& api, int
     std::optional<std::uint32_t> year, month, day, hour, minute;
     bool autosave = false;
     for (std::size_t at = 0x28; at + 8 <= n; at += 8) {
-        std::uint32_t hash, value;
-        std::memcpy(&hash, b + at, 4);
-        std::memcpy(&value, b + at + 4, 4);
+        const std::uint32_t hash = dsmod_sdk::Le32(b + at), value = dsmod_sdk::Le32(b + at + 4);
         switch (hash) {
         case caption::kYear: year = value; break;
         case caption::kMonth: month = value; break;
@@ -80,19 +77,32 @@ inline std::optional<SlotStamp> NewestSlot(const EdenDsmodHostSaveApi& api) {
     return best;
 }
 
-// slot_0N/progress.sav: size query, then one read of size + 1 bytes that must return exactly
-// size (a file that grew or shrank in between is rejected), then Parse.
-inline std::optional<GameData> ReadProgress(const EdenDsmodHostSaveApi& api, int slot) {
-    char path[] = "slot_00/progress.sav";
-    path[6] = char('0' + slot);
-    const std::size_t size = api.read_save_file(api.userdata, path, 0, nullptr, 0);
+namespace detail {
+struct ProgressPath {
+    char path[21] = "slot_00/progress.sav";
+    explicit ProgressPath(int slot) {
+        path[6] = char('0' + slot);
+    }
+};
+} // namespace detail
+
+// slot_0N/progress.sav size (the size query; 0 when missing).
+inline std::size_t ProgressSize(const EdenDsmodHostSaveApi& api, int slot) {
+    return api.read_save_file(api.userdata, detail::ProgressPath(slot).path, 0, nullptr, 0);
+}
+
+// One read of `size` + 1 bytes that must return exactly `size` (the size the caller queried):
+// a file that grew or shrank since is rejected.
+inline std::optional<std::vector<std::uint8_t>> ReadProgress(const EdenDsmodHostSaveApi& api,
+                                                             int slot, std::size_t size) {
     if (size < GameData::kEntriesBegin || size >= GameData::kMaxBytes)
         return std::nullopt;
     std::vector<std::uint8_t> bytes(size + 1);
-    if (api.read_save_file(api.userdata, path, 0, bytes.data(), bytes.size()) != size)
+    if (api.read_save_file(api.userdata, detail::ProgressPath(slot).path, 0, bytes.data(),
+                           bytes.size()) != size)
         return std::nullopt;
     bytes.resize(size);
-    return GameData::Parse(std::move(bytes));
+    return bytes;
 }
 
 // ---- keys, hashed at compile time ---------------------------------------------------------------
@@ -151,7 +161,7 @@ inline constexpr std::array<std::array<std::uint32_t, 2>, kAbilities> kAbilityKe
     }};
 }();
 
-// Weapon, bow and shield Effect.Type values [S29 pouch.js:444,454,461] -> short English labels
+// Weapon, bow and shield Effect.Type values [S29 pouch.js:457,468,475] -> short English labels
 // taken from the enum names. "" for None; null (not published) for anything else.
 inline const char* EffectLabel(std::uint32_t hash) {
     struct Label {
@@ -186,8 +196,7 @@ struct Item {
     int kind = 0;                   // 1 durability (Life), 2 count (StockNum), 0 none
     std::int32_t value = 0;
     std::optional<std::int32_t> hearts; // food LifeRecover
-    bool equipped = false;
-    std::uint32_t slot = 0; // index in the pouch's save arrays
+    std::optional<bool> equipped;       // absent when the pouch's equip key is not known
 };
 
 inline constexpr int kGearSlots = 4; // weapon, bow, shield, arrow
@@ -195,6 +204,8 @@ inline constexpr int kTabs = 8;
 
 struct Snapshot {
     std::optional<std::int64_t> hearts, max_hearts, max_stamina, rupees, max_battery;
+    // gear_known[s]: the pouch's EquipIndex was read; gear[s] is then the equipped item, if any.
+    std::array<bool, kGearSlots> gear_known{};
     std::array<std::optional<Item>, kGearSlots> gear;
     std::array<bool, kAbilities> owned{};
     std::array<std::vector<Item>, kTabs> tabs; // game order, at most kMaxItems each
@@ -220,8 +231,18 @@ inline std::string IconKey(const std::string& id) {
     return "module:totk:icon/" + id;
 }
 
-// One pouch in save order, empty names skipped. Equipped = slot == EquipIndex[0]; Armor's equip
-// key is UNKNOWN (three slots, candidate Pouch.Armor.EquipIndex UNVERIFIED), so never equipped.
+// Pouch.<P>.EquipIndex[0] (-1: nothing equipped), or nullopt when not known. Armor's equip key is
+// UNKNOWN (three slots; candidate Pouch.Armor.EquipIndex UNVERIFIED), so never known.
+inline std::optional<std::int64_t> EquipIndex(const GameData& g, Pouch p) {
+    if (p == kArmor)
+        return std::nullopt;
+    const auto equip = g.IntArray(kPouchKeys[p].equip);
+    if (!equip || equip->empty())
+        return std::nullopt;
+    return (*equip)[0];
+}
+
+// One pouch in save order, empty names skipped. Equipped: index == EquipIndex[0], when known.
 inline std::vector<Item> ReadPouch(const GameData& g, Pouch p) {
     const PouchKeys& k = kPouchKeys[p];
     const auto names = g.String64Array(k.name);
@@ -232,8 +253,7 @@ inline std::vector<Item> ReadPouch(const GameData& g, Pouch p) {
     const auto fused = g.String64Array(k.combined);
     const auto effects = g.EnumArray(k.effect);
     const auto recover = g.IntArray(k.life_recover);
-    const auto equip = g.IntArray(k.equip);
-    const std::int64_t equipped = p != kArmor && equip && !equip->empty() ? (*equip)[0] : -1;
+    const auto equipped = EquipIndex(g, p);
     std::vector<Item> out;
     for (std::size_t i = 0; i < names->size() && out.size() < kMaxItems; ++i) {
         const std::string& id = (*names)[i];
@@ -242,8 +262,8 @@ inline std::vector<Item> ReadPouch(const GameData& g, Pouch p) {
         Item it;
         it.id = id;
         it.icon = IconKey(id);
-        it.slot = std::uint32_t(i);
-        it.equipped = std::int64_t(i) == equipped;
+        if (equipped)
+            it.equipped = std::int64_t(i) == *equipped;
         if (const auto* v = At(values, i); v && p != kArmor) {
             it.kind = durability ? 1 : 2;
             it.value = *v;
@@ -276,10 +296,12 @@ inline Snapshot BuildSnapshot(const GameData& g) {
     for (int p = 0; p < 9; ++p)
         pouches[p] = detail::ReadPouch(g, Pouch(p));
     constexpr Pouch kGearPouch[kGearSlots] = {kWeapon, kBow, kShield, kArrow};
-    for (int i = 0; i < kGearSlots; ++i)
+    for (int i = 0; i < kGearSlots; ++i) {
+        s.gear_known[i] = detail::EquipIndex(g, kGearPouch[i]).has_value();
         for (const Item& it : pouches[kGearPouch[i]])
-            if (it.equipped)
+            if (it.equipped == true)
                 s.gear[i] = it;
+    }
 
     for (int a = 0; a < kAbilities; ++a)
         s.owned[a] = g.Bool(kAbilityKeys[a][0]).value_or(false) &&

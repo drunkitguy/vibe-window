@@ -15,6 +15,8 @@
 #include <unordered_map>
 #include <vector>
 
+#include "core/mods/modules/dsmod_module_sdk.h"
+
 namespace totk {
 
 // MurmurHash3 x86_32, seed 0: GameData key and enum value hashes [S28 §3][S29].
@@ -52,6 +54,7 @@ static_assert(Murmur3("PlayerStatus.SavePos") == 0xc884818d);
 static_assert(Murmur3("PlayerStatus.Life") == 0x31ab5580);
 static_assert(Murmur3("Pouch.Material.Content.Name") == 0xd96ebf12);
 static_assert(Murmur3("Pouch.Weapon.Content.Name") == 0x65efd0be);
+static_assert(Murmur3("MapData.IconData.StampData.Type") == 0x14d7f4c4);
 static_assert(Murmur3("") == 0 && Murmur3("a") != Murmur3("b")); // tail-only and empty paths
 
 enum class GdType : std::uint32_t {
@@ -129,19 +132,21 @@ public:
     std::optional<std::vector<std::uint32_t>> EnumArray(std::uint32_t hash) const {
         return Words<std::uint32_t>(Find(hash, GdType::EnumArray));
     }
-    // Each string ends at its first NUL (Parse rejected arrays with a 64-byte string lacking one).
+    // Each string ends at its first NUL; a 64-byte string without one rejects the whole array.
+    // Checked here, per lookup, so Parse stays linear in the file size.
     std::optional<std::vector<std::string>> String64Array(std::uint32_t hash) const {
         const Entry* e = Find(hash, GdType::String64Array);
         if (!e)
             return std::nullopt;
         std::vector<std::string> out(e->count);
-        for (std::uint32_t i = 0; i < e->count; ++i)
-            out[i] = reinterpret_cast<const char*>(&bytes_[e->value + 64 * std::size_t(i)]);
+        for (std::uint32_t i = 0; i < e->count; ++i) {
+            const char* s = reinterpret_cast<const char*>(&bytes_[e->value + 64 * std::size_t(i)]);
+            const void* nul = std::memchr(s, 0, 64);
+            if (!nul)
+                return std::nullopt;
+            out[i].assign(s, static_cast<const char*>(nul));
+        }
         return out;
-    }
-
-    std::size_t size() const {
-        return entries_.size();
     }
 
 private:
@@ -153,9 +158,7 @@ private:
     };
 
     std::uint32_t U32(std::size_t at) const {
-        std::uint32_t v;
-        std::memcpy(&v, &bytes_[at], 4);
-        return v;
+        return dsmod_sdk::Le32(&bytes_[at]);
     }
     static float BitFloat(std::uint32_t bits) {
         float f;
@@ -192,12 +195,6 @@ private:
             const std::uint64_t elem = GdType(type) == GdType::String64Array ? 64 : 4;
             if (!Fits(e.value, e.count, elem))
                 return;
-            if (elem == 64)
-                for (std::uint32_t i = 0; i < e.count; ++i) {
-                    const std::uint8_t* s = &bytes_[e.value + 64 * std::size_t(i)];
-                    if (!std::memchr(s, 0, 64))
-                        return;
-                }
             break;
         }
         default:
@@ -220,8 +217,8 @@ private:
         if (!e)
             return std::nullopt;
         std::vector<T> out(e->count);
-        if (e->count)
-            std::memcpy(out.data(), &bytes_[e->value], 4 * std::size_t(e->count));
+        for (std::uint32_t i = 0; i < e->count; ++i)
+            out[i] = T(U32(e->value + 4 * std::size_t(i)));
         return out;
     }
 

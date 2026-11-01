@@ -54,10 +54,20 @@ int main() {
         auto missing = Caption(2026, 1, 1, 0, 0, false);
         totk::test::PutU32(missing, 0x28 + 8 * 3, 0); // the day key
         d.Put(CaptionPath(4), missing);
-        d.Put(CaptionPath(5), Caption(2026, 13, 1, 0, 0, false));
+        assert(totk::NewestSlot(d.api)->slot == 5);
+        d.Put(CaptionPath(5), std::vector<std::uint8_t>(0x1C0, 0xFF));
         assert(totk::NewestSlot(d.api)->slot == 2);
-        d.Put(CaptionPath(5), Caption(2026, 1, 1, 24, 0, false));
-        assert(totk::NewestSlot(d.api)->slot == 2);
+        // Each date field just outside its range (and the edges just inside).
+        const std::uint32_t bad_dates[][4] = {{0, 1, 0, 0},  {13, 1, 0, 0}, {1, 0, 0, 0},
+                                              {1, 32, 0, 0}, {1, 1, 24, 0}, {1, 1, 0, 60}};
+        for (const auto& b : bad_dates) {
+            d.Put(CaptionPath(5), Caption(2026, b[0], b[1], b[2], b[3], false));
+            assert(totk::NewestSlot(d.api)->slot == 2);
+        }
+        d.Put(CaptionPath(5), Caption(2026, 12, 31, 23, 59, false));
+        assert(totk::NewestSlot(d.api)->slot == 5);
+        d.Put(CaptionPath(5), Caption(2026, 1, 1, 0, 0, false));
+        assert(totk::NewestSlot(d.api)->slot == 5);
         auto truncated = Caption(2026, 1, 1, 0, 0, false);
         truncated.resize(0x28 + 8 * 5); // the minute and autosave entries are cut off
         d.Put(CaptionPath(5), truncated);
@@ -74,26 +84,38 @@ int main() {
         }
         d.Put(CaptionPath(5), far);
         assert(totk::NewestSlot(d.api)->slot == 2);
+        // ... and the last entry of the table, at 0x1B8, is.
+        totk::test::PutU32(far, 0x1C0, 0);
+        totk::test::PutU32(far, 0x1B8, date[4][0]);
+        totk::test::PutU32(far, 0x1BC, date[4][1]);
+        d.Put(CaptionPath(5), far);
+        assert(totk::NewestSlot(d.api)->slot == 5);
         // Only the first 0x1C0 bytes are asked for.
-        assert(d.Reads(CaptionPath(5)) > 0);
+        assert(d.last_request[CaptionPath(5)] == 0x1C0);
     }
 
     // ---- progress.sav read ----------------------------------------------------------------------
     {
         SaveDir d;
-        assert(!totk::ReadProgress(d.api, 0)); // missing
-        d.Put(ProgressPath(0), FixtureSave().Build());
-        auto g = totk::ReadProgress(d.api, 0);
-        assert(g && g->Int(totk::Murmur3("PlayerStatus.Life")) == 12);
+        const auto read = [&d](int slot) {
+            return totk::ReadProgress(d.api, slot, totk::ProgressSize(d.api, slot));
+        };
+        assert(totk::ProgressSize(d.api, 0) == 0 && !read(0)); // missing
+        const auto save = FixtureSave().Build();
+        d.Put(ProgressPath(0), save);
+        auto bytes = read(0);
+        assert(bytes && *bytes == save);
         assert(d.size_queries[ProgressPath(0)] == 1 && d.Reads(ProgressPath(0)) == 1);
+        assert(d.last_request[ProgressPath(0)] == save.size() + 1);
         // The file grows between the size query and the read: rejected.
         d.grow_after_query = ProgressPath(0);
-        assert(!totk::ReadProgress(d.api, 0));
-        // Too small for a header, or not GameData.
+        assert(!read(0));
+        // A stale size (the file changed since the query) is rejected too.
+        assert(!totk::ReadProgress(d.api, 0, save.size()));
+        // Too small for a header, or over the cap: not even read.
         d.Put(ProgressPath(1), std::vector<std::uint8_t>(0x1F, 0));
-        assert(!totk::ReadProgress(d.api, 1));
-        d.Put(ProgressPath(1), std::vector<std::uint8_t>(0x100, 0));
-        assert(!totk::ReadProgress(d.api, 1));
+        assert(!read(1) && d.Reads(ProgressPath(1)) == 0);
+        assert(!totk::ReadProgress(d.api, 1, totk::GameData::kMaxBytes));
     }
     { // The file shrinks between the size query and the read: rejected.
         SaveDir d;
@@ -107,7 +129,7 @@ int main() {
             return ++calls == 1 ? r : r - 1;
         };
         d.Put(ProgressPath(0), save);
-        assert(!totk::ReadProgress(api, 0));
+        assert(!totk::ReadProgress(api, 0, totk::ProgressSize(api, 0)));
     }
 
     // ---- snapshot -------------------------------------------------------------------------------
@@ -120,7 +142,7 @@ int main() {
 
     // Gear from EquipIndex[0], with fuse and effect labels.
     const auto& weapon = s.gear[0];
-    assert(weapon && weapon->id == "Weapon_Spear_002" && weapon->slot == 2);
+    assert(weapon && weapon->id == "Weapon_Spear_002");
     assert(weapon->kind == 1 && weapon->value == 12);
     assert(weapon->icon == "module:totk:icon/Weapon_Spear_002");
     assert(weapon->fuse_id == "Item_Ruby" && weapon->fuse_icon == "module:totk:icon/Item_Ruby");
@@ -128,14 +150,23 @@ int main() {
     const auto& bow = s.gear[1];
     assert(bow && bow->id == "Weapon_Bow_001" && bow->value == 40 && bow->fuse_id.empty() &&
            std::string(bow->effect) == "Rapid Fire");
-    assert(!s.gear[2]); // shield EquipIndex -1
+    assert(s.gear_known == (std::array<bool, 4>{true, true, true, true}));
+    assert(!s.gear[2]); // shield EquipIndex -1: known, nothing equipped
     const auto& arrow = s.gear[3];
     assert(arrow && arrow->id == "FireArrow" && arrow->kind == 2 && arrow->value == 7);
-    // EquipIndex out of range, on an empty name, or missing: not present.
-    assert(!Snap(FixtureSave(3)).gear[0]);
-    assert(!Snap(FixtureSave(1)).gear[0]);
-    assert(!Snap(FixtureSave(-5)).gear[0]);
-    assert(!Snap(FixtureSave(0x7FFFFFFF)).gear[0]);
+    // EquipIndex out of range or on an empty name: known, not present.
+    for (std::int32_t index : {3, 1, -5, 0x7FFFFFFF}) {
+        const auto o = Snap(FixtureSave(index));
+        assert(o.gear_known[0] && !o.gear[0]);
+    }
+    { // No EquipIndex (or an empty one): not known, and no item says equipped or not.
+        const auto o = Snap(FixtureSave(std::nullopt));
+        assert(!o.gear_known[0] && !o.gear[0] && o.gear_known[1]);
+        assert(!o.tabs[0][0].equipped && !o.tabs[0][1].equipped);
+        SaveBuilder b;
+        b.String64Array("Pouch.Bow.Content.Name", {"Weapon_Bow_001"}).IntArray("Pouch.Bow.EquipIndex", {});
+        assert(!Snap(b).gear_known[1] && !Snap(b).tabs[1][0].equipped);
+    }
     assert(Snap(FixtureSave(0)).gear[0]->id == "Weapon_Sword_001");
     assert(std::string(Snap(FixtureSave(0)).gear[0]->effect).empty()); // None -> ""
 
@@ -163,11 +194,17 @@ int main() {
     assert((ids(3) == V{"Armor_001_Head", "Armor_001_Upper"}));
     assert((ids(4) == V{"Item_Fruit_A"}) && (ids(5) == V{"Item_Cook_A"}));
     assert((ids(6) == V{"SpecialParts_Fan"}) && (ids(7) == V{"Obj_KeyItem_X"}));
-    assert(!s.tabs[0][0].equipped && s.tabs[0][1].equipped);
-    assert(s.tabs[1][0].equipped && !s.tabs[1][1].equipped && s.tabs[1][2].equipped);
-    assert(!s.tabs[2][0].equipped);
-    assert(!s.tabs[3][0].equipped && s.tabs[3][0].kind == 0); // armor: no equip key, no value
+    assert(s.tabs[0][0].equipped == false && s.tabs[0][1].equipped == true);
+    assert(s.tabs[1][0].equipped == true && s.tabs[1][1].equipped == false &&
+           s.tabs[1][2].equipped == true);
+    assert(s.tabs[2][0].equipped == false);
+    assert(s.tabs[4][0].equipped == std::nullopt); // no Pouch.Material.EquipIndex
+    // Armor: the equip key is UNKNOWN (the fixture's Pouch.Armor.EquipIndex is ignored) and armor
+    // has no value (the fixture's Pouch.Armor.Content.StockNum is ignored).
+    assert(!s.tabs[3][0].equipped && !s.tabs[3][1].equipped);
+    assert(s.tabs[3][0].kind == 0 && s.tabs[3][1].kind == 0);
     assert(s.tabs[4][0].kind == 2 && s.tabs[4][0].value == 5 && !s.tabs[4][0].effect);
+    assert(!s.tabs[5][0].effect); // food Effect.Type (AttackUp) gets no gear label
     assert(s.tabs[5][0].hearts == 20 && !s.tabs[4][0].hearts);
     assert(std::string(s.tabs[2][0].effect) == "Guard Up" && s.tabs[2][0].fuse_id.empty());
 
@@ -199,6 +236,21 @@ int main() {
         b.Float("PlayerStatus.MaxEnergy", INFINITY).Vector3("PlayerStatus.SavePos", NAN, 0, 0);
         const auto e = Snap(b);
         assert(!e.max_battery && !e.position);
+        SaveBuilder z;
+        z.Vector3("PlayerStatus.SavePos", 1, 2, NAN); // z is the published y
+        assert(!Snap(z).position);
+        SaveBuilder y;
+        y.Vector3("PlayerStatus.SavePos", 1, NAN, 2); // height is not published
+        assert(Snap(y).position);
+    }
+    // Battery beyond the cap (|x| < 1e9, so x100 always fits): absent; just inside: rounded.
+    for (const auto& [energy, expected] :
+         std::initializer_list<std::pair<float, std::optional<std::int64_t>>>{
+             {2e9f, std::nullopt}, {-2e9f, std::nullopt}, {1e9f, std::nullopt},
+             {999999.94f, 99999994}, {-0.004f, 0}, {2.345f, 235}}) {
+        SaveBuilder b;
+        b.Float("PlayerStatus.MaxEnergy", energy);
+        assert(Snap(b).max_battery == expected);
     }
 
     std::puts("totk_save_test: ok");

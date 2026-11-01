@@ -22,7 +22,7 @@ using totk::test::SaveDir;
 // tracked so the test sees Destroy free it.
 namespace {
 std::atomic<long> g_live_blocks{0};
-thread_local long t_news = 0;
+thread_local long t_news = 0, t_deletes = 0;
 int g_nothrow_news = 0;
 void* g_nothrow_live = nullptr;
 } // namespace
@@ -44,6 +44,7 @@ void operator delete(void* p) noexcept {
     if (!p)
         return;
     --g_live_blocks;
+    ++t_deletes;
     if (p == g_nothrow_live)
         g_nothrow_live = nullptr;
     std::free(p);
@@ -64,7 +65,22 @@ const EdenDsmodModuleSaveExtensions* SaveExt() {
     return eden_dsmod_get_save_extensions(EDEN_DSMOD_SAVE_EXT_VERSION, EDEN_DSMOD_SAVE_EXT_HASH);
 }
 
-// Ask the worker for a poll and wait until one that started after the request has finished.
+// Wait until a poll that started after poll request `generation` has finished. The deadline is
+// well under the 2 s poll interval, so a lost wake-up fails instead of passing slowly.
+void WaitPoll(Instance& in, std::uint64_t generation) {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(1);
+    while (std::chrono::steady_clock::now() < deadline) {
+        {
+            std::scoped_lock lock{in.mutex};
+            if (in.completed >= generation)
+                return;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    assert(!"the worker did not poll within 1 s");
+}
+
+// Ask the worker for a poll and wait for it.
 void PollNow(void* instance) {
     auto& in = *static_cast<Instance*>(instance);
     std::uint64_t generation;
@@ -73,15 +89,19 @@ void PollNow(void* instance) {
         generation = ++in.requested;
     }
     in.wake.notify_all();
-    for (int i = 0; i < 30000; ++i) {
-        {
-            std::scoped_lock lock{in.mutex};
-            if (in.completed >= generation)
-                return;
-        }
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    WaitPoll(in, generation);
+}
+
+// configure, then wait for the poll it asks for (so the polls after it are counted exactly).
+void Configure(const EdenDsmodModuleSaveExtensions* se, void* instance, SaveDir& dir) {
+    se->configure(instance, &dir.api);
+    auto& in = *static_cast<Instance*>(instance);
+    std::uint64_t generation;
+    {
+        std::scoped_lock lock{in.mutex};
+        generation = in.requested;
     }
-    assert(!"the worker did not poll within 30 s");
+    WaitPoll(in, generation);
 }
 
 std::string Slot(int n, const char* file) {
@@ -190,15 +210,18 @@ int main() {
     assert(h.ints == empty);
 
     // An empty save directory: no slots, nothing published.
-    se->configure(instance, &none.api);
+    Configure(se, instance, none);
     PollNow(instance);
     SampleClean(m, instance, h);
     assert(h.ints == empty && h.texts.empty());
 
-    // The fixture save: the newest slot (1) is read once and published.
-    se->configure(instance, &d.api);
+    // The fixture save: the newest slot (1) is taken once two reads in a row match.
+    Configure(se, instance, d); // configure's own poll: the first read
+    assert(d.Reads(Slot(1, "progress.sav")) == 1);
+    SampleClean(m, instance, h);
+    assert(h.ints == empty);
     PollNow(instance);
-    assert(d.Reads(Slot(1, "progress.sav")) == 1 && d.Reads(Slot(0, "progress.sav")) == 0);
+    assert(d.Reads(Slot(1, "progress.sav")) == 2 && d.Reads(Slot(0, "progress.sav")) == 0);
     SampleClean(m, instance, h);
     const Host::Ints page0{
         {"totk.ready", 1},
@@ -288,9 +311,13 @@ int main() {
     in.sel = 0;
     SampleClean(m, instance, h);
     assert(h.ints.at("totk.inv.sel.hearts") == 20 && h.ints.at("totk.inv.sel.value") == 1);
-    in.tab = 3; // armor: kind 0, no value
+    in.tab = 3; // armor: kind 0, no value, equipped not known
     SampleClean(m, instance, h);
-    assert(h.ints.at("totk.inv.0.kind") == 0 && !h.ints.contains("totk.inv.0.value"));
+    assert(h.ints.at("totk.inv.0.kind") == 0 && !h.ints.contains("totk.inv.0.value") &&
+           !h.ints.contains("totk.inv.0.equipped"));
+    in.tab = 4; // materials: no EquipIndex, so equipped not known
+    SampleClean(m, instance, h);
+    assert(h.ints.at("totk.inv.0.value") == 5 && !h.ints.contains("totk.inv.0.equipped"));
     in.sel = 9; // past the list: no selection keys
     in.tab = 99; // out of range: counts only, no list
     SampleClean(m, instance, h);
@@ -305,38 +332,78 @@ int main() {
     // Unchanged captions: no re-read.
     PollNow(instance);
     PollNow(instance);
-    assert(d.Reads(Slot(1, "progress.sav")) == 1);
+    assert(d.Reads(Slot(1, "progress.sav")) == 2);
 
-    // A newer slot whose progress.sav is missing, then garbage, then changes size between the
-    // size query and the read: each keeps the previous snapshot (and is retried every poll).
+    // A newer slot whose progress.sav is missing, then garbage: the previous snapshot stays.
+    // Garbage is read 8 times at most, until its caption date or file size changes.
+    const std::string p4 = Slot(4, "progress.sav");
     d.Put(Slot(4, "caption.sav"), Caption(2024, 2, 1, 8, 0, true));
     PollNow(instance);
+    assert(d.Reads(p4) == 0);
     SampleClean(m, instance, h);
     assert(h.ints == page0);
-    d.Put(Slot(4, "progress.sav"), std::vector<std::uint8_t>(64, 0x5A));
-    PollNow(instance);
-    assert(d.Reads(Slot(4, "progress.sav")) == 1);
+    d.Put(p4, std::vector<std::uint8_t>(64, 0x5A));
+    for (int i = 0; i < 10; ++i)
+        PollNow(instance);
+    assert(d.Reads(p4) == 8);
     SampleClean(m, instance, h);
     assert(h.ints == page0);
-    d.Put(Slot(4, "progress.sav"), SaveBuilder().Int("PlayerStatus.Life", 33).Build());
-    {
-        std::scoped_lock lock{d.mutex};
-        d.grow_after_query = Slot(4, "progress.sav");
-    }
+    // A new size: tried again. It changes size between the size query and the read (rejected),
+    // then reads the same twice and replaces the shown save.
+    d.Put(p4, SaveBuilder().Int("PlayerStatus.Life", 33).Build());
+    d.GrowAfterQuery(p4);
     PollNow(instance);
-    assert(d.Reads(Slot(4, "progress.sav")) == 2);
+    assert(d.Reads(p4) == 9);
+    PollNow(instance);
+    assert(d.Reads(p4) == 10);
     SampleClean(m, instance, h);
     assert(h.ints == page0);
-    // Next poll reads it (the file no longer changes): the new save replaces the old one.
     PollNow(instance);
-    assert(d.Reads(Slot(4, "progress.sav")) == 3);
+    assert(d.Reads(p4) == 11);
     SampleClean(m, instance, h);
     assert(h.ints.at("totk.status.hearts") == 33 && !h.ints.contains("totk.status.max_hearts"));
-    assert(h.ints.at("totk.gear.weapon.present") == 0 && h.ints.at("totk.map.valid") == 0);
+    // No Pouch.<P>.EquipIndex in this save: equipped is not known, so .present is absent.
+    for (const char* slot : kGearSlotNames)
+        assert(!h.ints.contains(std::string("totk.gear.") + slot + ".present"));
+    assert(h.ints.at("totk.gear.valid") == 1 && h.ints.at("totk.map.valid") == 0);
     assert(h.ints.at("totk.inv.tab0.count") == 0 && h.texts.empty() && h.floats.empty());
-    // Back to the fixture as the newest (a manual save on the same minute beats the autosave).
-    d.Put(Slot(1, "caption.sav"), Caption(2024, 2, 1, 8, 0, false));
     PollNow(instance);
+    assert(d.Reads(p4) == 11); // shown: no re-read
+
+    // Back to slot 1 (a manual save on the same minute beats the autosave), whose caption is
+    // written before its progress.sav: the first read sees the old file, then the new one lands
+    // (same size, in place). The new content must win, not the old one.
+    std::weak_ptr<const totk::Snapshot> old_snapshot;
+    std::shared_ptr<const totk::Snapshot> held; // what a sample holds across the swap
+    {
+        std::scoped_lock lock{in.mutex};
+        held = in.snapshot;
+        old_snapshot = held;
+    }
+    d.Put(Slot(1, "caption.sav"), Caption(2024, 2, 1, 8, 0, false));
+    PollNow(instance); // reads slot 1's old progress.sav (the fixture with the spear)
+    const auto weapon_sword = FixtureSave(0).Build();
+    assert(weapon_sword.size() == FixtureSave().Build().size());
+    d.Put(Slot(1, "progress.sav"), weapon_sword);
+    PollNow(instance);
+    SampleClean(m, instance, h);
+    assert(h.ints.at("totk.status.hearts") == 33); // nothing taken yet
+    PollNow(instance);
+    SampleClean(m, instance, h);
+    assert(h.texts.at("totk.gear.weapon.id") == "Weapon_Sword_001");
+    // The worker keeps the replaced snapshot for one more swap, so the sample's copy is not the
+    // last owner: releasing it here frees nothing on this thread.
+    {
+        const long deletes = t_deletes;
+        held.reset();
+        assert(t_deletes == deletes && !old_snapshot.expired());
+    }
+    // Back to the fixture (a newer caption); the worker frees the snapshot retired above.
+    d.Put(Slot(1, "caption.sav"), Caption(2024, 2, 1, 8, 1, false));
+    d.Put(Slot(1, "progress.sav"), FixtureSave().Build());
+    PollNow(instance);
+    PollNow(instance);
+    assert(old_snapshot.expired());
     SampleClean(m, instance, h);
     assert(h.ints == page0 && h.texts == page0_text);
 
@@ -402,10 +469,15 @@ int main() {
         void* cycle = m->create(&c.api, "{}");
         assert(cycle);
         se->configure(cycle, &cycles.api);
-        if (i % 10 == 0 || i < 0)
+        if (i % 10 == 0 || i < 0) {
             PollNow(cycle);
+            PollNow(cycle);
+        }
         m->sample(cycle, &c.api);
+        // destroy wakes the worker: it must not wait out the 2 s poll interval.
+        const auto start = std::chrono::steady_clock::now();
         m->destroy(cycle);
+        assert(std::chrono::steady_clock::now() - start < std::chrono::milliseconds(500));
         assert(g_nothrow_live == nullptr);
     }
     assert(g_live_blocks == live_before);
