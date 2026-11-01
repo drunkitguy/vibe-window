@@ -52,8 +52,17 @@ jobs:
             -DENABLE_QT=OFF -DYUZU_TESTS=ON -DYUZU_ROOM=OFF -DENABLE_WEB_SERVICE=OFF
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           # -k 0: report every compile error in one run, not just the first
-          cmake --build build --target yuzu-cmd tests -- -k 0
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake --build build --target yuzu-cmd tests -- -k 0 2>&1 | Tee-Object -FilePath build.log
+          $buildExit = $LASTEXITCODE
+          if ($buildExit -ne 0) {
+            # One short line per distinct error, so the end of the log is enough to fix them all
+            Write-Host "==== compile errors ===="
+            Select-String -Path build.log -Pattern ': (fatal )?error [A-Z]+[0-9]+' |
+              ForEach-Object { $_.Line -replace '^.*\\eden-duo\\', '' } |
+              ForEach-Object { if ($_.Length -gt 300) { $_.Substring(0, 300) } else { $_ } } |
+              Sort-Object -Unique | Write-Host
+            exit $buildExit
+          }
           ./build/bin/tests.exe "[dsmod]"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
