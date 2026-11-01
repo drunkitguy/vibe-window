@@ -44,8 +44,8 @@ Everything below is blocked on you, in this order. Send logs, `.shot` files and 
    native size, tap error under 2 px, no added frame drops at 60 fps.
 5. **T2.** You play **1.2.0** (D2, answered). Send `xxd -s 0x40 -l 32 -p main` from
    `eden-cli --dump-romfs` of base + update, so T2 confirms the 1.2.0 build id T2a sets.
-6. **Approve vendoring zstd (T3a)** when the coder asks: four files from the PyPI `zstandard`
-   0.23.0 sdist, hashes in §T3a. TotK's romfs is zstd and the runtime has no decoder.
+6. **Vendoring zstd (T3a): approved by the user.** Four files from the PyPI `zstandard` 0.23.0
+   sdist, hashes in §T3a. The user also chose to stay on 1.2.0 for memory work (D2b).
 7. **T8 (after T4-T7 are coded here).** Install the package on the PC, load a save, and send the
    `.shot` pictures and `DSMod` log lines listed in §T8. This is the first time icons, names and
    map tiles from your romfs and values from your save are seen.
@@ -299,12 +299,12 @@ Doable in this Linux container now (no game, no Windows, no Thor):
 
 | # | Packet | Depends | Status |
 |---|---|---|---|
-| 0 | Decisions: D1 host path = **C** (user, done); D2 target version = **1.2.0** (user, done); D2b stay on 1.2.0 for T3 or update | - | D1, D2 done; D2b blocked: user (only blocks T3) |
+| 0 | Decisions: D1 host path = **C** (user, done); D2 target version = **1.2.0** (user, done); D2b = **stay on 1.2.0** (user, done); zstd vendoring = **approved** (user) | - | done |
 | H1a | Eden Duo: native modules on Windows (loader, harness compile fix, tests), as patches | - | done: `host/eden-duo/0001-0003` + `host/eden-duo-companions/0001`; loader Catch2 tests pass standalone; full eden-duo build blocked (proxy 403 on CPM fmt download), real-Windows checks in H1c; critic SATISFIED round 3 |
 | T1 | TotK package skeleton: build gate, fail-closed reader, tests; Linux `.so` and Windows DLL; `.dsmod.zip` | H1a (builder patch) | done: `2c482b6` (+ plan `911aed8`); gcc/clang/MinGW builds and ctest pass (MinGW under wine), single export, package + wine probe pass; critic SATISFIED round 3 |
 | H1b | eden-cli composite layout: `--window-rect`, `--aux-rect`, borderless, aux not focusable | H1a | done: `afe952e`, patch 0004 adds `--window-rect`/`--aux-rect` (borderless, hidden until placed), non-focusable aux, 640x360 main floor, 32767 bound, ledger rows; parser tests pass natively and under wine; SDL and harness code compile-checked only in H1c; critic SATISFIED round 3 |
 | T2a | Retarget the skeleton to 1.2.0 (`kTargetBuild`, data file name, tests) | T1 | doing |
-| T3a | Romfs assets in the module: vendored zstd + `ZsDic` dictionaries, SARC, BNTX + deswizzle + host ASTC, MSBT names; `load_image` in T4's base extensions | T2a, T4, zstd decision (user) | todo |
+| T3a | Romfs assets in the module: vendored zstd + `ZsDic` dictionaries, SARC, BNTX + deswizzle + host ASTC, MSBT names; `load_image` in T4's base extensions | T2a, T4 (zstd approved by the user) | todo |
 | T3s | Save reader: newest `slot_0N`, `progress.sav` GameData by murmur3 hash, domain snapshots (status, gear, pouches, abilities, position); save extension export; module worker thread | T2a | doing |
 | T4 | Shell + Gear page (status strip = Ready v1, 4 equipped cards, 3 armor cards), tab bar, notice overlay, base extensions (`configure`, `on_action`), manifest generator + checker; names fall back to ids and icons stay blank until T3a | T3s | todo |
 | T5 | Abilities page: 7 ability tiles from owned flags, battery, refused select action | T4 | todo |
@@ -1076,8 +1076,8 @@ path differs on 1.2.0) the pages still show ids, numbers and empty picture slots
 | Item | For | What exactly |
 |---|---|---|
 | D2 target version | T2a, T2 | Answered: 1.2.0 |
-| D2b | T3 only | Stay on 1.2.0 for memory work (almost no public leads) or update to 1.2.1 / 1.4.3 |
-| Approve vendoring zstd | T3a | The four zstd 1.5.6 files from the PyPI `zstandard` 0.23.0 sdist (hashes in §T3a); the session's classifier refused compiling downloaded code |
+| D2b | T3 only | Answered: stay on 1.2.0 |
+| Approve vendoring zstd | T3a | Answered: approved by the user (zstd 1.5.6 files from the PyPI `zstandard` 0.23.0 sdist, hashes in §T3a) |
 | T8 run | T8 | Package installed in the CI-built eden-cli, one save loaded, `.shot` pictures per page, `totk`/`DSMod` log lines, values compared with the game |
 | eden-duo fork + Windows build | H1c | A fork repo for the H1 patches, and either a Windows build on their PC (MSVC + Ninja, `tools/windows/load-msvc-env.ps1` [S1 docs/Build.md]) or a GitHub Actions Windows runner in the fork |
 | Windows tests | H1c, H2 | Install the window-host MSI from `apollo2-vibe` branch `claude/clever-clarke-k7hhhj`, add the "TotK duo" app (H2), run the H1c and H2 checks; send host logs and `.shot` screenshots |
