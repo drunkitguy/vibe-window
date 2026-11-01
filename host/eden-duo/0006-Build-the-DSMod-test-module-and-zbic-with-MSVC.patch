@@ -1,0 +1,52 @@
+From 6a2e672e1ec2f2d74bac5c9d3219cbcd6a53efa1 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 1 Nov 2026 19:15:25 +0000
+Subject: [PATCH] Build the DSMod test module and zbic with MSVC
+
+fake_module.cpp: dllexport on the definitions is a different linkage from the
+SDK's declarations (C2375); export the two entry points by name with
+/EXPORT instead. zbic_compression.cpp: its bundled zstd.c leaves many static
+functions unused, which /we4505 turns into errors; silence C4505 for that one
+file as the GCC/Clang options already do.
+---
+ src/common/CMakeLists.txt           | 2 +-
+ src/tests/core/mods/fake_module.cpp | 9 +++++----
+ 2 files changed, 6 insertions(+), 5 deletions(-)
+
+diff --git a/src/common/CMakeLists.txt b/src/common/CMakeLists.txt
+index 7b36321..a559eec 100644
+--- a/src/common/CMakeLists.txt
++++ b/src/common/CMakeLists.txt
+@@ -151,7 +151,7 @@ add_library(
+ 
+ set_source_files_properties(zbic_compression.cpp PROPERTIES
+     INCLUDE_DIRECTORIES "${ZBIC_INCLUDE_DIR}"
+-    COMPILE_OPTIONS "$<$<CXX_COMPILER_ID:Clang,GNU>:-Wno-unused-function;-Wno-missing-declarations;-Wno-shadow>")
++    COMPILE_OPTIONS "$<$<CXX_COMPILER_ID:Clang,GNU>:-Wno-unused-function;-Wno-missing-declarations;-Wno-shadow>;$<$<CXX_COMPILER_ID:MSVC>:/wd4505>")
+ 
+ if(WIN32)
+     target_sources(common PRIVATE windows/timer_resolution.cpp
+diff --git a/src/tests/core/mods/fake_module.cpp b/src/tests/core/mods/fake_module.cpp
+index d90fbf2..b9e81cd 100644
+--- a/src/tests/core/mods/fake_module.cpp
++++ b/src/tests/core/mods/fake_module.cpp
+@@ -6,11 +6,12 @@
+ #include "core/mods/dsmod_module_abi.h"
+ #include "core/mods/dsmod_module_extensions.h"
+ 
+-// MSVC exports nothing from a DLL by default.
+-#ifdef _WIN32
+-#define DSMOD_TEST_EXPORT __declspec(dllexport)
+-#else
++// MSVC exports nothing from a DLL by default. dllexport on the definitions clashes with the SDK's
++// plain declarations (C2375), so export by name instead; MinGW exports every global already.
+ #define DSMOD_TEST_EXPORT
++#ifdef _MSC_VER
++#pragma comment(linker, "/EXPORT:eden_dsmod_get_module")
++#pragma comment(linker, "/EXPORT:eden_dsmod_get_data_extensions")
+ #endif
+ 
+ namespace {
+-- 
+2.43.0
+
