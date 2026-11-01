@@ -406,11 +406,14 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
         if (prefConfig.dualScreen) {
             // readPreferences already turned off full external display, 3D and PiP
             // The display Game is really on (the intent extra defaults to 0 even when launched elsewhere)
-            dualScreenDisplay = ServerHelper.getOtherDisplay(this, getWindowManager().getDefaultDisplay().getDisplayId());
+            Display gameDisplay = getWindowManager().getDefaultDisplay();
+            dualScreenDisplay = ServerHelper.getOtherDisplay(this, gameDisplay.getDisplayId());
             if (dualScreenDisplay == null) {
                 LimeLog.warning("Dual screen: no second display; streaming normally");
                 prefConfig.dualScreen = false;
             } else {
+                // Display mode, refresh rate and frame pacing follow that display (onExternelDisplay stays false)
+                currentDisplay = gameDisplay;
                 // Request the composite mode
                 DualScreenLayout.Mode mode = DualScreenLayout.mode(true, prefConfig.width, prefConfig.height, prefConfig.fps);
                 prefConfig.width = mode.width;
