@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - claude/clever-clarke-k7hhhj
+      - claude/practical-mccarthy-f7wf2f
     # The TV app has its own workflow (tv-release.yml).
     paths-ignore:
       - 'tv/**'
@@ -177,6 +178,10 @@ jobs:
             Install: download the APK below, open it on the device and allow installs from your browser or file manager. Verify with the `.sha256` file if you like.
 
             Defaults: Auto resolution and frame rate (match the display), virtual display on, "Show only the app window" on, frame pacing Balanced, Motion on.
+
+            **New in 1.5.0**
+
+            - Dual screen (AYN Thor and other devices with a second display): a new setting next to the window-only options. It asks the host for a 1920x2160 stream and shows the top 1920x1080 on the main screen and the bottom 1240x1080 on the second screen, 1:1. Taps on either screen go to the matching spot on the PC, so the bottom screen drives a second app window such as an Eden Duo companion. Full external display, 3D, picture-in-picture and HDR are off while it is on. Off by default, and only shown when a second display is present.
 
             **Fixes in 1.4.10**
 
