@@ -51,7 +51,7 @@ int main() {
     assert(m->supports_build(totk::kTargetBuild));
     assert(!m->supports_build(nullptr));
     assert(!m->supports_build(""));
-    assert(!m->supports_build("9B4E43650501A4D4"));
+    assert(!m->supports_build("6F32C68DD3BC7D77"));
     assert(!m->supports_build("277178B7DBA1B6D4949A84778D4ABC58B31B34F5000000000000000000000000"));
     assert(!m->supports_build("8E9978D50BDD20B4C8395A106C27FFDE00000000000000000000000000000000"));
 
