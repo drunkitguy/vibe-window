@@ -1,0 +1,71 @@
+name: Eden Duo Windows
+
+# Builds Eden Duo's eden-cli for Windows x64 from igawa6/eden-duo with the patches in host/eden-duo
+# (native companion modules on Windows, --window-rect / --aux-rect). Eden Duo itself ships Android only.
+on:
+  push:
+    branches:
+      - claude/practical-mccarthy-f7wf2f
+    paths:
+      - 'host/eden-duo/**'
+      - '.github/workflows/eden-duo-windows.yml'
+  workflow_dispatch:
+
+permissions: {}
+
+env:
+  EDEN_DUO_REF: v1.3.2.2
+
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 300
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          path: vibe-window
+
+      - name: Fetch Eden Duo and apply the patches
+        shell: bash
+        run: |
+          git clone --depth 1 --branch "$EDEN_DUO_REF" https://github.com/igawa6/eden-duo.git eden-duo
+          cd eden-duo
+          git -c user.name=ci -c user.email=ci@localhost am ../vibe-window/host/eden-duo/000*.patch
+
+      - name: Install the Vulkan SDK
+        shell: pwsh
+        run: ./eden-duo/tools/windows/install-vulkan-sdk.ps1
+
+      - name: Configure, build and test
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          . ./eden-duo/tools/windows/load-msvc-env.ps1
+          # Eden needs CMake 3.31+; take CMake and Ninja from pip, ahead of Visual Studio's copies
+          python -m pip install --quiet cmake ninja
+          $scripts = python -c "import sysconfig; print(sysconfig.get_path('scripts'))"
+          $env:PATH = "$scripts;$env:PATH"
+          cmake --version
+          cmake -S eden-duo -B build -G Ninja -DCMAKE_BUILD_TYPE=Release `
+            -DENABLE_QT=OFF -DYUZU_TESTS=ON -DYUZU_ROOM=OFF -DENABLE_WEB_SERVICE=OFF
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake --build build --target yuzu-cmd tests
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ./build/bin/tests.exe "[dsmod]"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory dist | Out-Null
+          Get-ChildItem build/bin -File | Where-Object { $_.Name -notmatch '^tests' -and $_.Extension -ne '.pdb' } |
+            Copy-Item -Destination dist
+          Get-ChildItem dist
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: eden-duo-windows-x64
+          path: dist/*
+          if-no-files-found: error

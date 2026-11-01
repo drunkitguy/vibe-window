@@ -11,6 +11,8 @@ on:
       - 'tv/**'
       - 'docs/tizen-tv-plan.md'
       - '.github/workflows/tv-release.yml'
+      - 'host/**'
+      - '.github/workflows/eden-duo-windows.yml'
 
 permissions: {}
 
