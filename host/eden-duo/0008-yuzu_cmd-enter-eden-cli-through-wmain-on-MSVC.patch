@@ -1,0 +1,28 @@
+From fe82644ef0c36013b3fe0017542db39f4f177cdc Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 1 Nov 2026 21:54:32 +0000
+Subject: [PATCH] yuzu_cmd: enter eden-cli through wmain on MSVC
+
+Eden compiles with UNICODE, so SDL_main_impl.h defines wmain, not main;
+forcing /ENTRY:mainCRTStartup left main unresolved (LNK2019). Use the
+wide-character CRT entry that calls the wmain SDL provides.
+---
+ src/yuzu_cmd/CMakeLists.txt | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/yuzu_cmd/CMakeLists.txt b/src/yuzu_cmd/CMakeLists.txt
+index a95ced5..43c7e75 100644
+--- a/src/yuzu_cmd/CMakeLists.txt
++++ b/src/yuzu_cmd/CMakeLists.txt
+@@ -56,7 +56,7 @@ endif()
+ if(WIN32)
+     # compile as a win32 gui application instead of a console application
+     if(MSVC)
+-        set_target_properties(yuzu-cmd PROPERTIES LINK_FLAGS_RELEASE "/SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup")
++        set_target_properties(yuzu-cmd PROPERTIES LINK_FLAGS_RELEASE "/SUBSYSTEM:WINDOWS /ENTRY:wmainCRTStartup")
+     elseif(MINGW)
+         set_target_properties(yuzu-cmd PROPERTIES LINK_FLAGS_RELEASE "-Wl,--subsystem,windows")
+     endif()
+-- 
+2.43.0
+
