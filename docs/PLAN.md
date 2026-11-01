@@ -22,6 +22,31 @@ Build order: first the pieces that can be built and tested in this Linux contain
 game (Windows module loading, the TotK skeleton), then the Windows and client work the user must
 run, then the game-dependent companion pages, smallest first.
 
+## Next steps for the user
+
+Everything below is blocked on you, in this order. Send logs, `.shot` files and screenshots back.
+1. **H1c, eden-cli on Windows.** Fork igawa6/eden-duo at `v1.3.2.2`, then
+   `git am host/eden-duo/000*.patch`. Run `tools/windows/load-msvc-env.ps1`, then
+   `cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DYUZU_TESTS=ON -DEDEN_DSMOD_BUILD_DEV_TOOLS=ON`
+   and `cmake --build build`. Then run the five checks in §H1c (stage and rect tests,
+   `tests.exe "[dsmod][module]"`, smoke run, rect minimums, `tools/duo/duo-touched-ledger.sh --check`).
+2. **H2, host.** Install the apollo2-vibe window-host MSI from branch `claude/clever-clarke-k7hhhj`.
+   Turn on Windows taskbar auto-hide (Settings > Personalization > Taskbar > Automatically hide).
+   Keep `virtual_display_mode = per_client` and `virtual_display_layout = exclusive`. Add the app
+   "TotK duo": `eden-cli.exe --aux-window --window-rect 0,0,1920,1080 --aux-rect 0,1080,1240,1080 -g <TotK path>`.
+3. **H3, client.** Build `./gradlew :app:testNonRoot_gameDebugUnitTest :app:assembleNonRoot_gameRelease`
+   (JDK 17, Android SDK). CI (`.github/workflows/release.yml`) runs only on pushes to `main` or
+   `claude/clever-clarke-k7hhhj`, not this plan branch, so push the commits there to get a CI build.
+   Install the APK on the Thor and turn on Settings > "Dual screen".
+4. **H2 + H3 checks on the Thor.** Run every §H2 check: 1920x2160 display, the right target,
+   bottom taps move the companion, taps within 50 px of the bottom edge, controller input after
+   taps. Also check two fingers on each screen at once. Then the §H3 checks: both screens at
+   native size, tap error under 2 px, no added frame drops at 60 fps.
+5. **D2 + T2.** Say which TotK update you play, and send `xxd -s 0x40 -l 32 -p main` from
+   `eden-cli --dump-romfs` of base + update.
+6. **T3.** Provide the dumps (exefs/romfs, kept outside the repo) or run discovery on the PC, plus
+   the test saves listed in "What needs the user".
+
 ## Facts that shape the plan
 
 1. **Runtime.** Eden Duo (GPL-3.0) is the runtime; companions are separate packages in
@@ -231,7 +256,7 @@ Needs the user, a Windows PC, the Thor or another repo:
 |---|---|---|---|
 | H1c | Windows build of the patched fork (MSVC Ninja per [S1 docs/Build.md], `EDEN_DSMOD_BUILD_DEV_TOOLS=ON`), smoke run: TotK package installed, notice page in the aux window, `.shot` screenshots, a tap on the aux window keeps controller input | H1a, H1b, T1 | blocked: user |
 | H2 | apollo2-vibe window-host (`claude/clever-clarke-k7hhhj`): verify the 1920x2160 window-only composite with no host code; H2b (`dualScreen=1` pin) only if a check fails | H1c, H3 | blocked: user |
-| H3 | Vibe Window client (`/home/user/vibe-window` `app/`, plan branch): "Dual screen" setting, split renderer, bottom-screen touch | H1b | todo |
+| H3 | Vibe Window client (`/home/user/vibe-window` `app/`, plan branch): "Dual screen" setting, split renderer, bottom-screen touch | H1b | done: `2d21128`, global Dual screen setting in `app/`; stream split onto the Thor's second display through a `Presentation` using the decoder's transform matrix; pointer ids 0-4 top, 5-9 bottom (host touch max 10); setting-off path behind one `if`; `DualScreenLayoutTest` 13 tests pass + android-all type-check; Gradle, Robolectric and the Thor untested; critic SATISFIED round 4 |
 | T2 | Pin the build: user's `xxd` output replaces `kTargetBuild`; data file renamed; T1 tests rerun | T1, D2, dump | blocked: user |
 | T3 | State discovery on the user's build (Windows dev-tools eden-cli, gdbstub): position + layer, hearts, stamina, rupees, time, weather, temperature, equipped gear with durability; sentinel test, second boot [S3 PORTING_A_GAME §2-3] | T2, H1c | blocked: user |
 | T4 | Ready page v1 = smallest working companion: status + position + equipped gear, read-only | T3 | todo |
