@@ -362,7 +362,7 @@ Needs the user, a Windows PC, the Thor or another repo:
 | T8 | First real run on the PC (romfs paths, save keys, pictures, sample cost), then end-to-end on the Thor through apollo2-vibe | T4v-T7, T8a, H1c (H2, H3 for the Thor part) | blocked: user |
 | T8c | Check live values on the PC (1.2.1): dev-console `chain` reads of every §L2 chain, in-game changes against the HUD, log and profile lines | T3a, T3b, H1c | blocked: user |
 | T8d | GameData index check lines (T3c) and the ability change scan (finds T3d's address) | T3c, H1c | blocked: user |
-| T3L | Live 3D Link figure on the companion (user wants it later): hook TotK's pause-menu Link render to a second target, or `mirror` the menu while paused as a stopgap; deferred by the user until memory work | T3a-T3c | later (user) |
+| T3L | Live 3D Link figure on the companion: dropped by the user (2026-11-02), since the Link in the reference photo is the game's own pause menu, not a companion widget | - | dropped (user) |
 | T9 | Release: `windows-x86_64` module (plus `android-arm64-v8a` only if path A is wanted) | T8 | todo |
 | T10+ | Extensions, one packet each: more live readers (time, weather, temperature, scene/menu state: no lead yet, §L2), actions (guest call on Windows, quick-menu steering with readback, or load-plan helper), map reveal from Skyview Towers, stamps and pins, travel, compass, quests, recipes, item-name language | T9 | todo |
 
