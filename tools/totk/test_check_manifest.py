@@ -75,7 +75,8 @@ class CheckManifestTest(unittest.TestCase):
         for key in ("totk.ready", "totk.gear.arrow.count", "totk.ability.travel.owned",
                     "totk.inv.{i}.icon", "totk.inv.12.icon", "totk.inv.tab7.count"):
             self.assertTrue(listed(key), key)
-        for key in ("totk.gear.head.present", "totk.inv.01.icon", "totk.inv.tab8.count",
+        for key in ("totk.gear.head.present", "totk.inv.01.icon", "totk.inv.0.name",
+                    "totk.inv.tab8.count",
                     "totk.gear.swap", "totk.inv.sel.colour"):
             self.assertFalse(listed(key), key)
         self.assertTrue(listed("totk.names.valid") and listed("totk.inv.sel.caption"))
@@ -475,10 +476,10 @@ class GenManifestTest(unittest.TestCase):
         roles = {
             "slot": self.one(pane, type="rect", rect=[20, 736, 128, 128]),
             "icon": self.one(pane, type="image", src_bind=f"{sel}.icon", rect=[20, 736, 128, 128]),
-            "name": self.one(pane, bind_text=f"{sel}.name", rect=[164, 738, 340, 34],
+            "name": self.one(pane, bind_text=f"{sel}.name", rect=[164, 738, 316, 34],
                              text_scale=6, max_lines=1, fit_text=True),
-            "ring": self.one(pane, type="button", rect=[512, 738, 108, 32], pill=True),
-            "badge": self.one(pane, text="Equipped", align="center", rect=[566, 744, 0, 20]),
+            "ring": self.one(pane, type="button", rect=[488, 738, 132, 32], pill=True),
+            "badge": self.one(pane, text="Equipped", align="center", rect=[554, 744, 0, 20]),
             "durability": self.one(pane, type="value", bind=f"{sel}.value", text="Durability ",
                                    rect=[164, 778, 280, 26], text_scale=5),
             "count": self.one(pane, type="value", bind=f"{sel}.value", text="x",
@@ -590,7 +591,7 @@ class GenManifestTest(unittest.TestCase):
                  need_bind=f"{w}.present")
         self.one(home, rect=[1000, 420, 72, 72], src_bind=f"{w}.fuse_icon",
                  need_bind=f"{w}.fuse")
-        anchors = {122, 320, 566, 620, 936, 1156, 1220} | {104 + 172 * k for k in range(7)} | \
+        anchors = {122, 320, 554, 620, 936, 1156, 1220} | {104 + 172 * k for k in range(7)} | \
             {47 + 78 * k for k in range(8)} | {78 + 78 * k for k in range(8)}
         for page_id, _, _ in gen_manifest.PAGES:
             for wd in self.page(page_id):
@@ -656,6 +657,15 @@ class GenManifestTest(unittest.TestCase):
             for w in self.page(page_id):
                 if w.get("bind_text", "").startswith("totk."):
                     self.assertTrue(w.get("need_bind"), (page_id, w))
+
+    def test_fit_text_floor(self):
+        """Every fit_text label shrinks no smaller than scale 4 (20 px): the runtime's floor is 1,
+        and these are single lines, so text that still does not fit ends in "..." instead."""
+        fits = [w for p in self.m["pages"] for w in p["widgets"] if w.get("fit_text")]
+        self.assertTrue(fits)
+        for w in fits:
+            self.assertGreaterEqual(w.get("text_min_scale", 1), 4, w)
+            self.assertEqual(w.get("max_lines"), 1, w)
 
     def test_notice(self):
         """The notice covers every page while totk.ready is absent or 0, and goes at 1."""

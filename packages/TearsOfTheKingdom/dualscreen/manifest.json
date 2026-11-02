@@ -862,23 +862,24 @@
      "rect": [
       164,
       738,
-      340,
+      316,
       34
      ],
      "bind_text": "totk.inv.sel.name",
      "text_scale": 6,
      "color": "#FFECE5C8",
-     "wrap_width": 340,
+     "wrap_width": 316,
      "max_lines": 1,
      "fit_text": true,
+     "text_min_scale": 4,
      "need_bind": "ui.has.inv.sel.kind"
     },
     {
      "type": "button",
      "rect": [
-      512,
+      488,
       738,
-      108,
+      132,
       32
      ],
      "text": "",
@@ -891,7 +892,7 @@
     {
      "type": "label",
      "rect": [
-      566,
+      554,
       744,
       0,
       20
@@ -900,9 +901,10 @@
      "text_scale": 4,
      "align": "center",
      "color": "#FF6FF0C0",
-     "wrap_width": 100,
+     "wrap_width": 128,
      "max_lines": 1,
      "fit_text": true,
+     "text_min_scale": 4,
      "need_bind": "totk.inv.sel.equipped"
     },
     {
@@ -966,6 +968,7 @@
      "wrap_width": 220,
      "max_lines": 1,
      "fit_text": true,
+     "text_min_scale": 4,
      "need_bind": "ui.has.inv.sel.kind"
     },
     {
@@ -1330,6 +1333,7 @@
      "wrap_width": 256,
      "max_lines": 1,
      "fit_text": true,
+     "text_min_scale": 4,
      "need_bind": "totk.gear.weapon.present"
     },
     {

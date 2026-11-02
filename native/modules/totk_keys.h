@@ -72,11 +72,10 @@ inline constexpr const char* kGearKeys[kGearFields] = {
     "totk.gear.<s>.fuse",    "totk.gear.<s>.fuse_name", "totk.gear.<s>.fuse_icon",
     "totk.gear.<s>.effect"};
 inline constexpr char kAbilityOwned[] = "totk.ability.<a>.owned";
-enum ItemField { kItemIcon, kItemName, kItemValue, kItemKind, kItemEquipped, kItemFuseIcon,
-                 kItemFields };
+enum ItemField { kItemIcon, kItemValue, kItemKind, kItemEquipped, kItemFuseIcon, kItemFields };
 inline constexpr const char* kItemKeys[kItemFields] = {
-    "totk.inv.{i}.icon", "totk.inv.{i}.name",     "totk.inv.{i}.value",
-    "totk.inv.{i}.kind", "totk.inv.{i}.equipped", "totk.inv.{i}.fuse_icon"};
+    "totk.inv.{i}.icon", "totk.inv.{i}.value", "totk.inv.{i}.kind", "totk.inv.{i}.equipped",
+    "totk.inv.{i}.fuse_icon"};
 inline constexpr char kTabCount[] = "totk.inv.tab{k}.count";
 
 // ---- module actions (on_action) -----------------------------------------------------------------

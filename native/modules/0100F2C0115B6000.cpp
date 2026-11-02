@@ -425,7 +425,6 @@ void PublishInventory(const Out& o, const Instance& in, const totk::Snapshot& s)
         const auto& key = in.keys.items[i];
         const auto& it = items[i];
         o.T(key[pub::kItemIcon], it.icon);
-        o.T(key[pub::kItemName], Shown(it.name, it.id));
         o.I(key[pub::kItemKind].c_str(), it.kind);
         if (it.kind)
             o.I(key[pub::kItemValue].c_str(), it.value);
@@ -444,8 +443,7 @@ void PublishInventory(const Out& o, const Instance& in, const totk::Snapshot& s)
         o.I(pub::kInvSelValue, it.value);
     if (it.equipped)
         o.I(pub::kInvSelEquipped, *it.equipped ? 1 : 0);
-    o.Line(pub::kInvSelFuseName,
-           it.fuse_id.empty() ? nullptr : Shown(it.fuse_name, it.fuse_id).c_str());
+    o.Line(pub::kInvSelFuseName, Shown(it.fuse_name, it.fuse_id).c_str());
     o.Line(pub::kInvSelEffect, it.effect);
     o.Line(pub::kInvSelCaption, it.caption.c_str());
     if (it.hearts)

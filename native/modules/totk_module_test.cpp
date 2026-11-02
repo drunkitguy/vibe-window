@@ -323,9 +323,7 @@ int main() {
         {"totk.gear.arrow.name", "FireArrow"},
         {"totk.gear.arrow.icon", "romfs:/UI/Tex/Icon/FireArrow.bntx.zs"},
         {"totk.inv.0.icon", "romfs:/UI/Tex/Icon/Weapon_Sword_001.bntx.zs"},
-        {"totk.inv.0.name", "Weapon_Sword_001"},
         {"totk.inv.1.icon", "romfs:/UI/Tex/Icon/Weapon_Spear_002.bntx.zs"},
-        {"totk.inv.1.name", "Weapon_Spear_002"},
         {"totk.inv.1.fuse_icon", "romfs:/UI/Tex/Icon/Item_Ruby.bntx.zs"},
         {"totk.inv.sel.icon", "romfs:/UI/Tex/Icon/Weapon_Sword_001.bntx.zs"},
         {"totk.inv.sel.name", "Weapon_Sword_001"},
@@ -373,8 +371,8 @@ int main() {
             assert(h.ints.at("totk.inv.count") == std::int64_t(want.ids.size()));
             for (std::size_t i = 0; i < want.ids.size(); ++i) {
                 const std::string at = "totk.inv." + std::to_string(i);
-                assert(h.texts.at(at + ".name") == want.ids[i]);
-                assert(h.texts.at(at + ".icon") == "romfs:/UI/Tex/Icon/" + want.ids[i] + ".bntx.zs");
+                assert(h.texts.at(at + ".icon") ==
+                       "romfs:/UI/Tex/Icon/" + want.ids[i] + ".bntx.zs");
                 const auto eq = h.ints.find(at + ".equipped");
                 assert(want.equipped[i] < 0 ? eq == h.ints.end()
                                             : eq != h.ints.end() && eq->second == want.equipped[i]);
@@ -396,15 +394,18 @@ int main() {
     in.sel = 2;
     SampleClean(m, instance, h);
     assert(h.ints.at("totk.inv.count") == 3);
-    assert(h.texts.at("totk.inv.0.name") == "Weapon_Bow_001" && h.ints.at("totk.inv.0.kind") == 1 &&
+    assert(h.texts.at("totk.inv.0.icon") == "romfs:/UI/Tex/Icon/Weapon_Bow_001.bntx.zs" &&
+           h.ints.at("totk.inv.0.kind") == 1 &&
            h.ints.at("totk.inv.0.value") == 40 && h.ints.at("totk.inv.0.equipped") == 1);
     assert(h.texts.at("totk.inv.1.icon") == "romfs:/UI/Tex/Icon/NormalArrow.bntx.zs" &&
            h.ints.at("totk.inv.1.value") == 50 && h.ints.at("totk.inv.1.equipped") == 0);
-    assert(h.texts.at("totk.inv.2.name") == "FireArrow" && h.ints.at("totk.inv.2.equipped") == 1);
+    assert(h.texts.at("totk.inv.2.icon") == "romfs:/UI/Tex/Icon/FireArrow.bntx.zs" &&
+           h.ints.at("totk.inv.2.equipped") == 1);
     assert(!h.ints.contains("totk.inv.3.kind") && !h.texts.contains("totk.inv.0.fuse_icon"));
     assert(h.texts.at("totk.inv.sel.name") == "FireArrow" && h.ints.at("totk.inv.sel.kind") == 2 &&
            h.ints.at("totk.inv.sel.value") == 7 && !h.ints.contains("totk.inv.sel.hearts") &&
-           h.texts.at("totk.inv.sel.effect").empty() && h.texts.at("totk.inv.sel.fuse_name").empty());
+           h.texts.at("totk.inv.sel.effect").empty() &&
+           h.texts.at("totk.inv.sel.fuse_name").empty());
     assert(h.ints.at("totk.inv.sel.equipped") == 1); // FireArrow is Pouch.Arrow.EquipIndex[0]
     in.tab = 0;
     in.sel = 1;
@@ -428,13 +429,13 @@ int main() {
     in.tab = 99; // out of range: counts only, no list
     SampleClean(m, instance, h);
     assert(!h.texts.contains("totk.inv.sel.name") && !h.ints.contains("totk.inv.count") &&
-           h.ints.at("totk.inv.tab7.count") == 1 && !h.texts.contains("totk.inv.0.name"));
+           h.ints.at("totk.inv.tab7.count") == 1 && !h.texts.contains("totk.inv.0.icon"));
     in.tab = 0;
     in.sel = 0;
     for (int other : {1, 2}) { // abilities and map: no list, no selection
         in.page = other;
         SampleClean(m, instance, h);
-        assert(!h.texts.contains("totk.inv.0.name") && !h.ints.contains("totk.inv.sel.equipped") &&
+        assert(!h.texts.contains("totk.inv.0.icon") && !h.ints.contains("totk.inv.sel.equipped") &&
                h.ints.at("totk.inv.count") == 2 && h.ints.at("totk.gear.weapon.present") == 1);
     }
     in.page = kPageHome;
@@ -563,8 +564,7 @@ int main() {
         assert(!h.texts.contains(key));
     in.page = kPageHome;
     SampleClean(m, instance, h);
-    assert(h.texts.at("totk.inv.0.name") == "../Pack/X" &&
-           h.texts.at("totk.inv.sel.name") == "../Pack/X");
+    assert(h.ints.at("totk.inv.count") == 1 && h.texts.at("totk.inv.sel.name") == "../Pack/X");
     for (const char* key : {"totk.inv.0.icon", "totk.inv.0.fuse_icon", "totk.inv.sel.icon"})
         assert(!h.texts.contains(key));
     // A present weapon with no effect publishes an empty effect (an absent one would draw "-");
@@ -813,8 +813,9 @@ int main() {
         assert(cact("totk.inv.select", 399) && !cact("totk.inv.select", 400));
         SampleClean(m, capped, hc);
         assert(hc.ints.at("totk.inv.tab4.count") == 400 && hc.ints.at("totk.inv.count") == 400);
-        assert(hc.texts.at("totk.inv.399.name") == "Item_399" && hc.ints.at("totk.inv.399.value") == 2);
-        assert(!hc.texts.contains("totk.inv.400.name") && !hc.ints.contains("totk.inv.400.kind"));
+        assert(hc.texts.at("totk.inv.399.icon") == "romfs:/UI/Tex/Icon/Item_399.bntx.zs" &&
+               hc.ints.at("totk.inv.399.value") == 2);
+        assert(!hc.texts.contains("totk.inv.400.icon") && !hc.ints.contains("totk.inv.400.kind"));
         assert(hc.ints.at("totk.inv.sel") == 399 && hc.texts.at("totk.inv.sel.name") == "Item_399");
         const long before = t_news;
         for (int i = 0; i < 1000; ++i)
@@ -853,26 +854,26 @@ int main() {
         auto expected = page0_text;
         expected["totk.gear.weapon.name"] = "Traveler's Spear";
         expected["totk.gear.weapon.fuse_name"] = "Ruby";
-        expected["totk.inv.0.name"] = expected["totk.inv.sel.name"] = "Traveler's Sword";
-        expected["totk.inv.1.name"] = "Traveler's Spear";
+        expected["totk.inv.sel.name"] = "Traveler's Sword";
         assert(hn.texts == expected);
         {
             std::scoped_lock lock{hn.log_mutex};
-            assert((hn.logs ==
-                    std::vector<std::string>{"totk: item names from Mals/USen.Product.121 (6 labels)"}));
+            assert((hn.logs == std::vector<std::string>{
+                                   "totk: item names from Mals/USen.Product.121 (6 labels)"}));
         }
         ni.page = kPageHome;
         ni.tab = 1;
         ni.sel = 1;
         SampleClean(m, named, hn);
-        assert(hn.texts.at("totk.inv.0.name") == "Weapon_Bow_001" &&
-               hn.texts.at("totk.inv.1.name") == "Arrow" && hn.texts.at("totk.inv.2.name") == "FireArrow" &&
-               hn.texts.at("totk.inv.sel.name") == "Arrow");
+        assert(hn.texts.at("totk.inv.sel.name") == "Arrow");
         assert(hn.texts.at("totk.inv.sel.caption").empty()); // no Arrow caption
+        ni.sel = 2;
+        SampleClean(m, named, hn);
+        assert(hn.texts.at("totk.inv.sel.name") == "FireArrow"); // empty label: the id stays
+        ni.sel = 1;
         ni.tab = 0;
         SampleClean(m, named, hn);
-        assert(hn.texts.at("totk.inv.1.name") == "Traveler's Spear" &&
-               hn.texts.at("totk.inv.sel.name") == "Traveler's Spear" &&
+        assert(hn.texts.at("totk.inv.sel.name") == "Traveler's Spear" &&
                hn.texts.at("totk.inv.sel.fuse_name") == "Ruby" &&
                hn.texts.at("totk.inv.sel.caption") == "A spear.");
         // CA10 with names: no allocation in 1000 samples.
@@ -936,9 +937,10 @@ int main() {
         PollNow(early);
         {
             std::scoped_lock lock{hd.log_mutex};
-            assert((hd.logs == std::vector<std::string>{
-                                   "totk dump mals 120",
-                                   "totk dump failed: no UI/LayoutArchive/Common.Product.<100-200>"}));
+            assert((hd.logs ==
+                    std::vector<std::string>{
+                        "totk dump mals 120",
+                        "totk dump failed: no UI/LayoutArchive/Common.Product.<100-200>"}));
         }
         m->destroy(early);
     }

@@ -213,10 +213,10 @@ def grid(actions):
 
 def detail_pane(derived):
     """The selected item: icon (hold: refused use), name, Equipped badge, value line (durability
-    or count; food's LifeRecover on the right), fuse and effect, caption. The whole pane takes a dragged item (refused
-    use). Every line is gated on a selection (.kind) or its own key, so an absent int never reads
-    as 0 and an absent text never draws the runtime's "-" (the module publishes the optional texts
-    empty while an item is selected)."""
+    or count; food's LifeRecover on the right), fuse and effect, caption. The whole pane takes a
+    dragged item (refused use). Every line is gated on a selection (.kind) or its own key, so an
+    absent int never reads as 0 and an absent text never draws the runtime's "-" (the module
+    publishes the optional texts empty while an item is selected)."""
     sel = "totk.inv.sel"
     picked = has(derived, f"{sel}.kind")
     widgets = panel([8, 722, 624, 206], "detail")
@@ -224,17 +224,18 @@ def detail_pane(derived):
     widgets += [
         {"type": "image", "rect": [20, 736, 128, 128], "src_bind": f"{sel}.icon",
          "need_bind": picked},
-        {"type": "label", "rect": [164, 738, 340, 34], "bind_text": f"{sel}.name",
-         "text_scale": 6, "color": TEXT, "wrap_width": 340, "max_lines": 1, "fit_text": True,
-         "need_bind": picked},
+        {"type": "label", "rect": [164, 738, 316, 34], "bind_text": f"{sel}.name",
+         "text_scale": 6, "color": TEXT, "wrap_width": 316, "max_lines": 1, "fit_text": True,
+         "text_min_scale": 4, "need_bind": picked},
     ]
-    badge = [{"type": "button", "rect": [512, 738, 108, 32], "text": "", "pill": True,
+    # R5's badge is 108 wide; 132 holds "Equipped" at scale 4 in the built-in font too.
+    badge = [{"type": "button", "rect": [488, 738, 132, 32], "text": "", "pill": True,
               "border": 2, "bg": CLEAR, "color": SELECT, "need_bind": f"{sel}.equipped"}]
-    widgets += textured("badge", [512, 738, 108, 32], badge, need_bind=f"{sel}.equipped")
+    widgets += textured("badge", [488, 738, 132, 32], badge, need_bind=f"{sel}.equipped")
     widgets += [
-        {"type": "label", "rect": [566, 744, 0, 20], "text": "Equipped", "text_scale": 4,
-         "align": "center", "color": SELECT, "wrap_width": 100, "max_lines": 1,
-         "fit_text": True, "need_bind": f"{sel}.equipped"},
+        {"type": "label", "rect": [554, 744, 0, 20], "text": "Equipped", "text_scale": 4,
+         "align": "center", "color": SELECT, "wrap_width": 128, "max_lines": 1,
+         "fit_text": True, "text_min_scale": 4, "need_bind": f"{sel}.equipped"},
         {"type": "value", "rect": [164, 778, 280, 26], "bind": f"{sel}.value",
          "text": "Durability ", "text_scale": 5, "color": VALUE, **kind_is(f"{sel}.kind", 1)},
         {"type": "value", "rect": [164, 778, 280, 26], "bind": f"{sel}.value", "text": "x",
@@ -246,7 +247,7 @@ def detail_pane(derived):
         # Fuse left, effect right: 220 px each, so "Durability Up+" fits in the built-in font.
         {"type": "label", "rect": [164, 808, 220, 24], "bind_text": f"{sel}.fuse_name",
          "text_scale": 4, "color": DIM, "wrap_width": 220, "max_lines": 1, "fit_text": True,
-         "need_bind": picked},
+         "text_min_scale": 4, "need_bind": picked},
         {"type": "label", "rect": [620, 808, 0, 24], "bind_text": f"{sel}.effect",
          "text_scale": 4, "align": "right", "color": DIM, "need_bind": picked},
         {"type": "label", "rect": [164, 836, 456, 84], "bind_text": f"{sel}.caption",
@@ -363,7 +364,7 @@ def equipment(derived, actions):
          "need_bind": f"{w}.present"},
         {"type": "label", "rect": [936, 768, 0, 26], "bind_text": f"{w}.effect",
          "text_scale": 4, "align": "center", "color": VALUE, "wrap_width": 256, "max_lines": 1,
-         "fit_text": True, "need_bind": f"{w}.present"},
+         "fit_text": True, "text_min_scale": 4, "need_bind": f"{w}.present"},
         {"type": "label", "rect": [936, 800, 0, 24], "bind_text": f"{w}.fuse_name",
          "text_scale": 4, "align": "center", "color": DIM, "wrap_width": 256, "max_lines": 1,
          "need_bind": f"{w}.fuse"},

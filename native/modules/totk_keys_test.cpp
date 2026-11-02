@@ -57,7 +57,7 @@ int main() {
          {"totk.gear.head.present", "totk.gear..present", "totk.gear.weapon.colour",
           "totk.gear.<s>.present", "totk.ability.dash.owned", "totk.ability.fuse.name",
           "totk.inv.01.icon", "totk.inv.x.icon", "totk.inv..icon", "totk.inv.{i}.icon",
-          "totk.inv.-1.icon", "totk.inv.tab8.count", "totk.inv.tab10.count",
+          "totk.inv.-1.icon", "totk.inv.0.name", "totk.inv.tab8.count", "totk.inv.tab10.count",
           "totk.inv.tab.count", "totk.names.valid.x", "totk.map.tile.0", "totk.gear.swap",
           "totk.ready.", "totk.ready ", "", "totk"})
         assert(!pub::Listed(bad));
