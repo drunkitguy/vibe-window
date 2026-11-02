@@ -52,11 +52,12 @@ Everything below is blocked on you, in this order. Send logs, `.shot` files and 
    decodes zstd in Eden Duo, which already links zstd); the coder uses those files only to build
    patch 0009's standalone test, outside the repo.
 7. **T8a (after T3a' and H1c): texture dump.** Use the CI-built eden-cli (it now applies
-   `host/eden-duo/0001-0009`). Install the package, create a file
-   `<Eden data dir>/dualscreen/user/0100F2C0115B6000/totk-dump` containing `1`, start TotK 1.2.0
-   once, load a save, quit. Send every log line with `totk dump`. Then, in the dev-tools build's
-   console, run the `imgdump` lines the coder lists in §T8a and send the PNGs back (they stay out
-   of the repo). This names the game's UI textures for 1.2.0, which no public source lists.
+   `host/eden-duo/0001-0011`) and the CI-built companion package. Install the package, create the
+   `totk-dump` file, start TotK 1.2.0 once, load a save, wait for `totk dump done` (or `failed`) in
+   the log, quit. Send every log line with `totk` or `DSMod`. Then write the `imgdump` lines the
+   coder lists into the `EDEN_DSMOD_CMD` file and send the PNGs back (they stay out of the repo).
+   Exact PowerShell steps in §T8a. This names the game's UI textures for 1.2.0, which no public
+   source lists.
 8. **T8 (after T4v-T7 are coded here).** Install the package on the PC, load a save, and send the
    `.shot` pictures and `DSMod` log lines listed in §T8. This is the first time the restyled pages
    are seen with your game's textures, font, icons and map tiles, and values from your save.
@@ -1406,24 +1407,52 @@ textures and font (T8a/T8).
 
 ### T8a (user, after T3a' and H1c): name the game's UI textures
 
-1. CI-built eden-cli with patches 0001-0010 (`.github/workflows/eden-duo-windows.yml`; dev tools
-   are on by default, `EDEN_DSMOD_BUILD_DEV_TOOLS`). Package installed as §T8 step 1. Create
-   `<Eden data dir>/dualscreen/user/0100F2C0115B6000/totk-dump` containing `1` [S1
-   `mod_user_source.h`]. (The dump lists archive members through patch 0010's `read_romfs
-   ("<archive>#")`, the whole decoded SARC.)
-2. Start TotK 1.2.0, load a save, wait 10 s, quit. Send every log line containing `totk dump`,
-   `totk` and `DSMod` (font, Mals n, misses).
-3. The dev-tools console is a file: before starting eden-cli again set `EDEN_DSMOD_CMD` to a file
-   path (PowerShell: `$env:EDEN_DSMOD_CMD = "$PWD\dsmod-cmd.txt"`) [S1 `mod_console.cpp:72-90`].
-   Load a save, then for each texture the coder picks from the dump (one line each, listed in the
-   coder's T8a request) write that one line, `imgdump <src> <out.png>` [S3 PORTING_A_GAME §6
-   table], into the file and wait for its `DSMod imgdump ok` (or `FAILED`) line in
-   `dsmod-cmd.txt.out` before the next (the runtime takes one command per write and empties the
-   file; `<out.png>` may not contain spaces; a relative path lands in eden-cli's working
-   directory). After T3a'.3 also
-   `imgdump module:totk:font/body:48 font-atlas.png`. Send the PNGs and `dsmod-cmd.txt.out`; the
-   PNGs are used only in the scratch render (`--assets`), never committed.
-4. Delete the `totk-dump` file.
+PowerShell on the Windows PC. The Eden data dir `$d` is `$env:APPDATA\eden`, or `<eden-cli
+folder>\user` when that folder exists (portable) [S1 `src/common/fs/path_util.cpp:115-118`]; the
+log is `$d\log\eden_log.txt` [S1 `src/common/logging.cpp:403`, `fs_paths.h:42`].
+1. From this branch's GitHub Actions runs download two artifacts and unzip them: `eden-duo-windows-x64`
+   (workflow "Eden Duo Windows": eden-cli with patches 0001-0011; dev tools are on by default,
+   `EDEN_DSMOD_BUILD_DEV_TOOLS`) and `totk-companion` (workflow "TotK companion":
+   `0100F2C0115B6000.dsmod.zip`). Then:
+   ```
+   $d = "$env:APPDATA\eden"
+   Expand-Archive -Force 0100F2C0115B6000.dsmod.zip "$d\load\0100F2C0115B6000\TotKDuo"
+   New-Item -Force -ItemType File "$d\dualscreen\user\0100F2C0115B6000\totk-dump" -Value 1
+   ```
+   `dualscreen\manifest.json` must end up directly in `TotKDuo` (§T8 step 1; any folder name
+   works). The `totk-dump` file is read through the runtime's `user:` source, `$d\dualscreen\user\
+   <TITLEID>\` [S1 `mod_user_source.cpp:22-28`]; any non-empty content turns the dump on.
+2. Start `.\eden-cli.exe -g <TotK 1.2.0>`, load a save, and wait until this prints a line (seconds;
+   up to about a minute when the Mals archive is not found):
+   `Select-String -Path "$d\log\eden_log.txt" -Pattern 'totk dump (done|failed)'`. Quit eden-cli
+   (the next start rewrites the log), then save what to send:
+   `Select-String -Path "$d\log\eden_log.txt" -Pattern 'totk|DSMod' | ForEach-Object Line | Set-Content -Encoding utf8 totk-log.txt`.
+   Send `totk-log.txt` (the dump, the Mals n, the item-name line, missing romfs paths).
+3. Texture PNGs. The dev console is a file [S1 `mod_console.cpp:72-90`]: the runtime reads one
+   command per write and empties the file, and mirrors its answers to `<file>.out`. It reads
+   plain 8-bit text: PowerShell 5.1's `>` writes UTF-16, which it cannot parse, so always use
+   `Set-Content -Encoding ascii`. Save the coder's list as `imgdump.txt` (one
+   `imgdump <src> <out.png>` per line; `<out.png>` has no spaces and lands in the folder eden-cli
+   was started in). In one PowerShell window:
+   `$env:EDEN_DSMOD_CMD = "$env:USERPROFILE\dsmod-cmd.txt"; .\eden-cli.exe -g <TotK 1.2.0>`, and
+   load a save. In a second window:
+   ```
+   $cmd = "$env:USERPROFILE\dsmod-cmd.txt"; $end = 'DSMod imgdump (ok|write-failed|FAILED)'
+   foreach ($line in Get-Content imgdump.txt) {
+     $n = @(Select-String -Path "$cmd.out" -Pattern $end -ErrorAction SilentlyContinue).Count
+     Set-Content -Encoding ascii $cmd $line
+     while (@(Select-String -Path "$cmd.out" -Pattern $end -ErrorAction SilentlyContinue).Count -le $n) { Start-Sleep 1 }
+   }
+   ```
+   One line by hand is `Set-Content -Encoding ascii $cmd 'imgdump <src> <out.png>'` (single quotes
+   keep `$`, `#` and `^` as typed). Each command ends in one of: `DSMod imgdump ok '<src>' WxH ->
+   <out.png>` (written), `DSMod imgdump write-failed ...` (decoded, but the PNG path could not be
+   written), or `DSMod imgdump queued '<src>'` (still decoding) followed later by `ok`,
+   `write-failed` or `FAILED '<src>' (not decodable|timeout)` (60 s) [S1 `mod_nx_runtime.cpp:2171-2197`,
+   `2236-2280`, line numbers with 0001-0011]. After T3a'.3 also `imgdump module:totk:font/body:48 font-atlas.png`. Send the
+   PNGs and `dsmod-cmd.txt.out`; the PNGs are used only in the scratch render (`--assets`), never
+   committed.
+4. `Remove-Item "$d\dualscreen\user\0100F2C0115B6000\totk-dump"`.
 Result: the coder fills `TEX`, the tints (BFLYT material colours), `Common.Product.<n>`, the Mals n
 and any BFLYT reference values, in one commit; the critic re-renders with `--assets`.
 
@@ -1500,7 +1529,7 @@ numbers and the widget-drawn fallbacks in the built-in font.
 | D2b | T3 only | Answered: stay on 1.2.0 |
 | Approve vendoring zstd | T3a | Answered: approved. No longer vendored in the module (§R2); the same files build patch 0009's test outside the repo (hashes in §T3a') |
 | Approve vendoring stb_truetype | T3a' | `native/modules/third_party/stb_truetype.h` v1.26 (public domain) from the companions clone, for the game font (§R2) |
-| T8a dump | T8a, T4v | The `totk-dump` file, one start of TotK 1.2.0 with the CI-built eden-cli (patches 0001-0009), the `totk dump` log lines and the `imgdump` PNGs the coder lists |
+| T8a dump | T8a, T4v | The `totk-dump` file, one start of TotK 1.2.0 with the CI-built eden-cli (patches 0001-0011) and companion package, the `totk`/`DSMod` log lines and the `imgdump` PNGs the coder lists (PowerShell steps in §T8a) |
 | Reference look decisions | T4v | Accepted by the user: pages Map / Inventory (home) / Abilities with Gear in the home page's right column; no 3D Link figure (§R3), the equipped weapon at 256 px instead; English only |
 | T8 run | T8 | Package installed in the CI-built eden-cli, one save loaded, `.shot` pictures per page, `totk`/`DSMod` log lines, values compared with the game |
 | eden-duo fork + Windows build | H1c | A fork repo for the H1 patches, and either a Windows build on their PC (MSVC + Ninja, `tools/windows/load-msvc-env.ps1` [S1 docs/Build.md]) or a GitHub Actions Windows runner in the fork |

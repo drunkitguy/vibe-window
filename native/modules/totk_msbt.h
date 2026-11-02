@@ -15,21 +15,13 @@
 #include <vector>
 
 #include "core/mods/dsmod_module_abi.h"
+#include "totk_bytes.h"
 
 namespace totk::msbt {
 
 using Labels = std::unordered_map<std::string, std::string>; // label -> UTF-8 text
 
-inline constexpr std::size_t kMaxFile = 64u << 20; // read_romfs's own cap [S1 mod_module_host.cpp:29]
-
 namespace detail {
-using Bytes = std::span<const std::uint8_t>;
-inline std::uint32_t U16(Bytes d, std::uint64_t at) {
-    return d[at] | std::uint32_t(d[at + 1]) << 8;
-}
-inline std::uint32_t U32(Bytes d, std::uint64_t at) {
-    return U16(d, at) | U16(d, at + 2) << 16;
-}
 inline void Utf8(std::string& out, std::uint32_t cp) {
     if (cp < 0x80) {
         out += char(cp);
@@ -47,12 +39,13 @@ inline void Utf8(std::string& out, std::uint32_t cp) {
         out += char(0x80 | (cp & 0x3F));
     }
 }
-// One TXT2 entry [at, end): text up to the first NUL. Tags are dropped: 0x0E group type size
-// params, 0x0F group type (closing). So are control characters other than '\n' and lone surrogates.
-inline std::string Text(Bytes d, std::uint64_t at, std::uint64_t end) {
+// One TXT2 entry [at, end) of `r` (the TXT2 body): text up to the first NUL. Tags are dropped:
+// 0x0E group type size params, 0x0F group type (closing). So are control characters other than
+// '\n' and lone surrogates.
+inline std::string Text(const Reader& r, std::uint64_t at, std::uint64_t end) {
     std::string out;
     while (at + 2 <= end) {
-        std::uint32_t c = U16(d, at);
+        std::uint32_t c = r.U16(at);
         at += 2;
         if (c == 0)
             break;
@@ -63,12 +56,12 @@ inline std::string Text(Bytes d, std::uint64_t at, std::uint64_t end) {
             if (c == 0x0E) {
                 if (at + 2 > end)
                     break;
-                at += 2 + U16(d, at); // parameter size, parameters
+                at += 2 + r.U16(at); // parameter size, parameters
             }
             continue;
         }
         if (c >= 0xD800 && c <= 0xDBFF && at + 2 <= end) {
-            const std::uint32_t low = U16(d, at);
+            const std::uint32_t low = r.U16(at);
             if (low >= 0xDC00 && low <= 0xDFFF) {
                 c = 0x10000 + ((c - 0xD800) << 10) + (low - 0xDC00);
                 at += 2;
@@ -83,58 +76,53 @@ inline std::string Text(Bytes d, std::uint64_t at, std::uint64_t end) {
 } // namespace detail
 
 // Every label of a little-endian UTF-16 MSBT. False (and `out` empty) when the header, a section
-// or a label runs past its bounds; a text entry out of bounds only drops its label.
+// or a label runs past its bounds, when the label table is implausible (more labels than 5-byte
+// slots: overlapping buckets) or there is no label; a text entry out of bounds only drops the
+// labels it bounds. Each section is read through its own Reader, so nothing reads past it.
 inline bool Parse(std::span<const std::uint8_t> d, Labels& out) {
-    using detail::U16;
-    using detail::U32;
     out.clear();
-    if (d.size() < 0x20 || std::memcmp(d.data(), "MsgStdBn", 8) != 0 || d[8] != 0xFF ||
-        d[9] != 0xFE || d[12] != 1)
+    const Reader file{d};
+    if (d.size() < 0x20 || std::memcmp(d.data(), "MsgStdBn", 8) != 0 || file.U16(8) != 0xFEFF ||
+        d[12] != 1)
         return false;
     std::vector<std::pair<std::uint32_t, std::string>> labels; // (TXT2 index, label)
-    std::uint64_t txt = 0, txt_size = 0;
+    Reader txt{{}};
     std::uint64_t at = 0x20;
-    for (std::uint32_t s = 0, sections = U16(d, 14); s < sections && at + 16 <= d.size(); ++s) {
-        const std::uint64_t size = U32(d, at + 4), body = at + 16, end = body + size;
-        if (end > d.size())
+    for (std::uint32_t s = 0, sections = file.U16(14); s < sections && at + 16 <= d.size(); ++s) {
+        const std::uint64_t size = file.U32(at + 4);
+        if (size > d.size() - at - 16)
             return false;
+        const Reader sec{d.subspan(at + 16, size)};
         if (std::memcmp(d.data() + at, "LBL1", 4) == 0) {
-            if (size < 4)
-                return false;
-            const std::uint64_t buckets = U32(d, body);
+            const std::uint64_t buckets = sec.U32(0);
             if (4 + 8 * buckets > size)
                 return false;
             for (std::uint64_t b = 0; b < buckets; ++b) {
-                const std::uint64_t count = U32(d, body + 4 + 8 * b);
-                std::uint64_t p = body + U32(d, body + 8 + 8 * b);
-                for (std::uint64_t k = 0; k < count; ++k) {
-                    if (p >= end || p + 1 + d[p] + 4 > end)
+                std::uint64_t p = sec.U32(8 + 8 * b);
+                for (std::uint64_t k = 0, count = sec.U32(4 + 8 * b); k < count; ++k) {
+                    const std::uint32_t len = sec.U8(p);
+                    if (p + 1 + len + 4 > size || labels.size() >= size / 5)
                         return false;
-                    const std::uint8_t len = d[p];
-                    labels.emplace_back(U32(d, p + 1 + len),
-                                        std::string(reinterpret_cast<const char*>(&d[p + 1]), len));
+                    labels.emplace_back(sec.U32(p + 1 + len),
+                                        std::string(reinterpret_cast<const char*>(&sec.d[p + 1]), len));
                     p += 1 + len + 4;
                 }
             }
         } else if (std::memcmp(d.data() + at, "TXT2", 4) == 0) {
-            txt = body;
-            txt_size = size;
+            txt = sec;
         }
-        at = body + ((size + 15) & ~std::uint64_t(15));
+        at += 16 + ((size + 15) & ~std::uint64_t(15));
     }
-    if (txt_size < 4 || labels.empty())
-        return false;
-    const std::uint64_t count = U32(d, txt);
-    if (4 + 4 * count > txt_size)
+    const std::uint64_t count = txt.U32(0), txt_size = txt.d.size();
+    if (txt_size < 4 || labels.empty() || 4 + 4 * count > txt_size)
         return false;
     for (auto& [index, name] : labels) {
         if (index >= count)
             continue;
-        const std::uint64_t begin = txt + U32(d, txt + 4 + 4 * std::uint64_t(index));
-        const std::uint64_t end =
-            index + 1 < count ? txt + U32(d, txt + 8 + 4 * std::uint64_t(index)) : txt + txt_size;
-        if (begin <= end && end <= txt + txt_size)
-            out.emplace(std::move(name), detail::Text(d, begin, end));
+        const std::uint64_t begin = txt.U32(4 + 4 * std::uint64_t(index));
+        const std::uint64_t end = index + 1 < count ? txt.U32(8 + 4 * std::uint64_t(index)) : txt_size;
+        if (begin <= end && end <= txt_size)
+            out.emplace(std::move(name), detail::Text(txt, begin, end));
     }
     return true;
 }
@@ -156,14 +144,9 @@ inline bool LoadNames(const EdenDsmodHostApi& h, int n, Labels& out, const char*
     char path[96];
     std::snprintf(path, sizeof path, "romfs:Mals/USen.Product.%d.sarc.zs#ActorMsg/PouchContent.msbt",
                   n);
-    const std::size_t size = h.read_romfs(h.userdata, path, 0, nullptr, 0);
-    if (size == 0 || size > kMaxFile) {
+    std::vector<std::uint8_t> bytes;
+    if (!ReadAll(h, path, bytes)) {
         why = "PouchContent.msbt unreadable (Eden Duo patch 0009 missing?)";
-        return false;
-    }
-    std::vector<std::uint8_t> bytes(size);
-    if (h.read_romfs(h.userdata, path, 0, bytes.data(), size) != size) {
-        why = "PouchContent.msbt short read";
         return false;
     }
     if (!Parse(bytes, out)) {

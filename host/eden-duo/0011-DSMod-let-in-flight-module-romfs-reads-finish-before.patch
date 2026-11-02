@@ -1,0 +1,40 @@
+From 4868665d0695f4f03e08b6974d3fdddcded41057 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Mon, 2 Nov 2026 04:42:13 +0000
+Subject: [PATCH] DSMod: let in-flight module romfs reads finish before
+ nx_assets goes
+
+When the application process changes, RefuseChangedProcess resets
+nx_assets before ShutdownGameModule joins the module's own threads. A
+module thread can be inside read_romfs at that moment, and a "#member"
+read goes through ReadNxMember, which uses nx_assets.
+
+The owner guard is already revoked when RefuseChangedProcess runs (the
+tick saw IsOwnerContext() fail), so every new read_romfs returns 0
+under module_romfs_mutex. Taking that mutex once right before
+nx_assets.reset() lets a read already in flight finish first.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01XgyuSR8o8AbzxuWHYqLwsv
+---
+ src/core/mods/mod_runtime.cpp | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/src/core/mods/mod_runtime.cpp b/src/core/mods/mod_runtime.cpp
+index 4419f06..e44d15e 100644
+--- a/src/core/mods/mod_runtime.cpp
++++ b/src/core/mods/mod_runtime.cpp
+@@ -116,6 +116,10 @@ void ModRuntime::RefuseChangedProcess() {
+         // No decoder or module callback may retain a guest pointer when the owner is released.
+         StopRedrawWorker();
+         DropFontPages();
++        // A module thread may be inside read_romfs (ReadNxMember uses nx_assets). The owner guard
++        // is already revoked, so a new read_romfs returns 0 under this mutex; taking it once
++        // lets a read already in flight finish before nx_assets goes.
++        { std::scoped_lock barrier{module_romfs_mutex}; }
+         nx_assets.reset(); // stops and joins its decode worker
+         ShutdownGameModule(); // joins module image/map-area workers before destroying the instance
+         process_workers_stopped = true;
+-- 
+2.43.0
+

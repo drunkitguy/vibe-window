@@ -274,19 +274,31 @@ inline std::vector<std::uint8_t> Sarc(
     return b;
 }
 
-// A little-endian UTF-16 MSBT: one LBL1 bucket with every label (label i -> text i), then TXT2.
-// Texts are UTF-16 code units (tags and surrogates written by the caller), NUL-terminated here.
-inline std::vector<std::uint8_t> Msbt(
-    const std::vector<std::pair<std::string, std::u16string>>& entries) {
-    const auto section = [](std::vector<std::uint8_t>& b, const char* magic,
-                            const std::vector<std::uint8_t>& body) {
+// A little-endian UTF-16 MSBT around raw LBL1 and TXT2 bodies (each section padded to 16 with 0xAB).
+inline std::vector<std::uint8_t> MsbtFile(const std::vector<std::uint8_t>& lbl,
+                                          const std::vector<std::uint8_t>& txt) {
+    std::vector<std::uint8_t> b(0x20);
+    std::memcpy(b.data(), "MsgStdBn", 8);
+    b[8] = 0xFF;
+    b[9] = 0xFE;
+    b[12] = 1; // UTF-16
+    PutU16(b, 14, 2);
+    for (const auto& [magic, body] : {std::pair{"LBL1", &lbl}, std::pair{"TXT2", &txt}}) {
         const std::size_t at = b.size();
         b.resize(at + 16);
         std::memcpy(b.data() + at, magic, 4);
-        PutU32(b, at + 4, std::uint32_t(body.size()));
-        b.insert(b.end(), body.begin(), body.end());
+        PutU32(b, at + 4, std::uint32_t(body->size()));
+        b.insert(b.end(), body->begin(), body->end());
         b.resize((b.size() + 15) & ~std::size_t(15), 0xAB);
-    };
+    }
+    PutU32(b, 18, std::uint32_t(b.size()));
+    return b;
+}
+
+// An MSBT with one LBL1 bucket holding every label (label i -> text i), then TXT2. Texts are
+// UTF-16 code units (tags and surrogates written by the caller), NUL-terminated here.
+inline std::vector<std::uint8_t> Msbt(
+    const std::vector<std::pair<std::string, std::u16string>>& entries) {
     std::vector<std::uint8_t> lbl(12), txt(4 + 4 * entries.size());
     PutU32(lbl, 0, 1);
     PutU32(lbl, 4, std::uint32_t(entries.size()));
@@ -301,16 +313,7 @@ inline std::vector<std::uint8_t> Msbt(
         for (const char16_t c : text + u'\0')
             PutU16(txt, txt.size(), std::uint16_t(c));
     }
-    std::vector<std::uint8_t> b(0x20);
-    std::memcpy(b.data(), "MsgStdBn", 8);
-    b[8] = 0xFF;
-    b[9] = 0xFE;
-    b[12] = 1; // UTF-16
-    PutU16(b, 14, 2);
-    section(b, "LBL1", lbl);
-    section(b, "TXT2", txt);
-    PutU32(b, 18, std::uint32_t(b.size()));
-    return b;
+    return MsbtFile(lbl, txt);
 }
 
 // caption.sav: the date fields and the autosave flag in the key table from 0x28, then filler for

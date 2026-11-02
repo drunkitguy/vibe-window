@@ -141,18 +141,18 @@ void Replace(Instance& in, std::shared_ptr<const totk::Snapshot> next) {
     in.snapshot = std::move(next);
 }
 
-// True when the names have just loaded.
+// True when the names have just loaded. The try is counted first, so a try that throws still
+// counts towards kNameTries.
 bool TryNames(const EdenDsmodHostApi& h, Names& n) {
     if (n.done)
         return false;
-    if (!h.read_romfs) {
-        n.done = true;
+    n.done = !h.read_romfs || ++n.tries >= kNameTries;
+    if (!h.read_romfs)
         return false;
-    }
     const char* why = "no Mals/USen.Product.<100-200>.sarc.zs";
     n.mals = totk::msbt::FindMals(h);
     const bool ok = n.mals && totk::msbt::LoadNames(h, n.mals, n.labels, why);
-    if (!ok && ++n.tries < kNameTries)
+    if (!ok && !n.done)
         return false;
     n.done = true;
     if (h.log) {
@@ -217,7 +217,6 @@ void Worker(Instance& in) {
                 std::shared_ptr<const totk::Snapshot> shown;
                 {
                     std::scoped_lock names_lock{in.mutex};
-                    in.names = true;
                     shown = in.snapshot;
                 }
                 if (shown) { // a save read before the names: name it now
@@ -225,8 +224,12 @@ void Worker(Instance& in) {
                     ApplyNames(*next, names.labels);
                     Replace(in, std::move(next));
                 }
+                std::scoped_lock names_lock{in.mutex}; // after the renamed snapshot is shown
+                in.names = true;
             }
-            if (names.done && !dumped) {
+            // The dump needs only the Mals n: it runs once the romfs answered the Mals probe, or
+            // when the names gave up (a romfs without that archive).
+            if ((names.mals || names.done) && !dumped) {
                 dumped = true;
                 totk::dump::Run(in.host, names.mals);
             }

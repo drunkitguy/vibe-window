@@ -5,9 +5,10 @@
 // exists. Reads through read_romfs only; "<archive>#" (the decoded SARC itself) needs Eden Duo
 // patch 0010. A failure logs one line and ends the dump.
 // Formats: SARC as Eden Duo's ParseSarc [S1 mod_nx_assets.cpp:175-235]; BNTX/BRTI fields as its
-// ParseBntx [S1 mod_nx_assets.cpp:252-318]; BFLYT txl1/mat1/pane fields as acnh_lyt.cpp (GPL-3.0)
-// [S2]; wnd1's content and frame table offsets are Switch-Toolbox's WND1 layout (UNVERIFIED for
-// TotK: a bad offset prints "mat=?").
+// ParseBntx [S1 mod_nx_assets.cpp:252-318]; BFLYT txl1/pane fields as acnh_lyt.cpp (GPL-3.0) [S2].
+// UNVERIFIED for TotK's BFLYT (ACNH's v9 layout and Switch-Toolbox are the only leads; T8a's lines
+// show): mat1's texmap-count flags +0x1C, black +0x24, white +0x28, texmaps +0x2C (ACNH), and
+// wnd1's content and frame table offsets (Switch-Toolbox's WND1; a bad offset prints "mat=?").
 #pragma once
 
 #include <cstdarg>
@@ -20,46 +21,16 @@
 #include <vector>
 
 #include "core/mods/dsmod_module_abi.h"
+#include "totk_bytes.h"
 
 namespace totk::dump {
 
 using Bytes = std::span<const std::uint8_t>;
-inline constexpr std::size_t kMaxFile = 64u << 20; // read_romfs's own cap
 inline constexpr char kCommon[] = "romfs:UI/LayoutArchive/Common.Product.%d.Nin_NX_NVN.blarc.zs";
 inline constexpr char kMals[] = "romfs:Mals/USen.Product.%d.sarc.zs";
 // Layouts whose panes are dumped (blyt/<prefix>*.bflyt) [docs/PLAN.md §R2].
 inline constexpr std::string_view kLayouts[] = {"Pause", "Pouch",    "App",
                                                 "PlayerStatus", "ShortCut", "Map"};
-
-// Bounds-checked little-endian reads: 0 / "" outside the data.
-struct R {
-    Bytes d;
-    std::uint32_t U8(std::uint64_t at) const {
-        return at < d.size() ? d[at] : 0;
-    }
-    std::uint32_t U16(std::uint64_t at) const {
-        return U8(at) | U8(at + 1) << 8;
-    }
-    std::uint32_t U32(std::uint64_t at) const {
-        return U16(at) | U16(at + 2) << 16;
-    }
-    // A u16 table index, or ~0 (matches nothing) when it lies outside the data.
-    std::uint32_t Index(std::uint64_t at) const {
-        return at + 2 <= d.size() ? U16(at) : ~0u;
-    }
-    float F32(std::uint64_t at) const {
-        const std::uint32_t v = U32(at);
-        float f;
-        std::memcpy(&f, &v, 4);
-        return f;
-    }
-    std::string Str(std::uint64_t at, std::size_t max) const {
-        std::string s;
-        for (std::size_t i = 0; i < max && U8(at + i); ++i)
-            s += char(U8(at + i));
-        return s;
-    }
-};
 
 // One log line of at most 200 characters.
 __attribute__((format(printf, 2, 3))) inline void Line(const EdenDsmodHostApi& h,
@@ -79,7 +50,7 @@ struct Member {
 
 // The named members of a little-endian SARC, or nothing when the header or file table is bad.
 inline std::vector<Member> Sarc(Bytes d) {
-    const R r{d};
+    const Reader r{d};
     if (d.size() < 0x14 || std::memcmp(d.data(), "SARC", 4) != 0 || r.U16(6) != 0xFEFF)
         return {};
     const std::uint64_t sfat = r.U16(4), data = r.U32(0xC);
@@ -107,7 +78,7 @@ inline std::vector<Member> Sarc(Bytes d) {
 // One line per BNTX texture: name (with its ^ suffix), size, format ((type << 8) | data type,
 // hex), channel map (0 zero, 1 one, 2-5 RGBA). False when it is not a Switch BNTX.
 inline bool Textures(const EdenDsmodHostApi& h, Bytes d) {
-    const R r{d};
+    const Reader r{d};
     if (d.size() < 0x30 || std::memcmp(d.data(), "BNTX", 4) != 0 ||
         std::memcmp(d.data() + 0x20, "NX  ", 4) != 0 || r.U32(0x2C) != 0)
         return false;
@@ -132,7 +103,7 @@ inline bool Textures(const EdenDsmodHostApi& h, Bytes d) {
 // translate, size, material name, the material's texture names, white and black colour (RGBA).
 // False when it is not a BFLYT.
 inline bool Panes(const EdenDsmodHostApi& h, std::string_view layout, Bytes d) {
-    const R r{d};
+    const Reader r{d};
     if (d.size() < 0x14 || std::memcmp(d.data(), "FLYT", 4) != 0)
         return false;
     std::vector<std::string> textures, materials;
@@ -145,7 +116,7 @@ inline bool Panes(const EdenDsmodHostApi& h, std::string_view layout, Bytes d) {
         const std::uint64_t size = r.U32(s + 4);
         if (size < 8 || s + size > d.size())
             return false;
-        const R sec{d.subspan(s, size)};
+        const Reader sec{d.subspan(s, size)};
         if (tag == "txl1") {
             for (std::uint32_t i = 0, count = sec.U16(8); i < count; ++i)
                 textures.push_back(sec.Str(0xC + sec.U32(0xC + 4 * i), 128));
@@ -185,15 +156,6 @@ inline bool Panes(const EdenDsmodHostApi& h, std::string_view layout, Bytes d) {
     return true;
 }
 
-// The whole of `path` (a size query, then one read), or false.
-inline bool Read(const EdenDsmodHostApi& h, const char* path, std::vector<std::uint8_t>& out) {
-    const std::size_t size = h.read_romfs(h.userdata, path, 0, nullptr, 0);
-    if (size == 0 || size > kMaxFile)
-        return false;
-    out.resize(size);
-    return h.read_romfs(h.userdata, path, 0, out.data(), size) == size;
-}
-
 inline bool IsDumpedLayout(std::string_view member) {
     if (!member.starts_with("blyt/") || !member.ends_with(".bflyt"))
         return false;
@@ -222,8 +184,11 @@ inline void Run(const EdenDsmodHostApi& h, int mals) {
     std::snprintf(path, sizeof path, kCommon, common);
     std::strcat(path, "#");
     std::vector<std::uint8_t> bytes;
-    if (!Read(h, path, bytes))
-        return Line(h, "totk dump failed: %s unreadable (Eden Duo patch 0010 missing?)", path);
+    if (!ReadAll(h, path, bytes))
+        return Line(h,
+                    "totk dump failed: %s unreadable (Eden Duo patch 0010 missing, or the decoded "
+                    "archive is over the runtime's 64 MiB cap)",
+                    path);
     const auto members = Sarc(bytes);
     if (members.empty())
         return Line(h, "totk dump failed: %s is not a SARC", path);
@@ -244,7 +209,7 @@ inline void Run(const EdenDsmodHostApi& h, int mals) {
     std::snprintf(path, sizeof path, kMals, mals);
     std::strcat(path, "#");
     std::vector<std::uint8_t> msgs;
-    if (!Read(h, path, msgs))
+    if (!ReadAll(h, path, msgs))
         return Line(h, "totk dump failed: %s unreadable", path);
     const auto messages = Sarc(msgs);
     if (messages.empty())

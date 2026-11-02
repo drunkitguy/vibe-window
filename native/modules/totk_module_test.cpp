@@ -770,6 +770,40 @@ int main() {
         assert(hf.MemoryCalls() == 0);
         m->destroy(unnamed);
     }
+    // The Mals archive answers but PouchContent.msbt does not: the dump runs on the first poll,
+    // not after the 30 name tries.
+    {
+        Host hd;
+        hd.PutRomfs("user:totk-dump", {'1'});
+        hd.PutRomfs("romfs:Mals/USen.Product.120.sarc.zs", {1});
+        void* early = m->create(&hd.api, "{}");
+        assert(early);
+        PollNow(early);
+        {
+            std::scoped_lock lock{hd.log_mutex};
+            assert((hd.logs == std::vector<std::string>{
+                                   "totk dump mals 120",
+                                   "totk dump failed: no UI/LayoutArchive/Common.Product.<100-200>"}));
+        }
+        m->destroy(early);
+    }
+    // A host without read_romfs: no names, no dump, no log, nothing called.
+    {
+        Host hr;
+        hr.PutRomfs("user:totk-dump", {'1'});
+        hr.api.read_romfs = nullptr;
+        void* blind = m->create(&hr.api, "{}");
+        assert(blind);
+        for (int i = 0; i < 3; ++i)
+            PollNow(blind);
+        SampleClean(m, blind, hr);
+        assert(hr.ints.at("totk.names.valid") == 0 && hr.romfs_calls == 0);
+        {
+            std::scoped_lock lock{hr.log_mutex};
+            assert(hr.logs.empty());
+        }
+        m->destroy(blind);
+    }
 
     // 100 create/destroy cycles with a save to read: no hang, no leak. Some destroys land while
     // the worker is mid-read. Cycle -1 warms up the save dir's counters before the leak count.

@@ -93,6 +93,7 @@ struct Mat {
     std::string name;
     std::array<std::uint8_t, 4> black, white;
     std::vector<std::uint16_t> tex;
+    std::uint32_t flag_bits = 0; // flags above the texmap count (bits 0-1)
 };
 // mat1: count, offsets relative to the section; name[0x1C], flags (texmap count), black, white,
 // texmaps (u16 texture index, wrap bytes).
@@ -104,7 +105,7 @@ Bytes Mat1(const std::vector<Mat>& mats) {
         PutU32(body, 4 + 4 * i, std::uint32_t(at + 8));
         body.resize(at + 0x2C + 4 * mats[i].tex.size());
         PutStr(body, at, mats[i].name);
-        PutU32(body, at + 0x1C, std::uint32_t(mats[i].tex.size()));
+        PutU32(body, at + 0x1C, std::uint32_t(mats[i].tex.size()) | mats[i].flag_bits);
         std::memcpy(body.data() + at + 0x24, mats[i].black.data(), 4);
         std::memcpy(body.data() + at + 0x28, mats[i].white.data(), 4);
         for (std::size_t t = 0; t < mats[i].tex.size(); ++t)
@@ -266,7 +267,8 @@ int main() {
                    "totk dump failed: no UI/LayoutArchive/Common.Product.<100-200>"}));
     assert(failed([](Host& h) { h.romfs.erase(kCommon110 + "#"); }, 120,
                   concat({head, {"totk dump failed: " + kCommon110 +
-                                 "# unreadable (Eden Duo patch 0010 missing?)"}})));
+                                 "# unreadable (Eden Duo patch 0010 missing, or the decoded archive "
+                                 "is over the runtime's 64 MiB cap)"}})));
     assert(failed([](Host& h) { h.romfs[kCommon110 + "#"] = {'S', 'A', 'R', 'C'}; }, 120,
                   concat({head, {"totk dump failed: " + kCommon110 + "# is not a SARC"}})));
     assert(failed([](Host& h) { h.romfs[kCommon110 + "#"] = Sarc({{"timg/x.bntx", {1}}}); }, 120,
@@ -305,6 +307,94 @@ int main() {
         assert(Logs(h).back() == "totk dump failed: blyt/PouchList_00.bflyt is not a BFLYT");
     }
 
+    // Two Common archives: the highest n is dumped.
+    {
+        Host h;
+        full(h);
+        const std::string common120 = "romfs:UI/LayoutArchive/Common.Product.120.Nin_NX_NVN.blarc.zs";
+        h.PutRomfs(common120, {1, 2});
+        h.PutRomfs(common120 + "#", layouts);
+        h.romfs.erase(kCommon110 + "#");
+        totk::dump::Run(h.api, 120);
+        const auto logs = Logs(h);
+        assert(logs[0] == "totk dump common 110 (4 bytes)" &&
+               logs[1] == "totk dump common 120 (2 bytes)" && logs.back() == "totk dump done");
+    }
+
+    // SARC nodes: a nameless node, end before begin and a name past the name table are skipped;
+    // a header or SFAT whose tables lie past the data offset is refused.
+    {
+        const Bytes four = Sarc({{"a", {1}}, {"b", {2}}, {"c", {3}}, {"d", {4}}});
+        assert(totk::dump::Sarc(four).size() == 4);
+        Bytes b = four;
+        PutU32(b, 0x20 + 4, 0);           // node a: no name flag
+        PutU32(b, 0x30 + 8, 5);           // node b: begin 5 > end
+        PutU32(b, 0x40 + 4, 0x01FFFFFF);  // node c: name far past the table
+        const auto kept = totk::dump::Sarc(b);
+        assert(kept.size() == 1 && kept[0].name == "d" && kept[0].bytes.size() == 1 &&
+               kept[0].bytes[0] == 4);
+        b = four;
+        PutU16(b, 4, 0xFFFF); // SFAT offset past the file
+        assert(totk::dump::Sarc(b).empty());
+        b = four;
+        PutU16(b, 0x1A, 0xFFFF); // node count: SFNT past the file
+        assert(totk::dump::Sarc(b).empty());
+        b = four;
+        b[0x14] = 'X'; // SFAT magic
+        assert(totk::dump::Sarc(b).empty());
+        b = four;
+        std::swap(b[6], b[7]); // big-endian byte-order mark
+        assert(totk::dump::Sarc(b).empty());
+    }
+
+    // BNTX: 64-bit pointers with a non-zero high word are refused (table), or reported (a BRTI,
+    // a name).
+    {
+        Host h;
+        Bytes b = bntx;
+        PutU32(b, 0x2C, 1);
+        assert(!totk::dump::Textures(h.api, b) && Logs(h).empty());
+        b = bntx;
+        PutU32(b, 0x40 + 4, 1);           // texture 0's BRTI pointer
+        PutU32(b, 0x50 + 0x80 + 0x64, 1); // texture 1's name pointer
+        assert(totk::dump::Textures(h.api, b));
+        assert((Logs(h) == std::vector<std::string>{"totk dump tex #0: no BRTI",
+                                                    "totk dump tex ? 48x48 fmt=0201 ch=2221"}));
+    }
+
+    // BFLYT bounds: a pic1 cut before its material index, a 24-character name without a NUL, a
+    // material flag above the texmap-count bits, a wnd1 frame entry cut by the section end (its
+    // two bytes would name the content material), and a section of size 0.
+    {
+        Host h;
+        Bytes cut = Pic1("P_Cut", 0, 0, 1, 1, 0);
+        cut.resize(0x64);
+        PutU32(cut, 4, 0x64);
+        Bytes long_name = Pic1(std::string(24, 'N'), 0, 0, 1, 1, 0);
+        long_name[0x24] = 'Z'; // the byte after the 0x18-byte name field
+        Bytes frame = Wnd1("W_Cut", 1, {0});
+        frame.push_back(0x80); // content material at +0x80
+        frame.push_back(0x00);
+        PutU32(frame, 0x6C, std::uint32_t(frame.size() - 2));
+        PutU32(frame, 4, std::uint32_t(frame.size()));
+        const Bytes f = Flyt({Txl1({"Btn_Frame^w", "Heart_00^r"}),
+                              Mat1({{"M_Heart", {0, 0, 0, 0}, {1, 2, 3, 4}, {1}, 4},
+                                    {"M_Frame", {0, 0, 0, 0}, {0, 0, 0, 0}, {}}}),
+                              cut, long_name, frame});
+        assert(totk::dump::Panes(h.api, "L", f));
+        assert((Logs(h) ==
+                std::vector<std::string>{
+                    "totk dump pane L pic1 P_Cut t=0,0 s=1x1 mat=?",
+                    "totk dump pane L pic1 NNNNNNNNNNNNNNNNNNNNNNNN t=0,0 s=1x1 mat=M_Heart "
+                    "tex=Heart_00^r white=01020304 black=00000000",
+                    "totk dump pane L wnd1 W_Cut t=10,-20 s=300x60 mat=M_Frame tex= "
+                    "white=00000000 black=00000000",
+                    "totk dump frame L W_Cut 0 mat=?"}));
+        Bytes zero = Flyt({Txl1({"a"})});
+        PutU32(zero, 0x14 + 4, 0);
+        assert(!totk::dump::Panes(h.api, "L", zero));
+    }
+
     // Layout names: blyt/<one of the prefixes>*.bflyt only.
     for (const char* yes : {"blyt/PauseMenuBG_00.bflyt", "blyt/PouchList.bflyt", "blyt/AppMap_00.bflyt",
                             "blyt/PlayerStatus_00.bflyt", "blyt/ShortCutBG_00.bflyt",
@@ -317,12 +407,16 @@ int main() {
     // Every truncation of the three formats stays in bounds (and the full files parse).
     {
         Host h;
+        // Each cut in a buffer of exactly that size: a read past it is a heap overflow under ASan.
+        const auto cut = [](const Bytes& b, std::size_t n) {
+            return Bytes(b.begin(), b.begin() + std::ptrdiff_t(n));
+        };
         for (std::size_t n = 0; n <= flyt.size(); ++n)
-            totk::dump::Panes(h.api, "x", std::span(flyt.data(), n));
+            totk::dump::Panes(h.api, "x", cut(flyt, n));
         for (std::size_t n = 0; n <= bntx.size(); ++n)
-            totk::dump::Textures(h.api, std::span(bntx.data(), n));
+            totk::dump::Textures(h.api, cut(bntx, n));
         for (std::size_t n = 0; n < layouts.size(); ++n)
-            assert(totk::dump::Sarc(std::span(layouts.data(), n)).size() < 4);
+            assert(totk::dump::Sarc(cut(layouts, n)).size() < 4);
         assert(totk::dump::Sarc(layouts).size() == 4);
     }
 
