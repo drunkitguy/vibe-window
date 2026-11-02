@@ -39,7 +39,7 @@ inline std::uint64_t Walk(const EdenDsmodHostApi& h, std::uint64_t base, const C
     if (c.n == 0 || c.n > c.hop.size() || base == 0 || base > kMax - c.hop[0])
         return 0;
     std::uint64_t at = base + c.hop[0];
-    if (base == h.main_base && c.n > 1 && !dsmod_sdk::InMain(h.main_base, h.main_size, at, 8))
+    if (base == h.main_base && !dsmod_sdk::InMain(h.main_base, h.main_size, at, 8))
         return 0;
     for (std::size_t i = 1; i < c.n; ++i) {
         std::uint64_t p = 0;

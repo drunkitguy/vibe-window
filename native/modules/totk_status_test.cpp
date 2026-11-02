@@ -14,6 +14,7 @@ namespace {
 using totk::kOffsets121;
 using totk::test::Host;
 using totk::test::Live;
+using totk::test::PutChain;
 using totk::test::PutLive;
 constexpr auto kMax = std::numeric_limits<std::uint64_t>::max();
 
@@ -129,9 +130,13 @@ int main() {
         PutLive(h);
         assert(Read(h).valid);
     }
-    // A first slot outside main (all bytes mapped), and one straddling its end.
+    // A first slot outside main (all bytes mapped), and an aligned one straddling its end.
     Invalid([](Host&, totk::Offsets& o) { o.rupees.hop[0] = Host::kMainSize; });
-    Invalid([](Host&, totk::Offsets& o) { o.max_stamina.hop[0] = Host::kMainSize - 4; });
+    Invalid([](Host&, totk::Offsets& o) { o.rupees = {1, {Host::kMainSize}}; }); // one hop too
+    Invalid([](Host& h, totk::Offsets& o) {
+        h.api.main_size = Host::kMainSize - 4;
+        o.max_stamina.hop[0] = Host::kMainSize - 8;
+    });
     { // The last whole slot inside main is fine.
         Host h;
         totk::Offsets o = kOffsets121;
@@ -234,6 +239,18 @@ int main() {
         assert(s.valid && !s.has_battery && s.battery == 0 && s.max_battery == 0);
         assert(s.hearts == 48 && s.max_hearts == 80 && s.rupees == 1234 && s.stamina == 1500.f &&
                s.max_stamina == 2000.f);
+    }
+    { // Battery pair absent (max battery's last byte unmapped) and the battery word torn in the
+        // second pass: the leftover words are cleared, so the passes still agree.
+        Host h;
+        PutLive(h);
+        h.memory.erase(PutChain(h, Host::kMainBase, kOffsets121.max_battery) + 3);
+        assert(Read(h).valid);
+        const unsigned per_pass = h.read_calls / 2;
+        // The battery word is the last read before max battery's n - 1 pointer reads.
+        h.corrupt_read = h.read_calls + 2 * per_pass - (kOffsets121.max_battery.n - 1);
+        const auto s = Read(h);
+        assert(s.valid && !s.has_battery);
     }
     { // A host without is_mapped is rejected (MissingIsMapped::Reject).
         Host h;

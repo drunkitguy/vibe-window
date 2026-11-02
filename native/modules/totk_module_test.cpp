@@ -809,15 +809,17 @@ int main() {
                         {"totk.status.stamina", 1500},     {"totk.status.max_stamina", 2000},
                         {"totk.status.rupees", 1234},      {"totk.status.battery", 90000},
                         {"totk.status.max_battery", 300000}};
-        // The live layout: source 2 and the live values; one line beside the save's values.
-        totk::test::PutLive(h1);
+        // The live layout: source 2 and the live values, rounded (truncating would give 1499,
+        // 1999, 89999, 299999); one line beside the save's values.
+        totk::test::PutLive(h1, {.stamina = 1499.6f, .max_stamina = 1999.7f,
+                                 .battery_now = 899.996f, .max_battery = 2999.996f});
         SampleClean(m, i1, h1);
         assert(status(h1) == live);
         for (const auto& [key, value] : h1.ints)
             assert(totk::pub::Listed(key));
         const std::vector<std::string> first{
-            "totk live status: hearts=48/80 stamina=1500/2000 rupees=1234 battery=900/3000 | "
-            "save: hearts=12 max_hearts=40 max_stamina=1000 rupees=4321"};
+            "totk live status: hearts=48/80 stamina=1499.6/1999.7 rupees=1234 battery=899.996/3000 "
+            "| save: hearts=12 max_hearts=40 max_stamina=1000 rupees=4321"};
         assert(live_logs(h1) == first);
         // CA10 with the live reader on: no allocation in 1000 samples, no second line.
         {
@@ -864,8 +866,8 @@ int main() {
         SampleClean(m, i1, h1);
         assert(status(h1) == save);
         const std::vector<std::string> lost{
-            first[0], "totk live status lost: hearts=48/80 stamina=1500/2000 rupees=1234 "
-                      "battery=900/3000 | save: hearts=12 max_hearts=40 max_stamina=1000 "
+            first[0], "totk live status lost: hearts=48/80 stamina=1499.6/1999.7 rupees=1234 "
+                      "battery=899.996/3000 | save: hearts=12 max_hearts=40 max_stamina=1000 "
                       "rupees=4321"};
         assert(live_logs(h1) == lost);
         // Live again: no third line.

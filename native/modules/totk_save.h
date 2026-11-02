@@ -299,8 +299,9 @@ inline Snapshot BuildSnapshot(const GameData& g) {
     s.max_hearts = IntOrUInt(g, keys::kMaxLife);
     s.max_stamina = IntOrUInt(g, keys::kMaxStamina);
     // lotuskit types it Float [S38 GMDHash_InfoList.mjs] and cheat 2 writes a float [S9]. The
-    // bound is false for NaN and infinity.
-    if (const auto f = g.Float(keys::kMaxStamina); !s.max_stamina && f && std::fabs(*f) < 1e9f)
+    // bound is false for NaN and infinity. An Int and a Float under one hash are ambiguous
+    // (GameData drops both), so at most one of the two is found.
+    if (const auto f = g.Float(keys::kMaxStamina); f && std::fabs(*f) < 1e9f)
         s.max_stamina = std::llround(*f);
     s.rupees = IntOrUInt(g, keys::kRupees);
     if (const auto e = g.Float(keys::kMaxEnergy); e && std::isfinite(*e) && std::fabs(*e) < 1e9f)

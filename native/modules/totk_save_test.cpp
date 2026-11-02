@@ -251,6 +251,9 @@ int main() {
         SaveBuilder n;
         n.Float("PlayerStatus.MaxStamina", NAN);
         assert(!Snap(n).max_stamina);
+        SaveBuilder i; // Int and Float under one key: ambiguous, neither is read.
+        i.Int("PlayerStatus.MaxStamina", 1000).Float("PlayerStatus.MaxStamina", 2000.f);
+        assert(!Snap(i).max_stamina);
     }
     // Non-finite battery or position: absent.
     {
