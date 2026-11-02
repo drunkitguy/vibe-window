@@ -870,6 +870,10 @@ int main() {
         SampleClean(m, named, hn);
         assert(hn.ints.at("totk.names.valid") == 0 &&
                hn.texts.at("totk.gear.weapon.name") == "Weapon_Spear_002");
+        const std::string dir = "romfs:/UI/Map/MainField/"; // map tiles, probed with the names
+        hn.PutRomfs(dir + "G_00-00_02.bntx.zs", {1});
+        hn.PutRomfs(dir + "S_11-09_02_T_A.bntx.zs", {1});
+        hn.PutRomfs(dir + "U_05-04_02_TTTT_A.bntx.zs", {1});
         hn.PutRomfs("romfs:Mals/USen.Product.121.sarc.zs", {0x28, 0xB5, 0x2F, 0xFD});
         hn.PutRomfs("romfs:Mals/USen.Product.121.sarc.zs#ActorMsg/PouchContent.msbt",
                     Msbt({{"Weapon_Spear_002_Name", u"Traveler's Spear"},
@@ -888,8 +892,12 @@ int main() {
         assert(hn.texts == expected);
         {
             std::scoped_lock lock{hn.log_mutex};
+            const std::string one = ": 1/120, first missing " + dir;
             assert((hn.logs == std::vector<std::string>{
-                                   "totk: item names from Mals/USen.Product.121 (6 labels)"}));
+                                   "totk: item names from Mals/USen.Product.121 (6 labels)",
+                                   "totk: map tiles G" + one + "G_01-00_02.bntx.zs",
+                                   "totk: map tiles S" + one + "S_00-00_02.bntx.zs",
+                                   "totk: map tiles U" + one + "U_00-00_02.bntx.zs"}));
         }
         ni.page = kPageHome;
         ni.tab = 1;
@@ -923,6 +931,45 @@ int main() {
                hn.texts.at("totk.gear.weapon.name") == "Traveler's Sword" &&
                !hn.texts.contains("totk.gear.weapon.fuse_name") &&
                hn.texts.at("totk.gear.weapon.effect").empty()); // Effect.Type None
+        // The map tiles: the selected layer's two keys per found tile, only on page 2; none on
+        // page 0.
+        const auto tile_keys = [&hn] {
+            int n = 0;
+            for (const auto& [key, value] : hn.texts)
+                n += key.starts_with("totk.map.tile.");
+            return n;
+        };
+        assert(tile_keys() == 0);
+        ni.page = kPageMap;
+        const std::pair<int, std::string> found[] = {
+            {0, "G_00-00_0%.bntx.zs"}, {119, "S_11-09_0%_T_A.bntx.zs"},
+            {4 * 12 + 5, "U_05-04_0%_TTTT_A.bntx.zs"}};
+        for (int layer = 0; layer < 3; ++layer) {
+            ni.layer = layer;
+            SampleClean(m, named, hn);
+            const auto& [n, name] = found[layer];
+            std::string overview = dir + name, detail = dir + name;
+            overview[overview.find('%')] = '2';
+            detail[detail.find('%')] = '1';
+            const std::string key = "totk.map.tile." + std::to_string(n);
+            assert(tile_keys() == 2 && hn.texts.at(key) == overview &&
+                   hn.texts.at(key + ".d") == detail);
+            assert(hn.ints.at("totk.map.layer") == layer);
+        }
+        // CA10 on the map page with tiles: no allocation in 1000 samples.
+        m->sample(named, &hn.api);
+        const long before_map = t_news;
+        for (int i = 0; i < 1000; ++i)
+            m->sample(named, &hn.api);
+        assert(t_news == before_map);
+        // A save without a position: totk.map.valid 0, no position, no tiles.
+        nd.Put(Slot(1, "caption.sav"), Caption(2024, 1, 2, 8, 2, false));
+        nd.Put(Slot(1, "progress.sav"), SaveBuilder().Int("PlayerStatus.Life", 3).Build());
+        PollNow(named);
+        PollNow(named);
+        SampleClean(m, named, hn);
+        assert(hn.ints.at("totk.map.valid") == 0 && tile_keys() == 0 &&
+               !hn.floats.contains("totk.map.x") && !hn.ints.contains("totk.map.source"));
         assert(hn.MemoryCalls() == 0);
         m->destroy(named);
     }
@@ -939,16 +986,21 @@ int main() {
         };
         for (int i = 0; i < 40 && logs().empty(); ++i)
             PollNow(unnamed);
+        const std::string none = ": 0/120, first missing romfs:/UI/Map/MainField/";
         const std::vector<std::string> lines{
             "totk: item names unavailable: no Mals/USen.Product.<100-200>.sarc.zs",
-            "totk dump mals 0", "totk dump failed: no UI/LayoutArchive/Common.Product.<100-200>"};
+            "totk dump mals 0", "totk dump failed: no UI/LayoutArchive/Common.Product.<100-200>",
+            "totk: map tiles G" + none + "G_00-00_02.bntx.zs",
+            "totk: map tiles S" + none + "S_00-00_02.bntx.zs",
+            "totk: map tiles U" + none + "U_00-00_02.bntx.zs"};
         assert(logs() == lines);
         unsigned calls;
         {
             std::scoped_lock lock{hf.romfs_mutex};
             calls = hf.romfs_calls;
         }
-        assert(calls == 30 * 101 + 1 + 101); // 30 Mals probes, the user file, the Common probe
+        // 30 Mals probes, the user file, the Common probe, 15 suffixes per tile of 3 layers.
+        assert(calls == 30 * 101 + 1 + 101 + 3 * 120 * 15);
         for (int i = 0; i < 5; ++i)
             PollNow(unnamed);
         SampleClean(m, unnamed, hf);
@@ -970,7 +1022,13 @@ int main() {
             assert((hd.logs ==
                     std::vector<std::string>{
                         "totk dump mals 120",
-                        "totk dump failed: no UI/LayoutArchive/Common.Product.<100-200>"}));
+                        "totk dump failed: no UI/LayoutArchive/Common.Product.<100-200>",
+                        "totk: map tiles G: 0/120, first missing "
+                        "romfs:/UI/Map/MainField/G_00-00_02.bntx.zs",
+                        "totk: map tiles S: 0/120, first missing "
+                        "romfs:/UI/Map/MainField/S_00-00_02.bntx.zs",
+                        "totk: map tiles U: 0/120, first missing "
+                        "romfs:/UI/Map/MainField/U_00-00_02.bntx.zs"}));
         }
         m->destroy(early);
     }

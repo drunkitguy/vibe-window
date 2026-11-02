@@ -48,6 +48,13 @@ FUSES = ("weapon", "shield")  # only these fuse
 CATEGORIES = [("WPN", "Weapons"), ("BOW", "Bows and Arrows"), ("SHD", "Shields"),
               ("ARM", "Armor"), ("MAT", "Materials"), ("FOOD", "Food"),
               ("ZON", "Zonai Devices"), ("KEY", "Key Items")]
+# Map layers in totk.map.layer order: (tile letter, pill label); pills top to bottom Sky, Surface,
+# Depths as in the game's map. The tile names and levels are the module's table (totk_map.h).
+LAYERS = [("G", "Surface"), ("S", "Sky"), ("U", "Depths")]
+LAYER_PILLS = [1, 0, 2]
+# The tile grid [S28 §2, 1.4.3; UNVERIFIED on 1.2.0]: 12x10 tiles of 1000 units from x -6000,
+# z -5000; the map's y is -z.
+TILE_COLS, TILE_ROWS, TILE_SIZE, TILE_X0, TILE_Z0 = 12, 10, 1000, -6000, -5000
 # Abilities in totk.ability.select order: (<a>, short name, the save's Obj_<X>).
 ABILITIES = [("ultrahand", "Ultrahand", "UltraHand"), ("fuse", "Fuse", "OneTouchBond"),
              ("ascend", "Ascend", "Tooreroof"), ("recall", "Recall", "ReverseRecorder"),
@@ -60,7 +67,8 @@ ABILITIES = [("ultrahand", "Ultrahand", "UltraHand"), ("fuse", "Fuse", "OneTouch
 # name. A set entry that does not load draws nothing, and the fallback under it still reads.
 TEX = {role: None for role in (
     "header", "tab_on", "slot", "cursor", "detail", "badge", "equipped", "equip_panel", "plate",
-    "bar_bg", "heart", "stamina", "rupee", "battery", "tile", *(f"cat_{k}" for k in range(8)))}
+    "bar_bg", "heart", "stamina", "rupee", "battery", "tile", "player_pin",
+    *(f"cat_{k}" for k in range(8)), "layer_G", "layer_S", "layer_U")}
 # R5's first candidate for the ability icons: the item icon of the save's Obj_<X> (UNVERIFIED).
 TEX.update({f"ability_{a}": {"src": f"romfs:/UI/Tex/Icon/Obj_{x}.bntx.zs"}
             for a, _, x in ABILITIES})
@@ -116,10 +124,11 @@ def header(page_index, domain):
         widgets.append({"type": "button", "rect": [x, 14, 48, 48], "text": glyph,
                         "text_scale": 8, "align": "center", "border": 0, "bg": CLEAR,
                         "color": TEXT, "on_tap": f"ui_page_{target}"})
-    widgets.append({"type": "label", "rect": [8, 1052, 600, 24],
-                    "text_bind": f"totk.{domain}.source", "text_scale": 4,
-                    "text_map": {"1": "From last save", "2": "Live"}, "color": DIM,
-                    "need_bind": f"totk.{domain}.valid"})
+    if domain != "map":  # the map page shows the save's position there instead
+        widgets.append({"type": "label", "rect": [8, 1052, 600, 24],
+                        "text_bind": f"totk.{domain}.source", "text_scale": 4,
+                        "text_map": {"1": "From last save", "2": "Live"}, "color": DIM,
+                        "need_bind": f"totk.{domain}.valid"})
     return widgets
 
 
@@ -458,23 +467,62 @@ def abilities_page(derived):
         {"type": "value", "rect": [88, 958, 200, 26], "bind": "totk.status.max_battery",
          "div": 100, "text_scale": 5, "color": VALUE,
          "need_bind": has(derived, "totk.status.max_battery")},
-        # The current ability is live only (offset UNKNOWN): never published from the save.
-        {"type": "label", "rect": [1208, 950, 0, 20],
-         "text": "Current ability: needs a live reader", "text_scale": 4, "align": "right",
-         "color": DIM},
     ]
     return widgets
 
 
-def later_page(domain):
-    """Map (T7): the frame and the empty state until its packet."""
-    return [*panel([16, 92, 1208, 944]),
-            {"type": "label", "rect": [620, 480, 0, 60], "text": "No save data yet",
-             "text_scale": 5, "align": "center", "color": DIM,
-             "need_bind": f"!totk.{domain}.valid"},
-            {"type": "label", "rect": [620, 480, 0, 60], "text": "Coming in a later update",
-             "text_scale": 5, "align": "center", "color": DIM,
-             "need_bind": f"totk.{domain}.valid"}]
+def map_page(derived, actions):
+    """The last save's position on the selected layer's tiles (pan and zoom), the layer pills,
+    Centre and the position line. Nothing but "No save data yet" without a position
+    (totk.map.valid), so no tiles either."""
+    valid, shown = {"need_bind": "totk.map.valid"}, {"hide_bind": "totk.map.valid", "hide_eq": 0}
+    overlays = []
+    for n in range(TILE_COLS * TILE_ROWS):
+        x0 = TILE_X0 + TILE_SIZE * (n % TILE_COLS)
+        y1 = -TILE_Z0 - TILE_SIZE * (n // TILE_COLS)
+        overlays.append({"src_bind": f"totk.map.tile.{n}",
+                         "src_detail_bind": f"totk.map.tile.{n}.d", "detail_threshold": 360,
+                         "x0": x0, "x1": x0 + TILE_SIZE, "y0": y1 - TILE_SIZE, "y1": y1})
+    widget = {"type": "map", "id": "totk_map", "rect": [0, 76, 1240, 972], "area": "MainField",
+              "area_label": False, "pan_zoom": True, "marker_x_bind": "totk.map.x",
+              "marker_y_bind": "totk.map.y", **valid, "overlays": overlays}
+    if TEX["player_pin"]:  # else the runtime's own pin
+        widget["marker_src"] = TEX["player_pin"]["src"]
+    widgets = [widget]
+    for j, k in enumerate(LAYER_PILLS):
+        letter, label = LAYERS[k]
+        rect, current = [1100, 96 + 80 * j, 124, 64], f"ui.map.layer{k}"
+        derived.append({"name": current, "cmp": "eq", "a": "totk.map.layer", "b": k})
+        actions[f"map_layer_{k}"] = {"kind": "module", "action": "totk.map.layer", "argument": k}
+        widgets += [{"type": "button", "rect": rect, "text": "", "border": 2, "bg": PANEL,
+                     "color": EDGE, "on_tap": f"map_layer_{k}", **valid},
+                    {"type": "rect", "rect": rect, "bg": CLEAR, "color": SELECT, "frame": 3,
+                     "need_bind": current, **shown}]
+        for gate, colour, tint in ((current, TEXT, None), (f"!{current}", DIM, TAB_OTHER)):
+            text = {"type": "label", "rect": [1162, rect[1] + 22, 0, 20], "text": label,
+                    "text_scale": 5, "align": "center", "color": colour, "wrap_width": 116,
+                    "max_lines": 1, "fit_text": True, "text_min_scale": 4, "need_bind": gate,
+                    **shown}
+            widgets += textured(f"layer_{letter}", [1138, rect[1] + 8, 48, 48], [text],
+                                need_bind=gate, **shown, **({"tint": tint} if tint else {}))
+    actions["map_centre"] = {"kind": "view_reset", "view": "totk_map"}
+    derived += [{"name": "ui.map.x", "expr": "round(totk.map.x)"},
+                {"name": "ui.map.z", "expr": "round(-totk.map.y)"}]
+    widgets += [
+        {"type": "button", "rect": [1100, 968, 124, 64], "text": "Centre", "text_scale": 5,
+         "align": "center", "border": 2, "bg": PANEL, "color": TEXT, "on_tap": "map_centre",
+         **valid},
+        {"type": "label", "rect": [620, 540, 0, 40], "text": "No save data yet",
+         "text_scale": 5, "align": "center", "color": DIM, "need_bind": "!totk.map.valid"},
+        # The position line replaces the source line: x and z (the save's, not the map's y).
+        {"type": "label", "rect": [16, 1052, 150, 24], "text": "Last save", "text_scale": 4,
+         "color": DIM, **valid},
+        {"type": "value", "rect": [176, 1052, 130, 24], "bind": "ui.map.x", "text": "x ",
+         "text_scale": 4, "color": VALUE, **valid},
+        {"type": "value", "rect": [320, 1052, 130, 24], "bind": "ui.map.z", "text": "z ",
+         "text_scale": 4, "color": VALUE, **valid},
+    ]
+    return widgets
 
 
 def manifest():
@@ -484,7 +532,8 @@ def manifest():
     pages = []
     for k, (page_id, _, domain) in enumerate(PAGES):
         body = (home_page(derived, actions) if page_id == "home" else
-                abilities_page(derived) if page_id == "abilities" else later_page(domain))
+                abilities_page(derived) if page_id == "abilities" else
+                map_page(derived, actions))
         page = {"id": page_id, "widgets": body + header(k, domain) + notice()}
         if page_id == "home":
             page["scrolls"] = [GRID_REGION]
@@ -505,6 +554,12 @@ def manifest():
         "pages": pages,
         "actions": actions,
         "derived": derived,
+        # The map's world [PLAN.md T7]: the tile grid's bounds, a blank base under the tiles.
+        "map": {"areas": {"MainField": {
+            "min": [TILE_X0, TILE_Z0], "max": [TILE_X0 + TILE_COLS * TILE_SIZE,
+                                               TILE_Z0 + TILE_ROWS * TILE_SIZE],
+            "image": "file:assets/map-blank.png", "clamp_view": True}},
+            "style": {"background": BG}},
         # BotW's page_binds values [S2]: the module's totk.ui.page picks the page.
         "page_binds": [{"point": "totk.ui.page", "equals": k,
                         "when_equal": {"page": page_id, "transition": "fade", "duration_ms": 130,

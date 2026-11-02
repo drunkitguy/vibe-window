@@ -5,7 +5,8 @@
 // Data: the last save through the save extension (a worker thread polls it every 2 s) and the
 // live status reader, whose offsets stay UNKNOWN (0) so it never touches guest memory yet. The
 // worker also loads the item names from the game's romfs (totk_msbt.h) and, once per session
-// when the player asks for it, logs T8a's texture dump (totk_dump.h).
+// when the player asks for it, logs T8a's texture dump (totk_dump.h), and finds the map's tile
+// files once (totk_map.h).
 // Base extensions: module actions drive the UI state (page, tab, selection, map layer); game
 // actions are refused; load_image serves only the font atlas (icons are romfs: paths the runtime
 // reads). Font extension: decode_font builds that atlas from the game's own font (totk_font.h).
@@ -29,6 +30,7 @@
 #include "totk_dump.h"
 #include "totk_font.h"
 #include "totk_keys.h"
+#include "totk_map.h"
 #include "totk_msbt.h"
 #include "totk_offsets.h"
 #include "totk_save.h"
@@ -42,6 +44,8 @@ static_assert(std::size(pub::kGearSlotNames) == totk::kGearSlots);
 static_assert(std::size(pub::kAbilityNames) == totk::kAbilities);
 static_assert(pub::kActionArgs[pub::kActInvTab] == totk::kTabs);
 constexpr int kPageHome = 0; // inventory, gear and status [docs/PLAN.md R5]
+constexpr int kPageMap = 2;
+static_assert(pub::kActionArgs[pub::kActMapLayer] == totk::map::kLayerCount);
 
 // Every key sample publishes with a computed name, built once in create so sample never allocates.
 struct Keys {
@@ -49,6 +53,7 @@ struct Keys {
     std::array<std::string, totk::kAbilities> owned;
     std::array<std::string, totk::kTabs> tab_count;
     std::vector<std::array<std::string, pub::kItemFields>> items;
+    std::array<std::array<std::string, totk::map::kLevelCount>, totk::map::kTiles> tiles;
 
     Keys() : items(totk::kMaxItems) {
         for (int s = 0; s < totk::kGearSlots; ++s)
@@ -61,6 +66,9 @@ struct Keys {
         for (std::size_t i = 0; i < items.size(); ++i)
             for (int f = 0; f < pub::kItemFields; ++f)
                 items[i][f] = pub::Expand(pub::kItemKeys[f], std::to_string(i));
+        for (int n = 0; n < totk::map::kTiles; ++n)
+            for (int l = 0; l < totk::map::kLevelCount; ++l)
+                tiles[n][l] = pub::Expand(pub::kTileKeys[l], std::to_string(n));
     }
 };
 
@@ -91,6 +99,7 @@ struct Instance {
     // holding its copy, frees it.
     std::shared_ptr<const totk::Snapshot> retired;
     bool names = false; // the item names loaded (totk.names.valid)
+    std::shared_ptr<const totk::map::Tiles> tiles; // set once by the worker
 
     // The font atlas, built on first use by decode_font (tick thread) or load_image (asset
     // worker); the lock is held while it builds so the two never build it twice.
@@ -215,7 +224,7 @@ void Poll(Instance& in, const EdenDsmodHostSaveApi& api, Watch& w,
 void Worker(Instance& in) {
     Watch watch;
     Names names;
-    bool dumped = false;
+    bool dumped = false, probed = false;
     std::unique_lock lock{in.mutex};
     while (!in.stop) {
         const std::uint64_t generation = in.requested;
@@ -241,6 +250,13 @@ void Worker(Instance& in) {
             if ((names.mals || names.done) && !dumped) {
                 dumped = true;
                 totk::dump::Run(in.host, names.mals);
+            }
+            // The map tiles: once, on the same condition (the romfs answered, or never will).
+            if ((names.mals || names.done) && !probed && in.host.read_romfs) {
+                probed = true;
+                auto tiles = std::make_shared<const totk::map::Tiles>(totk::map::Probe(in.host));
+                std::scoped_lock tiles_lock{in.mutex};
+                in.tiles = std::move(tiles);
             }
             if (api)
                 Poll(in, *api, watch, names.labels);
@@ -457,10 +473,12 @@ void Sample(void* instance, const EdenDsmodHostApi* host) {
         auto& in = *static_cast<Instance*>(instance);
         const totk::Status live = totk::ReadStatus(*host, in.offsets);
         std::shared_ptr<const totk::Snapshot> snap;
+        std::shared_ptr<const totk::map::Tiles> tiles;
         bool names;
         {
             std::scoped_lock lock{in.mutex};
             snap = in.snapshot;
+            tiles = in.tiles;
             names = in.names;
         }
         const Out o{*host};
@@ -488,6 +506,12 @@ void Sample(void* instance, const EdenDsmodHostApi* host) {
             o.I(pub::kMapSource, 1);
             o.F(pub::kMapX, (*snap->position)[0]);
             o.F(pub::kMapY, (*snap->position)[1]);
+            // The selected layer's tiles: heavy, so only while the map page is open, and only
+            // with a position (totk.map.valid), so no save shows no map.
+            if (tiles && in.page == kPageMap && in.layer >= 0 && in.layer < totk::map::kLayerCount)
+                for (int n = 0; n < totk::map::kTiles; ++n)
+                    for (int l = 0; l < totk::map::kLevelCount; ++l)
+                        o.T(in.keys.tiles[n][l], (*tiles)[in.layer][n][l]);
         }
     } catch (...) {
     }

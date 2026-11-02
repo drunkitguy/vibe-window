@@ -582,20 +582,97 @@ class GenManifestTest(unittest.TestCase):
 
     def test_battery_strip(self):
         """The abilities page's battery strip: caption while totk.status.valid, the value (div
-        100) while totk.status.max_battery is published (0 shows), the live-only note always."""
+        100) while totk.status.max_battery is published (0 shows); nothing else in it."""
         ws = self.page("abilities")
         caption = self.one(ws, text="Battery", rect=[88, 934, 200, 20])
         value = self.one(ws, type="value", bind="totk.status.max_battery", div=100,
                          rect=[88, 958, 200, 26])
-        note = self.one(ws, text="Current ability: needs a live reader", align="right",
-                        rect=[1208, 950, 0, 20])
-        for snap, expect in (({}, [note]), ({"totk.status.valid": 0}, [note]),
-                             ({"totk.status.valid": 1}, [caption, note]),
+        strip = [w for w in ws if w["rect"][1] >= 924 and w["rect"][1] < 996]
+        self.assertEqual([w["type"] for w in strip], ["rect", "label", "value"])
+        for snap, expect in (({}, []), ({"totk.status.valid": 0}, []),
+                             ({"totk.status.valid": 1}, [caption]),
                              ({"totk.status.valid": 1, "totk.status.max_battery": 0},
-                              [caption, value, note])):
+                              [caption, value])):
             snap = {"totk.ready": 1, **snap}
-            self.assertEqual([w for w in (caption, value, note) if self.visible(w, snap)],
+            self.assertEqual([w for w in (caption, value) if self.visible(w, snap)],
                              expect, snap)
+
+    def test_map_page(self):
+        """The map widget: MainField with pan/zoom, the save's position as the marker, 120 tile
+        overlays (tile n = r * 12 + c covers x -6000 + 1000c.., map y 5000 - 1000r down 1000;
+        detail past 360 px). Per state: no position (totk.map.valid absent or 0) only "No save
+        data yet"; with one, the map, pills, Centre and the position line (x, and z = -y)."""
+        ws = self.page("map")
+        self.assertEqual(self.m["map"], {"areas": {"MainField": {
+            "min": [-6000, -5000], "max": [6000, 5000], "image": "file:assets/map-blank.png",
+            "clamp_view": True}}, "style": {"background": gen_manifest.BG}})
+        widget = self.one(ws, type="map")
+        self.assertEqual({k: v for k, v in widget.items() if k != "overlays"}, {
+            "type": "map", "id": "totk_map", "rect": [0, 76, 1240, 972], "area": "MainField",
+            "area_label": False, "pan_zoom": True, "marker_x_bind": "totk.map.x",
+            "marker_y_bind": "totk.map.y", "need_bind": "totk.map.valid"})
+        overlays = widget["overlays"]
+        self.assertEqual(len(overlays), 120)
+        for n, (x0, y0) in ((0, (-6000, 4000)), (11, (5000, 4000)), (53, (-1000, 0)),
+                            (119, (5000, -5000))):
+            self.assertEqual(overlays[n], {
+                "src_bind": f"totk.map.tile.{n}", "src_detail_bind": f"totk.map.tile.{n}.d",
+                "detail_threshold": 360, "x0": x0, "x1": x0 + 1000, "y0": y0, "y1": y0 + 1000})
+        self.assertEqual(sorted((o["x0"], o["y0"]) for o in overlays),
+                         sorted((x, y) for x in range(-6000, 6000, 1000)
+                                for y in range(-5000, 5000, 1000)))
+        centre = self.one(ws, text="Centre", rect=[1100, 968, 124, 64])
+        self.assertEqual(self.action(centre["on_tap"]), {"kind": "view_reset", "view": "totk_map"})
+        nosave = self.one(ws, text="No save data yet")
+        line = [self.one(ws, text="Last save", rect=[16, 1052, 150, 24]),
+                self.one(ws, type="value", bind="ui.map.x", text="x "),
+                self.one(ws, type="value", bind="ui.map.z", text="z ")]
+        self.assertEqual([d for d in self.m["derived"] if d["name"] in ("ui.map.x", "ui.map.z")],
+                         [{"name": "ui.map.x", "expr": "round(totk.map.x)"},
+                          {"name": "ui.map.z", "expr": "round(-totk.map.y)"}])
+        self.assertEqual([w for w in ws if w.get("text_bind", "").endswith(".source")], [])
+        pills = [w for w in ws if w.get("on_tap", "").startswith("map_layer_")]
+        for valid, expect in ((None, [nosave]), (0, [nosave]),
+                              (1, [widget, centre, *line, *pills])):
+            snap = {"totk.ready": 1, "totk.map.layer": 0}
+            if valid is not None:
+                snap["totk.map.valid"] = valid
+            parts = [widget, centre, nosave, *line, *pills]
+            self.assertEqual([w for w in parts if self.visible(w, snap)],
+                             [w for w in parts if any(w is e for e in expect)], valid)
+
+    def test_layer_pills(self):
+        """Pills top to bottom Sky, Surface, Depths send totk.map.layer 1, 0, 2; the selected
+        layer's pill has the select frame and its label in text, the others dim; nothing shows
+        without a position. With TEX.layer_<L> named, its icon follows the same two gates (full
+        tint selected, B3FFFFFF otherwise)."""
+        ws = self.page("map")
+        named = next(p for p in self.named(["layer_G", "layer_S", "layer_U"])["pages"]
+                     if p["id"] == "map")["widgets"]
+        for j, (k, letter, label) in enumerate(((1, "S", "Sky"), (0, "G", "Surface"),
+                                                (2, "U", "Depths"))):
+            y = 96 + 80 * j
+            pill = self.one(ws, type="button", rect=[1100, y, 124, 64])
+            self.assertEqual(self.action(pill["on_tap"]), {
+                "kind": "module", "action": "totk.map.layer", "argument": k})
+            frame = self.one(ws, type="rect", rect=[1100, y, 124, 64], color=gen_manifest.SELECT)
+            labels = [w for w in ws if w.get("text") == label]
+            self.assertEqual([w["rect"] for w in labels], [[1162, y + 22, 0, 20]] * 2)
+            self.assertTrue(all(w["text_min_scale"] == 4 for w in labels))
+            icons = [w for w in named if w.get("src") == f"romfs:/T8A/layer_{letter}"]
+            self.assertEqual([w["rect"] for w in icons], [[1138, y + 8, 48, 48]] * 2)
+            for layer in range(3):
+                for valid in (None, 0, 1):
+                    snap = {"totk.ready": 1, "totk.map.layer": layer}
+                    if valid is not None:
+                        snap["totk.map.valid"] = valid
+                    on = valid == 1
+                    self.assertEqual(self.visible(frame, snap), on and layer == k)
+                    self.assertEqual([w["color"] for w in labels if self.visible(w, snap)],
+                                     [gen_manifest.TEXT if layer == k else gen_manifest.DIM]
+                                     if on else [], (k, layer, valid))
+                    self.assertEqual([w.get("tint") for w in icons if self.visible(w, snap)],
+                                     [None if layer == k else "#B3FFFFFF"] if on else [])
 
     def one(self, widgets, **fields):
         found = [w for w in widgets if all(w.get(k) == v for k, v in fields.items())]
@@ -631,14 +708,11 @@ class GenManifestTest(unittest.TestCase):
             "Weapons", "Bows and Arrows", "Shields", "Armor", "Materials", "Food",
             "Zonai Devices", "Key Items"])})
         cases.append((names, ["totk.inv.valid"]))
-        for page_id, domain in (("home", "gear"), ("abilities", "ability"), ("map", "map")):
+        for page_id, domain in (("home", "gear"), ("abilities", "ability")):
             ws = self.page(page_id)
             source = self.one(ws, text_bind=f"totk.{domain}.source", rect=[8, 1052, 600, 24],
                               text_map={"1": "From last save", "2": "Live"})
             cases.append((source, [f"totk.{domain}.valid"]))
-            if page_id == "map":
-                later = self.one(ws, text="Coming in a later update")
-                cases.append((later, [f"totk.{domain}.valid"]))
         for w, keys in cases:
             snap = {"totk.ready": 1, **{k: 1 for k in keys}}
             self.assertTrue(self.visible(w, snap), w)
@@ -656,7 +730,7 @@ class GenManifestTest(unittest.TestCase):
                  need_bind=f"{w}.present")
         self.one(home, rect=[1000, 420, 72, 72], src_bind=f"{w}.fuse_icon",
                  need_bind=f"{w}.fuse")
-        anchors = {122, 320, 554, 620, 936, 1156, 1208, 1220} | \
+        anchors = {122, 320, 554, 620, 936, 1156, 1162, 1220} | \
             {104 + 172 * k for k in range(7)} | {47 + 78 * k for k in range(8)} | \
             {78 + 78 * k for k in range(8)} | {161 + 306 * k for k in range(4)} | \
             {314 + 306 * k for k in range(3)}
@@ -685,7 +759,7 @@ class GenManifestTest(unittest.TestCase):
         check(self.m)
         unknown = {r for r, t in gen_manifest.TEX.items() if t is None}
         self.assertTrue(unknown)
-        srcs = {w.get("src") for p in self.m["pages"] for w in p["widgets"]}
+        srcs = {w.get("src", w.get("marker_src")) for p in self.m["pages"] for w in p["widgets"]}
         self.assertFalse({f"romfs:/T8A/{r}" for r in unknown} & srcs)
         saved = dict(gen_manifest.TEX)
         try:
@@ -695,7 +769,8 @@ class GenManifestTest(unittest.TestCase):
             gen_manifest.TEX.clear()
             gen_manifest.TEX.update(saved)
         check(named)
-        used = {w["src"] for p in named["pages"] for w in p["widgets"] if "src" in w}
+        used = {w.get("src", w.get("marker_src")) for p in named["pages"] for w in p["widgets"]
+                if "src" in w or "marker_src" in w}
         self.assertEqual({gen_manifest.TEX[r]["src"] if gen_manifest.TEX[r] else
                           f"romfs:/T8A/{r}" for r in gen_manifest.TEX}, used)
 

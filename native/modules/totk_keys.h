@@ -3,8 +3,8 @@
 // [docs/PLAN.md "Data model", "Actions"]. The module builds its key strings from here, and
 // tools/totk/check_manifest.py parses this file: every string literal starting "totk." outside
 // kActionNames is a key or a key family; kActionNames holds the module actions.
-// Family placeholders: <s> one of kGearSlotNames, <a> one of kAbilityNames, {i} an item index,
-// {k} an inventory tab index (0-7).
+// Family placeholders: <s> one of kGearSlotNames, <a> one of kAbilityNames, {i} an item or map
+// tile index, {k} an inventory tab index (0-7).
 #pragma once
 
 #include <cstddef>
@@ -77,6 +77,8 @@ inline constexpr const char* kItemKeys[kItemFields] = {
     "totk.inv.{i}.icon", "totk.inv.{i}.value", "totk.inv.{i}.kind", "totk.inv.{i}.equipped",
     "totk.inv.{i}.fuse_icon"};
 inline constexpr char kTabCount[] = "totk.inv.tab{k}.count";
+// Map tile n of the selected layer: the overview and the detail picture (totk_map.h).
+inline constexpr const char* kTileKeys[] = {"totk.map.tile.{i}", "totk.map.tile.{i}.d"};
 
 // ---- module actions (on_action) -----------------------------------------------------------------
 // UI actions touch only module state; game actions are refused until T3 finds verified offsets.
@@ -153,6 +155,9 @@ inline bool Listed(std::string_view key) {
         if (detail::Matches(f, key))
             return true;
     for (const char* f : kItemKeys)
+        if (detail::Matches(f, key))
+            return true;
+    for (const char* f : kTileKeys)
         if (detail::Matches(f, key))
             return true;
     return detail::Matches(kAbilityOwned, key) || detail::Matches(kTabCount, key);

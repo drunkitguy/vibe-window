@@ -36,7 +36,7 @@ KINDS = {"page", "module", "view_reset"}
 ACTION_REFS = ("on_tap", "on_hold", "on_swipe_left", "on_swipe_right", "on_swipe_up",
                "on_swipe_down", "drop_action")
 # Objects whose keys are names (actions, text_map values, ...), not runtime keys.
-NAME_MAPS = {"actions", "text_map", "tables", "sprite_map", "flags"}
+NAME_MAPS = {"actions", "text_map", "tables", "sprite_map", "flags", "areas"}
 TOKEN = re.compile(r"(?<![A-Za-z0-9_.])totk\.[A-Za-z0-9_.{}]*[A-Za-z0-9_}]")
 # What the runtime parses (mod_manifest.cpp ParseWidgetType, ParseEasing, ParsePageBindTarget,
 # ParseDerived; mod_runtime_shared.h HapticStrengthNames / HapticKindNames).

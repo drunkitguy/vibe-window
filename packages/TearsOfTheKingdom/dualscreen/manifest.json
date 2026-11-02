@@ -3006,19 +3006,6 @@
      "need_bind": "ui.has.status.max_battery"
     },
     {
-     "type": "label",
-     "rect": [
-      1208,
-      950,
-      0,
-      20
-     ],
-     "text": "Current ability: needs a live reader",
-     "text_scale": 4,
-     "align": "right",
-     "color": "#FF8F907F"
-    },
-    {
      "type": "rect",
      "rect": [
       0,
@@ -3193,23 +3180,1337 @@
    "id": "map",
    "widgets": [
     {
+     "type": "map",
+     "id": "totk_map",
+     "rect": [
+      0,
+      76,
+      1240,
+      972
+     ],
+     "area": "MainField",
+     "area_label": false,
+     "pan_zoom": true,
+     "marker_x_bind": "totk.map.x",
+     "marker_y_bind": "totk.map.y",
+     "need_bind": "totk.map.valid",
+     "overlays": [
+      {
+       "src_bind": "totk.map.tile.0",
+       "src_detail_bind": "totk.map.tile.0.d",
+       "detail_threshold": 360,
+       "x0": -6000,
+       "x1": -5000,
+       "y0": 4000,
+       "y1": 5000
+      },
+      {
+       "src_bind": "totk.map.tile.1",
+       "src_detail_bind": "totk.map.tile.1.d",
+       "detail_threshold": 360,
+       "x0": -5000,
+       "x1": -4000,
+       "y0": 4000,
+       "y1": 5000
+      },
+      {
+       "src_bind": "totk.map.tile.2",
+       "src_detail_bind": "totk.map.tile.2.d",
+       "detail_threshold": 360,
+       "x0": -4000,
+       "x1": -3000,
+       "y0": 4000,
+       "y1": 5000
+      },
+      {
+       "src_bind": "totk.map.tile.3",
+       "src_detail_bind": "totk.map.tile.3.d",
+       "detail_threshold": 360,
+       "x0": -3000,
+       "x1": -2000,
+       "y0": 4000,
+       "y1": 5000
+      },
+      {
+       "src_bind": "totk.map.tile.4",
+       "src_detail_bind": "totk.map.tile.4.d",
+       "detail_threshold": 360,
+       "x0": -2000,
+       "x1": -1000,
+       "y0": 4000,
+       "y1": 5000
+      },
+      {
+       "src_bind": "totk.map.tile.5",
+       "src_detail_bind": "totk.map.tile.5.d",
+       "detail_threshold": 360,
+       "x0": -1000,
+       "x1": 0,
+       "y0": 4000,
+       "y1": 5000
+      },
+      {
+       "src_bind": "totk.map.tile.6",
+       "src_detail_bind": "totk.map.tile.6.d",
+       "detail_threshold": 360,
+       "x0": 0,
+       "x1": 1000,
+       "y0": 4000,
+       "y1": 5000
+      },
+      {
+       "src_bind": "totk.map.tile.7",
+       "src_detail_bind": "totk.map.tile.7.d",
+       "detail_threshold": 360,
+       "x0": 1000,
+       "x1": 2000,
+       "y0": 4000,
+       "y1": 5000
+      },
+      {
+       "src_bind": "totk.map.tile.8",
+       "src_detail_bind": "totk.map.tile.8.d",
+       "detail_threshold": 360,
+       "x0": 2000,
+       "x1": 3000,
+       "y0": 4000,
+       "y1": 5000
+      },
+      {
+       "src_bind": "totk.map.tile.9",
+       "src_detail_bind": "totk.map.tile.9.d",
+       "detail_threshold": 360,
+       "x0": 3000,
+       "x1": 4000,
+       "y0": 4000,
+       "y1": 5000
+      },
+      {
+       "src_bind": "totk.map.tile.10",
+       "src_detail_bind": "totk.map.tile.10.d",
+       "detail_threshold": 360,
+       "x0": 4000,
+       "x1": 5000,
+       "y0": 4000,
+       "y1": 5000
+      },
+      {
+       "src_bind": "totk.map.tile.11",
+       "src_detail_bind": "totk.map.tile.11.d",
+       "detail_threshold": 360,
+       "x0": 5000,
+       "x1": 6000,
+       "y0": 4000,
+       "y1": 5000
+      },
+      {
+       "src_bind": "totk.map.tile.12",
+       "src_detail_bind": "totk.map.tile.12.d",
+       "detail_threshold": 360,
+       "x0": -6000,
+       "x1": -5000,
+       "y0": 3000,
+       "y1": 4000
+      },
+      {
+       "src_bind": "totk.map.tile.13",
+       "src_detail_bind": "totk.map.tile.13.d",
+       "detail_threshold": 360,
+       "x0": -5000,
+       "x1": -4000,
+       "y0": 3000,
+       "y1": 4000
+      },
+      {
+       "src_bind": "totk.map.tile.14",
+       "src_detail_bind": "totk.map.tile.14.d",
+       "detail_threshold": 360,
+       "x0": -4000,
+       "x1": -3000,
+       "y0": 3000,
+       "y1": 4000
+      },
+      {
+       "src_bind": "totk.map.tile.15",
+       "src_detail_bind": "totk.map.tile.15.d",
+       "detail_threshold": 360,
+       "x0": -3000,
+       "x1": -2000,
+       "y0": 3000,
+       "y1": 4000
+      },
+      {
+       "src_bind": "totk.map.tile.16",
+       "src_detail_bind": "totk.map.tile.16.d",
+       "detail_threshold": 360,
+       "x0": -2000,
+       "x1": -1000,
+       "y0": 3000,
+       "y1": 4000
+      },
+      {
+       "src_bind": "totk.map.tile.17",
+       "src_detail_bind": "totk.map.tile.17.d",
+       "detail_threshold": 360,
+       "x0": -1000,
+       "x1": 0,
+       "y0": 3000,
+       "y1": 4000
+      },
+      {
+       "src_bind": "totk.map.tile.18",
+       "src_detail_bind": "totk.map.tile.18.d",
+       "detail_threshold": 360,
+       "x0": 0,
+       "x1": 1000,
+       "y0": 3000,
+       "y1": 4000
+      },
+      {
+       "src_bind": "totk.map.tile.19",
+       "src_detail_bind": "totk.map.tile.19.d",
+       "detail_threshold": 360,
+       "x0": 1000,
+       "x1": 2000,
+       "y0": 3000,
+       "y1": 4000
+      },
+      {
+       "src_bind": "totk.map.tile.20",
+       "src_detail_bind": "totk.map.tile.20.d",
+       "detail_threshold": 360,
+       "x0": 2000,
+       "x1": 3000,
+       "y0": 3000,
+       "y1": 4000
+      },
+      {
+       "src_bind": "totk.map.tile.21",
+       "src_detail_bind": "totk.map.tile.21.d",
+       "detail_threshold": 360,
+       "x0": 3000,
+       "x1": 4000,
+       "y0": 3000,
+       "y1": 4000
+      },
+      {
+       "src_bind": "totk.map.tile.22",
+       "src_detail_bind": "totk.map.tile.22.d",
+       "detail_threshold": 360,
+       "x0": 4000,
+       "x1": 5000,
+       "y0": 3000,
+       "y1": 4000
+      },
+      {
+       "src_bind": "totk.map.tile.23",
+       "src_detail_bind": "totk.map.tile.23.d",
+       "detail_threshold": 360,
+       "x0": 5000,
+       "x1": 6000,
+       "y0": 3000,
+       "y1": 4000
+      },
+      {
+       "src_bind": "totk.map.tile.24",
+       "src_detail_bind": "totk.map.tile.24.d",
+       "detail_threshold": 360,
+       "x0": -6000,
+       "x1": -5000,
+       "y0": 2000,
+       "y1": 3000
+      },
+      {
+       "src_bind": "totk.map.tile.25",
+       "src_detail_bind": "totk.map.tile.25.d",
+       "detail_threshold": 360,
+       "x0": -5000,
+       "x1": -4000,
+       "y0": 2000,
+       "y1": 3000
+      },
+      {
+       "src_bind": "totk.map.tile.26",
+       "src_detail_bind": "totk.map.tile.26.d",
+       "detail_threshold": 360,
+       "x0": -4000,
+       "x1": -3000,
+       "y0": 2000,
+       "y1": 3000
+      },
+      {
+       "src_bind": "totk.map.tile.27",
+       "src_detail_bind": "totk.map.tile.27.d",
+       "detail_threshold": 360,
+       "x0": -3000,
+       "x1": -2000,
+       "y0": 2000,
+       "y1": 3000
+      },
+      {
+       "src_bind": "totk.map.tile.28",
+       "src_detail_bind": "totk.map.tile.28.d",
+       "detail_threshold": 360,
+       "x0": -2000,
+       "x1": -1000,
+       "y0": 2000,
+       "y1": 3000
+      },
+      {
+       "src_bind": "totk.map.tile.29",
+       "src_detail_bind": "totk.map.tile.29.d",
+       "detail_threshold": 360,
+       "x0": -1000,
+       "x1": 0,
+       "y0": 2000,
+       "y1": 3000
+      },
+      {
+       "src_bind": "totk.map.tile.30",
+       "src_detail_bind": "totk.map.tile.30.d",
+       "detail_threshold": 360,
+       "x0": 0,
+       "x1": 1000,
+       "y0": 2000,
+       "y1": 3000
+      },
+      {
+       "src_bind": "totk.map.tile.31",
+       "src_detail_bind": "totk.map.tile.31.d",
+       "detail_threshold": 360,
+       "x0": 1000,
+       "x1": 2000,
+       "y0": 2000,
+       "y1": 3000
+      },
+      {
+       "src_bind": "totk.map.tile.32",
+       "src_detail_bind": "totk.map.tile.32.d",
+       "detail_threshold": 360,
+       "x0": 2000,
+       "x1": 3000,
+       "y0": 2000,
+       "y1": 3000
+      },
+      {
+       "src_bind": "totk.map.tile.33",
+       "src_detail_bind": "totk.map.tile.33.d",
+       "detail_threshold": 360,
+       "x0": 3000,
+       "x1": 4000,
+       "y0": 2000,
+       "y1": 3000
+      },
+      {
+       "src_bind": "totk.map.tile.34",
+       "src_detail_bind": "totk.map.tile.34.d",
+       "detail_threshold": 360,
+       "x0": 4000,
+       "x1": 5000,
+       "y0": 2000,
+       "y1": 3000
+      },
+      {
+       "src_bind": "totk.map.tile.35",
+       "src_detail_bind": "totk.map.tile.35.d",
+       "detail_threshold": 360,
+       "x0": 5000,
+       "x1": 6000,
+       "y0": 2000,
+       "y1": 3000
+      },
+      {
+       "src_bind": "totk.map.tile.36",
+       "src_detail_bind": "totk.map.tile.36.d",
+       "detail_threshold": 360,
+       "x0": -6000,
+       "x1": -5000,
+       "y0": 1000,
+       "y1": 2000
+      },
+      {
+       "src_bind": "totk.map.tile.37",
+       "src_detail_bind": "totk.map.tile.37.d",
+       "detail_threshold": 360,
+       "x0": -5000,
+       "x1": -4000,
+       "y0": 1000,
+       "y1": 2000
+      },
+      {
+       "src_bind": "totk.map.tile.38",
+       "src_detail_bind": "totk.map.tile.38.d",
+       "detail_threshold": 360,
+       "x0": -4000,
+       "x1": -3000,
+       "y0": 1000,
+       "y1": 2000
+      },
+      {
+       "src_bind": "totk.map.tile.39",
+       "src_detail_bind": "totk.map.tile.39.d",
+       "detail_threshold": 360,
+       "x0": -3000,
+       "x1": -2000,
+       "y0": 1000,
+       "y1": 2000
+      },
+      {
+       "src_bind": "totk.map.tile.40",
+       "src_detail_bind": "totk.map.tile.40.d",
+       "detail_threshold": 360,
+       "x0": -2000,
+       "x1": -1000,
+       "y0": 1000,
+       "y1": 2000
+      },
+      {
+       "src_bind": "totk.map.tile.41",
+       "src_detail_bind": "totk.map.tile.41.d",
+       "detail_threshold": 360,
+       "x0": -1000,
+       "x1": 0,
+       "y0": 1000,
+       "y1": 2000
+      },
+      {
+       "src_bind": "totk.map.tile.42",
+       "src_detail_bind": "totk.map.tile.42.d",
+       "detail_threshold": 360,
+       "x0": 0,
+       "x1": 1000,
+       "y0": 1000,
+       "y1": 2000
+      },
+      {
+       "src_bind": "totk.map.tile.43",
+       "src_detail_bind": "totk.map.tile.43.d",
+       "detail_threshold": 360,
+       "x0": 1000,
+       "x1": 2000,
+       "y0": 1000,
+       "y1": 2000
+      },
+      {
+       "src_bind": "totk.map.tile.44",
+       "src_detail_bind": "totk.map.tile.44.d",
+       "detail_threshold": 360,
+       "x0": 2000,
+       "x1": 3000,
+       "y0": 1000,
+       "y1": 2000
+      },
+      {
+       "src_bind": "totk.map.tile.45",
+       "src_detail_bind": "totk.map.tile.45.d",
+       "detail_threshold": 360,
+       "x0": 3000,
+       "x1": 4000,
+       "y0": 1000,
+       "y1": 2000
+      },
+      {
+       "src_bind": "totk.map.tile.46",
+       "src_detail_bind": "totk.map.tile.46.d",
+       "detail_threshold": 360,
+       "x0": 4000,
+       "x1": 5000,
+       "y0": 1000,
+       "y1": 2000
+      },
+      {
+       "src_bind": "totk.map.tile.47",
+       "src_detail_bind": "totk.map.tile.47.d",
+       "detail_threshold": 360,
+       "x0": 5000,
+       "x1": 6000,
+       "y0": 1000,
+       "y1": 2000
+      },
+      {
+       "src_bind": "totk.map.tile.48",
+       "src_detail_bind": "totk.map.tile.48.d",
+       "detail_threshold": 360,
+       "x0": -6000,
+       "x1": -5000,
+       "y0": 0,
+       "y1": 1000
+      },
+      {
+       "src_bind": "totk.map.tile.49",
+       "src_detail_bind": "totk.map.tile.49.d",
+       "detail_threshold": 360,
+       "x0": -5000,
+       "x1": -4000,
+       "y0": 0,
+       "y1": 1000
+      },
+      {
+       "src_bind": "totk.map.tile.50",
+       "src_detail_bind": "totk.map.tile.50.d",
+       "detail_threshold": 360,
+       "x0": -4000,
+       "x1": -3000,
+       "y0": 0,
+       "y1": 1000
+      },
+      {
+       "src_bind": "totk.map.tile.51",
+       "src_detail_bind": "totk.map.tile.51.d",
+       "detail_threshold": 360,
+       "x0": -3000,
+       "x1": -2000,
+       "y0": 0,
+       "y1": 1000
+      },
+      {
+       "src_bind": "totk.map.tile.52",
+       "src_detail_bind": "totk.map.tile.52.d",
+       "detail_threshold": 360,
+       "x0": -2000,
+       "x1": -1000,
+       "y0": 0,
+       "y1": 1000
+      },
+      {
+       "src_bind": "totk.map.tile.53",
+       "src_detail_bind": "totk.map.tile.53.d",
+       "detail_threshold": 360,
+       "x0": -1000,
+       "x1": 0,
+       "y0": 0,
+       "y1": 1000
+      },
+      {
+       "src_bind": "totk.map.tile.54",
+       "src_detail_bind": "totk.map.tile.54.d",
+       "detail_threshold": 360,
+       "x0": 0,
+       "x1": 1000,
+       "y0": 0,
+       "y1": 1000
+      },
+      {
+       "src_bind": "totk.map.tile.55",
+       "src_detail_bind": "totk.map.tile.55.d",
+       "detail_threshold": 360,
+       "x0": 1000,
+       "x1": 2000,
+       "y0": 0,
+       "y1": 1000
+      },
+      {
+       "src_bind": "totk.map.tile.56",
+       "src_detail_bind": "totk.map.tile.56.d",
+       "detail_threshold": 360,
+       "x0": 2000,
+       "x1": 3000,
+       "y0": 0,
+       "y1": 1000
+      },
+      {
+       "src_bind": "totk.map.tile.57",
+       "src_detail_bind": "totk.map.tile.57.d",
+       "detail_threshold": 360,
+       "x0": 3000,
+       "x1": 4000,
+       "y0": 0,
+       "y1": 1000
+      },
+      {
+       "src_bind": "totk.map.tile.58",
+       "src_detail_bind": "totk.map.tile.58.d",
+       "detail_threshold": 360,
+       "x0": 4000,
+       "x1": 5000,
+       "y0": 0,
+       "y1": 1000
+      },
+      {
+       "src_bind": "totk.map.tile.59",
+       "src_detail_bind": "totk.map.tile.59.d",
+       "detail_threshold": 360,
+       "x0": 5000,
+       "x1": 6000,
+       "y0": 0,
+       "y1": 1000
+      },
+      {
+       "src_bind": "totk.map.tile.60",
+       "src_detail_bind": "totk.map.tile.60.d",
+       "detail_threshold": 360,
+       "x0": -6000,
+       "x1": -5000,
+       "y0": -1000,
+       "y1": 0
+      },
+      {
+       "src_bind": "totk.map.tile.61",
+       "src_detail_bind": "totk.map.tile.61.d",
+       "detail_threshold": 360,
+       "x0": -5000,
+       "x1": -4000,
+       "y0": -1000,
+       "y1": 0
+      },
+      {
+       "src_bind": "totk.map.tile.62",
+       "src_detail_bind": "totk.map.tile.62.d",
+       "detail_threshold": 360,
+       "x0": -4000,
+       "x1": -3000,
+       "y0": -1000,
+       "y1": 0
+      },
+      {
+       "src_bind": "totk.map.tile.63",
+       "src_detail_bind": "totk.map.tile.63.d",
+       "detail_threshold": 360,
+       "x0": -3000,
+       "x1": -2000,
+       "y0": -1000,
+       "y1": 0
+      },
+      {
+       "src_bind": "totk.map.tile.64",
+       "src_detail_bind": "totk.map.tile.64.d",
+       "detail_threshold": 360,
+       "x0": -2000,
+       "x1": -1000,
+       "y0": -1000,
+       "y1": 0
+      },
+      {
+       "src_bind": "totk.map.tile.65",
+       "src_detail_bind": "totk.map.tile.65.d",
+       "detail_threshold": 360,
+       "x0": -1000,
+       "x1": 0,
+       "y0": -1000,
+       "y1": 0
+      },
+      {
+       "src_bind": "totk.map.tile.66",
+       "src_detail_bind": "totk.map.tile.66.d",
+       "detail_threshold": 360,
+       "x0": 0,
+       "x1": 1000,
+       "y0": -1000,
+       "y1": 0
+      },
+      {
+       "src_bind": "totk.map.tile.67",
+       "src_detail_bind": "totk.map.tile.67.d",
+       "detail_threshold": 360,
+       "x0": 1000,
+       "x1": 2000,
+       "y0": -1000,
+       "y1": 0
+      },
+      {
+       "src_bind": "totk.map.tile.68",
+       "src_detail_bind": "totk.map.tile.68.d",
+       "detail_threshold": 360,
+       "x0": 2000,
+       "x1": 3000,
+       "y0": -1000,
+       "y1": 0
+      },
+      {
+       "src_bind": "totk.map.tile.69",
+       "src_detail_bind": "totk.map.tile.69.d",
+       "detail_threshold": 360,
+       "x0": 3000,
+       "x1": 4000,
+       "y0": -1000,
+       "y1": 0
+      },
+      {
+       "src_bind": "totk.map.tile.70",
+       "src_detail_bind": "totk.map.tile.70.d",
+       "detail_threshold": 360,
+       "x0": 4000,
+       "x1": 5000,
+       "y0": -1000,
+       "y1": 0
+      },
+      {
+       "src_bind": "totk.map.tile.71",
+       "src_detail_bind": "totk.map.tile.71.d",
+       "detail_threshold": 360,
+       "x0": 5000,
+       "x1": 6000,
+       "y0": -1000,
+       "y1": 0
+      },
+      {
+       "src_bind": "totk.map.tile.72",
+       "src_detail_bind": "totk.map.tile.72.d",
+       "detail_threshold": 360,
+       "x0": -6000,
+       "x1": -5000,
+       "y0": -2000,
+       "y1": -1000
+      },
+      {
+       "src_bind": "totk.map.tile.73",
+       "src_detail_bind": "totk.map.tile.73.d",
+       "detail_threshold": 360,
+       "x0": -5000,
+       "x1": -4000,
+       "y0": -2000,
+       "y1": -1000
+      },
+      {
+       "src_bind": "totk.map.tile.74",
+       "src_detail_bind": "totk.map.tile.74.d",
+       "detail_threshold": 360,
+       "x0": -4000,
+       "x1": -3000,
+       "y0": -2000,
+       "y1": -1000
+      },
+      {
+       "src_bind": "totk.map.tile.75",
+       "src_detail_bind": "totk.map.tile.75.d",
+       "detail_threshold": 360,
+       "x0": -3000,
+       "x1": -2000,
+       "y0": -2000,
+       "y1": -1000
+      },
+      {
+       "src_bind": "totk.map.tile.76",
+       "src_detail_bind": "totk.map.tile.76.d",
+       "detail_threshold": 360,
+       "x0": -2000,
+       "x1": -1000,
+       "y0": -2000,
+       "y1": -1000
+      },
+      {
+       "src_bind": "totk.map.tile.77",
+       "src_detail_bind": "totk.map.tile.77.d",
+       "detail_threshold": 360,
+       "x0": -1000,
+       "x1": 0,
+       "y0": -2000,
+       "y1": -1000
+      },
+      {
+       "src_bind": "totk.map.tile.78",
+       "src_detail_bind": "totk.map.tile.78.d",
+       "detail_threshold": 360,
+       "x0": 0,
+       "x1": 1000,
+       "y0": -2000,
+       "y1": -1000
+      },
+      {
+       "src_bind": "totk.map.tile.79",
+       "src_detail_bind": "totk.map.tile.79.d",
+       "detail_threshold": 360,
+       "x0": 1000,
+       "x1": 2000,
+       "y0": -2000,
+       "y1": -1000
+      },
+      {
+       "src_bind": "totk.map.tile.80",
+       "src_detail_bind": "totk.map.tile.80.d",
+       "detail_threshold": 360,
+       "x0": 2000,
+       "x1": 3000,
+       "y0": -2000,
+       "y1": -1000
+      },
+      {
+       "src_bind": "totk.map.tile.81",
+       "src_detail_bind": "totk.map.tile.81.d",
+       "detail_threshold": 360,
+       "x0": 3000,
+       "x1": 4000,
+       "y0": -2000,
+       "y1": -1000
+      },
+      {
+       "src_bind": "totk.map.tile.82",
+       "src_detail_bind": "totk.map.tile.82.d",
+       "detail_threshold": 360,
+       "x0": 4000,
+       "x1": 5000,
+       "y0": -2000,
+       "y1": -1000
+      },
+      {
+       "src_bind": "totk.map.tile.83",
+       "src_detail_bind": "totk.map.tile.83.d",
+       "detail_threshold": 360,
+       "x0": 5000,
+       "x1": 6000,
+       "y0": -2000,
+       "y1": -1000
+      },
+      {
+       "src_bind": "totk.map.tile.84",
+       "src_detail_bind": "totk.map.tile.84.d",
+       "detail_threshold": 360,
+       "x0": -6000,
+       "x1": -5000,
+       "y0": -3000,
+       "y1": -2000
+      },
+      {
+       "src_bind": "totk.map.tile.85",
+       "src_detail_bind": "totk.map.tile.85.d",
+       "detail_threshold": 360,
+       "x0": -5000,
+       "x1": -4000,
+       "y0": -3000,
+       "y1": -2000
+      },
+      {
+       "src_bind": "totk.map.tile.86",
+       "src_detail_bind": "totk.map.tile.86.d",
+       "detail_threshold": 360,
+       "x0": -4000,
+       "x1": -3000,
+       "y0": -3000,
+       "y1": -2000
+      },
+      {
+       "src_bind": "totk.map.tile.87",
+       "src_detail_bind": "totk.map.tile.87.d",
+       "detail_threshold": 360,
+       "x0": -3000,
+       "x1": -2000,
+       "y0": -3000,
+       "y1": -2000
+      },
+      {
+       "src_bind": "totk.map.tile.88",
+       "src_detail_bind": "totk.map.tile.88.d",
+       "detail_threshold": 360,
+       "x0": -2000,
+       "x1": -1000,
+       "y0": -3000,
+       "y1": -2000
+      },
+      {
+       "src_bind": "totk.map.tile.89",
+       "src_detail_bind": "totk.map.tile.89.d",
+       "detail_threshold": 360,
+       "x0": -1000,
+       "x1": 0,
+       "y0": -3000,
+       "y1": -2000
+      },
+      {
+       "src_bind": "totk.map.tile.90",
+       "src_detail_bind": "totk.map.tile.90.d",
+       "detail_threshold": 360,
+       "x0": 0,
+       "x1": 1000,
+       "y0": -3000,
+       "y1": -2000
+      },
+      {
+       "src_bind": "totk.map.tile.91",
+       "src_detail_bind": "totk.map.tile.91.d",
+       "detail_threshold": 360,
+       "x0": 1000,
+       "x1": 2000,
+       "y0": -3000,
+       "y1": -2000
+      },
+      {
+       "src_bind": "totk.map.tile.92",
+       "src_detail_bind": "totk.map.tile.92.d",
+       "detail_threshold": 360,
+       "x0": 2000,
+       "x1": 3000,
+       "y0": -3000,
+       "y1": -2000
+      },
+      {
+       "src_bind": "totk.map.tile.93",
+       "src_detail_bind": "totk.map.tile.93.d",
+       "detail_threshold": 360,
+       "x0": 3000,
+       "x1": 4000,
+       "y0": -3000,
+       "y1": -2000
+      },
+      {
+       "src_bind": "totk.map.tile.94",
+       "src_detail_bind": "totk.map.tile.94.d",
+       "detail_threshold": 360,
+       "x0": 4000,
+       "x1": 5000,
+       "y0": -3000,
+       "y1": -2000
+      },
+      {
+       "src_bind": "totk.map.tile.95",
+       "src_detail_bind": "totk.map.tile.95.d",
+       "detail_threshold": 360,
+       "x0": 5000,
+       "x1": 6000,
+       "y0": -3000,
+       "y1": -2000
+      },
+      {
+       "src_bind": "totk.map.tile.96",
+       "src_detail_bind": "totk.map.tile.96.d",
+       "detail_threshold": 360,
+       "x0": -6000,
+       "x1": -5000,
+       "y0": -4000,
+       "y1": -3000
+      },
+      {
+       "src_bind": "totk.map.tile.97",
+       "src_detail_bind": "totk.map.tile.97.d",
+       "detail_threshold": 360,
+       "x0": -5000,
+       "x1": -4000,
+       "y0": -4000,
+       "y1": -3000
+      },
+      {
+       "src_bind": "totk.map.tile.98",
+       "src_detail_bind": "totk.map.tile.98.d",
+       "detail_threshold": 360,
+       "x0": -4000,
+       "x1": -3000,
+       "y0": -4000,
+       "y1": -3000
+      },
+      {
+       "src_bind": "totk.map.tile.99",
+       "src_detail_bind": "totk.map.tile.99.d",
+       "detail_threshold": 360,
+       "x0": -3000,
+       "x1": -2000,
+       "y0": -4000,
+       "y1": -3000
+      },
+      {
+       "src_bind": "totk.map.tile.100",
+       "src_detail_bind": "totk.map.tile.100.d",
+       "detail_threshold": 360,
+       "x0": -2000,
+       "x1": -1000,
+       "y0": -4000,
+       "y1": -3000
+      },
+      {
+       "src_bind": "totk.map.tile.101",
+       "src_detail_bind": "totk.map.tile.101.d",
+       "detail_threshold": 360,
+       "x0": -1000,
+       "x1": 0,
+       "y0": -4000,
+       "y1": -3000
+      },
+      {
+       "src_bind": "totk.map.tile.102",
+       "src_detail_bind": "totk.map.tile.102.d",
+       "detail_threshold": 360,
+       "x0": 0,
+       "x1": 1000,
+       "y0": -4000,
+       "y1": -3000
+      },
+      {
+       "src_bind": "totk.map.tile.103",
+       "src_detail_bind": "totk.map.tile.103.d",
+       "detail_threshold": 360,
+       "x0": 1000,
+       "x1": 2000,
+       "y0": -4000,
+       "y1": -3000
+      },
+      {
+       "src_bind": "totk.map.tile.104",
+       "src_detail_bind": "totk.map.tile.104.d",
+       "detail_threshold": 360,
+       "x0": 2000,
+       "x1": 3000,
+       "y0": -4000,
+       "y1": -3000
+      },
+      {
+       "src_bind": "totk.map.tile.105",
+       "src_detail_bind": "totk.map.tile.105.d",
+       "detail_threshold": 360,
+       "x0": 3000,
+       "x1": 4000,
+       "y0": -4000,
+       "y1": -3000
+      },
+      {
+       "src_bind": "totk.map.tile.106",
+       "src_detail_bind": "totk.map.tile.106.d",
+       "detail_threshold": 360,
+       "x0": 4000,
+       "x1": 5000,
+       "y0": -4000,
+       "y1": -3000
+      },
+      {
+       "src_bind": "totk.map.tile.107",
+       "src_detail_bind": "totk.map.tile.107.d",
+       "detail_threshold": 360,
+       "x0": 5000,
+       "x1": 6000,
+       "y0": -4000,
+       "y1": -3000
+      },
+      {
+       "src_bind": "totk.map.tile.108",
+       "src_detail_bind": "totk.map.tile.108.d",
+       "detail_threshold": 360,
+       "x0": -6000,
+       "x1": -5000,
+       "y0": -5000,
+       "y1": -4000
+      },
+      {
+       "src_bind": "totk.map.tile.109",
+       "src_detail_bind": "totk.map.tile.109.d",
+       "detail_threshold": 360,
+       "x0": -5000,
+       "x1": -4000,
+       "y0": -5000,
+       "y1": -4000
+      },
+      {
+       "src_bind": "totk.map.tile.110",
+       "src_detail_bind": "totk.map.tile.110.d",
+       "detail_threshold": 360,
+       "x0": -4000,
+       "x1": -3000,
+       "y0": -5000,
+       "y1": -4000
+      },
+      {
+       "src_bind": "totk.map.tile.111",
+       "src_detail_bind": "totk.map.tile.111.d",
+       "detail_threshold": 360,
+       "x0": -3000,
+       "x1": -2000,
+       "y0": -5000,
+       "y1": -4000
+      },
+      {
+       "src_bind": "totk.map.tile.112",
+       "src_detail_bind": "totk.map.tile.112.d",
+       "detail_threshold": 360,
+       "x0": -2000,
+       "x1": -1000,
+       "y0": -5000,
+       "y1": -4000
+      },
+      {
+       "src_bind": "totk.map.tile.113",
+       "src_detail_bind": "totk.map.tile.113.d",
+       "detail_threshold": 360,
+       "x0": -1000,
+       "x1": 0,
+       "y0": -5000,
+       "y1": -4000
+      },
+      {
+       "src_bind": "totk.map.tile.114",
+       "src_detail_bind": "totk.map.tile.114.d",
+       "detail_threshold": 360,
+       "x0": 0,
+       "x1": 1000,
+       "y0": -5000,
+       "y1": -4000
+      },
+      {
+       "src_bind": "totk.map.tile.115",
+       "src_detail_bind": "totk.map.tile.115.d",
+       "detail_threshold": 360,
+       "x0": 1000,
+       "x1": 2000,
+       "y0": -5000,
+       "y1": -4000
+      },
+      {
+       "src_bind": "totk.map.tile.116",
+       "src_detail_bind": "totk.map.tile.116.d",
+       "detail_threshold": 360,
+       "x0": 2000,
+       "x1": 3000,
+       "y0": -5000,
+       "y1": -4000
+      },
+      {
+       "src_bind": "totk.map.tile.117",
+       "src_detail_bind": "totk.map.tile.117.d",
+       "detail_threshold": 360,
+       "x0": 3000,
+       "x1": 4000,
+       "y0": -5000,
+       "y1": -4000
+      },
+      {
+       "src_bind": "totk.map.tile.118",
+       "src_detail_bind": "totk.map.tile.118.d",
+       "detail_threshold": 360,
+       "x0": 4000,
+       "x1": 5000,
+       "y0": -5000,
+       "y1": -4000
+      },
+      {
+       "src_bind": "totk.map.tile.119",
+       "src_detail_bind": "totk.map.tile.119.d",
+       "detail_threshold": 360,
+       "x0": 5000,
+       "x1": 6000,
+       "y0": -5000,
+       "y1": -4000
+      }
+     ]
+    },
+    {
+     "type": "button",
+     "rect": [
+      1100,
+      96,
+      124,
+      64
+     ],
+     "text": "",
+     "border": 2,
+     "bg": "#E6121815",
+     "color": "#FF3E4A36",
+     "on_tap": "map_layer_1",
+     "need_bind": "totk.map.valid"
+    },
+    {
      "type": "rect",
      "rect": [
-      16,
-      92,
-      1208,
-      944
+      1100,
+      96,
+      124,
+      64
      ],
+     "bg": "#00000000",
+     "color": "#FF6FF0C0",
+     "frame": 3,
+     "need_bind": "ui.map.layer1",
+     "hide_bind": "totk.map.valid",
+     "hide_eq": 0
+    },
+    {
+     "type": "label",
+     "rect": [
+      1162,
+      118,
+      0,
+      20
+     ],
+     "text": "Sky",
+     "text_scale": 5,
+     "align": "center",
+     "color": "#FFECE5C8",
+     "wrap_width": 116,
+     "max_lines": 1,
+     "fit_text": true,
+     "text_min_scale": 4,
+     "need_bind": "ui.map.layer1",
+     "hide_bind": "totk.map.valid",
+     "hide_eq": 0
+    },
+    {
+     "type": "label",
+     "rect": [
+      1162,
+      118,
+      0,
+      20
+     ],
+     "text": "Sky",
+     "text_scale": 5,
+     "align": "center",
+     "color": "#FF8F907F",
+     "wrap_width": 116,
+     "max_lines": 1,
+     "fit_text": true,
+     "text_min_scale": 4,
+     "need_bind": "!ui.map.layer1",
+     "hide_bind": "totk.map.valid",
+     "hide_eq": 0
+    },
+    {
+     "type": "button",
+     "rect": [
+      1100,
+      176,
+      124,
+      64
+     ],
+     "text": "",
+     "border": 2,
      "bg": "#E6121815",
-     "color": "#FF3E4A36"
+     "color": "#FF3E4A36",
+     "on_tap": "map_layer_0",
+     "need_bind": "totk.map.valid"
+    },
+    {
+     "type": "rect",
+     "rect": [
+      1100,
+      176,
+      124,
+      64
+     ],
+     "bg": "#00000000",
+     "color": "#FF6FF0C0",
+     "frame": 3,
+     "need_bind": "ui.map.layer0",
+     "hide_bind": "totk.map.valid",
+     "hide_eq": 0
+    },
+    {
+     "type": "label",
+     "rect": [
+      1162,
+      198,
+      0,
+      20
+     ],
+     "text": "Surface",
+     "text_scale": 5,
+     "align": "center",
+     "color": "#FFECE5C8",
+     "wrap_width": 116,
+     "max_lines": 1,
+     "fit_text": true,
+     "text_min_scale": 4,
+     "need_bind": "ui.map.layer0",
+     "hide_bind": "totk.map.valid",
+     "hide_eq": 0
+    },
+    {
+     "type": "label",
+     "rect": [
+      1162,
+      198,
+      0,
+      20
+     ],
+     "text": "Surface",
+     "text_scale": 5,
+     "align": "center",
+     "color": "#FF8F907F",
+     "wrap_width": 116,
+     "max_lines": 1,
+     "fit_text": true,
+     "text_min_scale": 4,
+     "need_bind": "!ui.map.layer0",
+     "hide_bind": "totk.map.valid",
+     "hide_eq": 0
+    },
+    {
+     "type": "button",
+     "rect": [
+      1100,
+      256,
+      124,
+      64
+     ],
+     "text": "",
+     "border": 2,
+     "bg": "#E6121815",
+     "color": "#FF3E4A36",
+     "on_tap": "map_layer_2",
+     "need_bind": "totk.map.valid"
+    },
+    {
+     "type": "rect",
+     "rect": [
+      1100,
+      256,
+      124,
+      64
+     ],
+     "bg": "#00000000",
+     "color": "#FF6FF0C0",
+     "frame": 3,
+     "need_bind": "ui.map.layer2",
+     "hide_bind": "totk.map.valid",
+     "hide_eq": 0
+    },
+    {
+     "type": "label",
+     "rect": [
+      1162,
+      278,
+      0,
+      20
+     ],
+     "text": "Depths",
+     "text_scale": 5,
+     "align": "center",
+     "color": "#FFECE5C8",
+     "wrap_width": 116,
+     "max_lines": 1,
+     "fit_text": true,
+     "text_min_scale": 4,
+     "need_bind": "ui.map.layer2",
+     "hide_bind": "totk.map.valid",
+     "hide_eq": 0
+    },
+    {
+     "type": "label",
+     "rect": [
+      1162,
+      278,
+      0,
+      20
+     ],
+     "text": "Depths",
+     "text_scale": 5,
+     "align": "center",
+     "color": "#FF8F907F",
+     "wrap_width": 116,
+     "max_lines": 1,
+     "fit_text": true,
+     "text_min_scale": 4,
+     "need_bind": "!ui.map.layer2",
+     "hide_bind": "totk.map.valid",
+     "hide_eq": 0
+    },
+    {
+     "type": "button",
+     "rect": [
+      1100,
+      968,
+      124,
+      64
+     ],
+     "text": "Centre",
+     "text_scale": 5,
+     "align": "center",
+     "border": 2,
+     "bg": "#E6121815",
+     "color": "#FFECE5C8",
+     "on_tap": "map_centre",
+     "need_bind": "totk.map.valid"
     },
     {
      "type": "label",
      "rect": [
       620,
-      480,
+      540,
       0,
-      60
+      40
      ],
      "text": "No save data yet",
      "text_scale": 5,
@@ -3220,15 +4521,42 @@
     {
      "type": "label",
      "rect": [
-      620,
-      480,
-      0,
-      60
+      16,
+      1052,
+      150,
+      24
      ],
-     "text": "Coming in a later update",
-     "text_scale": 5,
-     "align": "center",
+     "text": "Last save",
+     "text_scale": 4,
      "color": "#FF8F907F",
+     "need_bind": "totk.map.valid"
+    },
+    {
+     "type": "value",
+     "rect": [
+      176,
+      1052,
+      130,
+      24
+     ],
+     "bind": "ui.map.x",
+     "text": "x ",
+     "text_scale": 4,
+     "color": "#FFE9C46A",
+     "need_bind": "totk.map.valid"
+    },
+    {
+     "type": "value",
+     "rect": [
+      320,
+      1052,
+      130,
+      24
+     ],
+     "bind": "ui.map.z",
+     "text": "z ",
+     "text_scale": 4,
+     "color": "#FFE9C46A",
      "need_bind": "totk.map.valid"
     },
     {
@@ -3337,23 +4665,6 @@
      "bg": "#00000000",
      "color": "#FFECE5C8",
      "on_tap": "ui_page_0"
-    },
-    {
-     "type": "label",
-     "rect": [
-      8,
-      1052,
-      600,
-      24
-     ],
-     "text_bind": "totk.map.source",
-     "text_scale": 4,
-     "text_map": {
-      "1": "From last save",
-      "2": "Live"
-     },
-     "color": "#FF8F907F",
-     "need_bind": "totk.map.valid"
     },
     {
      "type": "rect",
@@ -3528,6 +4839,25 @@
    "kind": "module",
    "action": "totk.ability.select",
    "argument": 6
+  },
+  "map_layer_1": {
+   "kind": "module",
+   "action": "totk.map.layer",
+   "argument": 1
+  },
+  "map_layer_0": {
+   "kind": "module",
+   "action": "totk.map.layer",
+   "argument": 0
+  },
+  "map_layer_2": {
+   "kind": "module",
+   "action": "totk.map.layer",
+   "argument": 2
+  },
+  "map_centre": {
+   "kind": "view_reset",
+   "view": "totk_map"
   }
  },
  "derived": [
@@ -3664,8 +4994,53 @@
   {
    "name": "ui.gear.shield.has_value",
    "expr": "totk.gear.shield.life * 0 + 1"
+  },
+  {
+   "name": "ui.map.layer1",
+   "cmp": "eq",
+   "a": "totk.map.layer",
+   "b": 1
+  },
+  {
+   "name": "ui.map.layer0",
+   "cmp": "eq",
+   "a": "totk.map.layer",
+   "b": 0
+  },
+  {
+   "name": "ui.map.layer2",
+   "cmp": "eq",
+   "a": "totk.map.layer",
+   "b": 2
+  },
+  {
+   "name": "ui.map.x",
+   "expr": "round(totk.map.x)"
+  },
+  {
+   "name": "ui.map.z",
+   "expr": "round(-totk.map.y)"
   }
  ],
+ "map": {
+  "areas": {
+   "MainField": {
+    "min": [
+     -6000,
+     -5000
+    ],
+    "max": [
+     6000,
+     5000
+    ],
+    "image": "file:assets/map-blank.png",
+    "clamp_view": true
+   }
+  },
+  "style": {
+   "background": "#FF0A0E0D"
+  }
+ },
  "page_binds": [
   {
    "point": "totk.ui.page",
