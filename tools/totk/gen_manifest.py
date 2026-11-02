@@ -60,7 +60,7 @@ ABILITIES = [("ultrahand", "Ultrahand", "UltraHand"), ("fuse", "Fuse", "OneTouch
 # name. A set entry that does not load draws nothing, and the fallback under it still reads.
 TEX = {role: None for role in (
     "header", "tab_on", "slot", "cursor", "detail", "badge", "equipped", "equip_panel", "plate",
-    "bar_bg", "heart", "stamina", "rupee", "battery", *(f"cat_{k}" for k in range(8)))}
+    "bar_bg", "heart", "stamina", "rupee", "battery", "tile", *(f"cat_{k}" for k in range(8)))}
 # R5's first candidate for the ability icons: the item icon of the save's Obj_<X> (UNVERIFIED).
 TEX.update({f"ability_{a}": {"src": f"romfs:/UI/Tex/Icon/Obj_{x}.bntx.zs"}
             for a, _, x in ABILITIES})
@@ -398,29 +398,33 @@ def equipment(derived, actions):
     return widgets
 
 
+def ability_parts(a, icon, label, name, scale):
+    """Ability <a>'s icon at `icon` and `name` centred at `label`: full colour while owned, the
+    locked tint and dim text while the save says it is not (no save: neither shows)."""
+    owned = f"totk.ability.{a}.owned"
+    locked = {"need_bind": "totk.ability.valid", "hide_bind": owned, "hide_eq": 1}
+    widgets = []
+    if TEX[f"ability_{a}"]:
+        widgets += [{"type": "image", "rect": icon, **TEX[f"ability_{a}"], "need_bind": owned},
+                    {"type": "image", "rect": icon, **TEX[f"ability_{a}"], "tint": LOCKED,
+                     **locked}]
+    text = {"type": "label", "rect": label, "text": name, "text_scale": scale,
+            "align": "center"}
+    return widgets + [{**text, "color": TEXT, "need_bind": owned},
+                      {**text, "color": DIM, **locked}], locked
+
+
 def ability_bar(actions):
     """Bottom: the seven abilities, owned at full colour, others dimmed; taps are refused."""
     widgets = panel([0, 940, 1240, 108], "bar_bg")
     for k, (a, name, _) in enumerate(ABILITIES):
-        x, owned = 18 + 172 * k, f"totk.ability.{a}.owned"
-        # Locked: the save says not owned (no save: neither variant shows).
-        locked = {"need_bind": "totk.ability.valid", "hide_bind": owned, "hide_eq": 1}
+        x = 18 + 172 * k
         actions[f"ability_select_{k}"] = {"kind": "module", "action": "totk.ability.select",
                                           "argument": k}
         icon = [x + 54, 946, 64, 64]
         widgets.append({"type": "rect", "rect": icon, "bg": CLEAR, "color": EDGE,
                         "on_tap": f"ability_select_{k}"})
-        if TEX[f"ability_{a}"]:
-            widgets += [{"type": "image", "rect": icon, **TEX[f"ability_{a}"],
-                         "need_bind": owned},
-                        {"type": "image", "rect": icon, **TEX[f"ability_{a}"],
-                         "tint": LOCKED, **locked}]
-        widgets += [
-            {"type": "label", "rect": [x + 86, 1014, 0, 22], "text": name, "text_scale": 4,
-             "align": "center", "color": TEXT, "need_bind": owned},
-            {"type": "label", "rect": [x + 86, 1014, 0, 22], "text": name, "text_scale": 4,
-             "align": "center", "color": DIM, **locked},
-        ]
+        widgets += ability_parts(a, icon, [x + 86, 1014, 0, 22], name, 4)[0]
     return widgets
 
 
@@ -429,8 +433,41 @@ def home_page(derived, actions):
             equipment(derived, actions) + ability_bar(actions))
 
 
+def abilities_page(derived):
+    """Seven tiles (row 1: Ultrahand, Fuse, Ascend, Recall; row 2: Autobuild, Camera, Travel
+    Medallion): icon and name owned or locked, "Locked" under a locked one; a tap is the refused
+    totk.ability.select (the home bar's actions). Then the battery strip."""
+    valid = {"need_bind": "totk.ability.valid"}
+    widgets = []
+    for k, (a, name, _) in enumerate(ABILITIES):
+        x, y = (16 + 306 * k, 92) if k < 4 else (169 + 306 * (k - 4), 508)
+        widgets += panel([x, y, 290, 400], "tile", on_tap=f"ability_select_{k}", **valid)
+        icon = [x + 65, y + 40, 160, 160]
+        widgets.append({"type": "rect", "rect": icon, "bg": CLEAR, "color": EDGE, **valid})
+        parts, locked = ability_parts(a, icon, [x + 145, y + 228, 0, 34], name, 6)
+        widgets += parts
+        widgets.append({"type": "label", "rect": [x + 145, y + 276, 0, 20], "text": "Locked",
+                        "text_scale": 4, "align": "center", "color": DIM, **locked})
+    widgets += [
+        {"type": "label", "rect": [620, 480, 0, 40], "text": "No save data yet",
+         "text_scale": 5, "align": "center", "color": DIM, "need_bind": "!totk.ability.valid"},
+        *panel([16, 924, 1208, 72]),
+        *textured("battery", [32, 940, 40, 40], []),
+        {"type": "label", "rect": [88, 934, 200, 20], "text": "Battery", "text_scale": 4,
+         "color": DIM, "need_bind": "totk.status.valid"},
+        {"type": "value", "rect": [88, 958, 200, 26], "bind": "totk.status.max_battery",
+         "div": 100, "text_scale": 5, "color": VALUE,
+         "need_bind": has(derived, "totk.status.max_battery")},
+        # The current ability is live only (offset UNKNOWN): never published from the save.
+        {"type": "label", "rect": [1208, 950, 0, 20],
+         "text": "Current ability: needs a live reader", "text_scale": 4, "align": "right",
+         "color": DIM},
+    ]
+    return widgets
+
+
 def later_page(domain):
-    """Abilities (T5) and Map (T7): the frame and the empty state until their packet."""
+    """Map (T7): the frame and the empty state until its packet."""
     return [*panel([16, 92, 1208, 944]),
             {"type": "label", "rect": [620, 480, 0, 60], "text": "No save data yet",
              "text_scale": 5, "align": "center", "color": DIM,
@@ -446,7 +483,8 @@ def manifest():
         actions[f"ui_page_{k}"] = {"kind": "module", "action": "totk.ui.page", "argument": k}
     pages = []
     for k, (page_id, _, domain) in enumerate(PAGES):
-        body = home_page(derived, actions) if page_id == "home" else later_page(domain)
+        body = (home_page(derived, actions) if page_id == "home" else
+                abilities_page(derived) if page_id == "abilities" else later_page(domain))
         page = {"id": page_id, "widgets": body + header(k, domain) + notice()}
         if page_id == "home":
             page["scrolls"] = [GRID_REGION]

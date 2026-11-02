@@ -1099,7 +1099,8 @@ Tabs in game order (user's list): 0 Weapons (`Pouch.Weapon`), 1 Bows (`Pouch.Bow
   (d) every refused action returns false.
 - CA8. Every field in `totk_offsets.h` is `0` with an `UNKNOWN:` comment (T1 acceptance 9).
 - CA9. `git status --porcelain` shows no build output; `packages/` holds only generated files;
-  no file over 64 KiB is added except `native/third_party/stb_truetype.h` (T3a'); no zstd source
+  no file over 64 KiB is added except `native/third_party/stb_truetype.h` (T3a') and the generated
+  `manifest.json` (checked by `gen_manifest.py --check`, so its size is not hand-maintained); no zstd source
   in the repo (patch 0009's test fetches it into its build dir).
 - CA10. `totk_module_test` counts `operator new` (as it already does) and asserts zero allocations
   across 1000 `sample` calls on a full fixture snapshot with each page selected.

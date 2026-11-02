@@ -532,6 +532,71 @@ class GenManifestTest(unittest.TestCase):
                     None: set(), "owned": {gen_manifest.TEXT, None},
                     "locked": {gen_manifest.DIM, gen_manifest.LOCKED}}[expect], (a, valid, owned))
 
+    TILES = [(16 + 306 * k, 92) for k in range(4)] + [(169 + 306 * k, 508) for k in range(3)]
+
+    def test_abilities_page(self):
+        """Seven 290x400 tiles in R5's two rows (Ultrahand, Fuse, Ascend, Recall; Autobuild,
+        Camera, Travel); tapping tile k sends totk.ability.select k (refused). Per state: no save
+        (totk.ability.valid absent or 0) only "No save data yet"; owned: the tile, the full-colour
+        icon and the name in text; not owned or no owned key: the locked-tint icon, the name dim
+        and "Locked". With every TEX role named the tile texture follows the tile's gate."""
+        ws = self.page("abilities")
+        names = [n for _, n, _ in gen_manifest.ABILITIES]
+        self.assertEqual(names, ["Ultrahand", "Fuse", "Ascend", "Recall", "Autobuild", "Camera",
+                                 "Travel"])
+        nosave = self.one(ws, text="No save data yet")
+        for k, ((a, name, obj), (x, y)) in enumerate(zip(gen_manifest.ABILITIES, self.TILES)):
+            tile = self.one(ws, type="rect", rect=[x, y, 290, 400])
+            self.assertEqual(self.action(tile["on_tap"]), {
+                "kind": "module", "action": "totk.ability.select", "argument": k})
+            frame = self.one(ws, type="rect", rect=[x + 65, y + 40, 160, 160])
+            icons = [w for w in ws if w["type"] == "image" and w["rect"] == frame["rect"]]
+            self.assertEqual([w["src"] for w in icons],
+                             [f"romfs:/UI/Tex/Icon/Obj_{obj}.bntx.zs"] * 2)
+            labels = [w for w in ws if w.get("text") == name]
+            self.assertEqual([w["rect"] for w in labels], [[x + 145, y + 228, 0, 34]] * 2)
+            self.assertTrue(all(w["text_scale"] == 6 for w in labels))
+            locked_label = self.one(ws, text="Locked", rect=[x + 145, y + 276, 0, 20])
+            parts = {"tile": [tile], "frame": [frame], "icon": [icons[0]],
+                     "icon locked": [icons[1]], "name": [labels[0]], "name dim": [labels[1]],
+                     "locked": [locked_label], "nosave": [nosave]}
+            self.assertEqual((icons[1].get("tint"), labels[0]["color"], labels[1]["color"]),
+                             (gen_manifest.LOCKED, gen_manifest.TEXT, gen_manifest.DIM))
+            owned_key = f"totk.ability.{a}.owned"
+            for valid, owned, expect in (
+                    (None, None, ["nosave"]), (0, None, ["nosave"]),
+                    (1, 1, ["tile", "frame", "icon", "name"]),
+                    (1, 0, ["tile", "frame", "icon locked", "name dim", "locked"]),
+                    (1, None, ["tile", "frame", "icon locked", "name dim", "locked"])):
+                snap = {"totk.ready": 1}
+                if valid is not None:
+                    snap["totk.ability.valid"] = valid
+                if owned is not None:
+                    snap[owned_key] = owned
+                shown = sorted(r for r, w in parts.items() if self.visible(w[0], snap))
+                self.assertEqual(shown, sorted(expect), (a, valid, owned))
+        named = next(p for p in self.named(["tile"])["pages"] if p["id"] == "abilities")
+        tex = [w for w in named["widgets"] if w.get("src") == "romfs:/T8A/tile"]
+        self.assertEqual([w["rect"] for w in tex], [[x, y, 290, 400] for x, y in self.TILES])
+        self.assertTrue(all(w["need_bind"] == "totk.ability.valid" for w in tex))
+
+    def test_battery_strip(self):
+        """The abilities page's battery strip: caption while totk.status.valid, the value (div
+        100) while totk.status.max_battery is published (0 shows), the live-only note always."""
+        ws = self.page("abilities")
+        caption = self.one(ws, text="Battery", rect=[88, 934, 200, 20])
+        value = self.one(ws, type="value", bind="totk.status.max_battery", div=100,
+                         rect=[88, 958, 200, 26])
+        note = self.one(ws, text="Current ability: needs a live reader", align="right",
+                        rect=[1208, 950, 0, 20])
+        for snap, expect in (({}, [note]), ({"totk.status.valid": 0}, [note]),
+                             ({"totk.status.valid": 1}, [caption, note]),
+                             ({"totk.status.valid": 1, "totk.status.max_battery": 0},
+                              [caption, value, note])):
+            snap = {"totk.ready": 1, **snap}
+            self.assertEqual([w for w in (caption, value, note) if self.visible(w, snap)],
+                             expect, snap)
+
     def one(self, widgets, **fields):
         found = [w for w in widgets if all(w.get(k) == v for k, v in fields.items())]
         self.assertEqual(len(found), 1, fields)
@@ -571,7 +636,7 @@ class GenManifestTest(unittest.TestCase):
             source = self.one(ws, text_bind=f"totk.{domain}.source", rect=[8, 1052, 600, 24],
                               text_map={"1": "From last save", "2": "Live"})
             cases.append((source, [f"totk.{domain}.valid"]))
-            if page_id != "home":
+            if page_id == "map":
                 later = self.one(ws, text="Coming in a later update")
                 cases.append((later, [f"totk.{domain}.valid"]))
         for w, keys in cases:
@@ -591,8 +656,10 @@ class GenManifestTest(unittest.TestCase):
                  need_bind=f"{w}.present")
         self.one(home, rect=[1000, 420, 72, 72], src_bind=f"{w}.fuse_icon",
                  need_bind=f"{w}.fuse")
-        anchors = {122, 320, 554, 620, 936, 1156, 1220} | {104 + 172 * k for k in range(7)} | \
-            {47 + 78 * k for k in range(8)} | {78 + 78 * k for k in range(8)}
+        anchors = {122, 320, 554, 620, 936, 1156, 1208, 1220} | \
+            {104 + 172 * k for k in range(7)} | {47 + 78 * k for k in range(8)} | \
+            {78 + 78 * k for k in range(8)} | {161 + 306 * k for k in range(4)} | \
+            {314 + 306 * k for k in range(3)}
         for page_id, _, _ in gen_manifest.PAGES:
             for wd in self.page(page_id):
                 if wd["type"] in ("label", "value") and wd.get("align") in ("center", "right"):

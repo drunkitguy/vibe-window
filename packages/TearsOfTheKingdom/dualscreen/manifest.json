@@ -2286,11 +2286,672 @@
      "rect": [
       16,
       92,
-      1208,
-      944
+      290,
+      400
      ],
      "bg": "#E6121815",
-     "color": "#FF3E4A36"
+     "color": "#FF3E4A36",
+     "on_tap": "ability_select_0",
+     "need_bind": "totk.ability.valid"
+    },
+    {
+     "type": "rect",
+     "rect": [
+      81,
+      132,
+      160,
+      160
+     ],
+     "bg": "#00000000",
+     "color": "#FF3E4A36",
+     "need_bind": "totk.ability.valid"
+    },
+    {
+     "type": "image",
+     "rect": [
+      81,
+      132,
+      160,
+      160
+     ],
+     "src": "romfs:/UI/Tex/Icon/Obj_UltraHand.bntx.zs",
+     "need_bind": "totk.ability.ultrahand.owned"
+    },
+    {
+     "type": "image",
+     "rect": [
+      81,
+      132,
+      160,
+      160
+     ],
+     "src": "romfs:/UI/Tex/Icon/Obj_UltraHand.bntx.zs",
+     "tint": "#66FFFFFF",
+     "need_bind": "totk.ability.valid",
+     "hide_bind": "totk.ability.ultrahand.owned",
+     "hide_eq": 1
+    },
+    {
+     "type": "label",
+     "rect": [
+      161,
+      320,
+      0,
+      34
+     ],
+     "text": "Ultrahand",
+     "text_scale": 6,
+     "align": "center",
+     "color": "#FFECE5C8",
+     "need_bind": "totk.ability.ultrahand.owned"
+    },
+    {
+     "type": "label",
+     "rect": [
+      161,
+      320,
+      0,
+      34
+     ],
+     "text": "Ultrahand",
+     "text_scale": 6,
+     "align": "center",
+     "color": "#FF8F907F",
+     "need_bind": "totk.ability.valid",
+     "hide_bind": "totk.ability.ultrahand.owned",
+     "hide_eq": 1
+    },
+    {
+     "type": "label",
+     "rect": [
+      161,
+      368,
+      0,
+      20
+     ],
+     "text": "Locked",
+     "text_scale": 4,
+     "align": "center",
+     "color": "#FF8F907F",
+     "need_bind": "totk.ability.valid",
+     "hide_bind": "totk.ability.ultrahand.owned",
+     "hide_eq": 1
+    },
+    {
+     "type": "rect",
+     "rect": [
+      322,
+      92,
+      290,
+      400
+     ],
+     "bg": "#E6121815",
+     "color": "#FF3E4A36",
+     "on_tap": "ability_select_1",
+     "need_bind": "totk.ability.valid"
+    },
+    {
+     "type": "rect",
+     "rect": [
+      387,
+      132,
+      160,
+      160
+     ],
+     "bg": "#00000000",
+     "color": "#FF3E4A36",
+     "need_bind": "totk.ability.valid"
+    },
+    {
+     "type": "image",
+     "rect": [
+      387,
+      132,
+      160,
+      160
+     ],
+     "src": "romfs:/UI/Tex/Icon/Obj_OneTouchBond.bntx.zs",
+     "need_bind": "totk.ability.fuse.owned"
+    },
+    {
+     "type": "image",
+     "rect": [
+      387,
+      132,
+      160,
+      160
+     ],
+     "src": "romfs:/UI/Tex/Icon/Obj_OneTouchBond.bntx.zs",
+     "tint": "#66FFFFFF",
+     "need_bind": "totk.ability.valid",
+     "hide_bind": "totk.ability.fuse.owned",
+     "hide_eq": 1
+    },
+    {
+     "type": "label",
+     "rect": [
+      467,
+      320,
+      0,
+      34
+     ],
+     "text": "Fuse",
+     "text_scale": 6,
+     "align": "center",
+     "color": "#FFECE5C8",
+     "need_bind": "totk.ability.fuse.owned"
+    },
+    {
+     "type": "label",
+     "rect": [
+      467,
+      320,
+      0,
+      34
+     ],
+     "text": "Fuse",
+     "text_scale": 6,
+     "align": "center",
+     "color": "#FF8F907F",
+     "need_bind": "totk.ability.valid",
+     "hide_bind": "totk.ability.fuse.owned",
+     "hide_eq": 1
+    },
+    {
+     "type": "label",
+     "rect": [
+      467,
+      368,
+      0,
+      20
+     ],
+     "text": "Locked",
+     "text_scale": 4,
+     "align": "center",
+     "color": "#FF8F907F",
+     "need_bind": "totk.ability.valid",
+     "hide_bind": "totk.ability.fuse.owned",
+     "hide_eq": 1
+    },
+    {
+     "type": "rect",
+     "rect": [
+      628,
+      92,
+      290,
+      400
+     ],
+     "bg": "#E6121815",
+     "color": "#FF3E4A36",
+     "on_tap": "ability_select_2",
+     "need_bind": "totk.ability.valid"
+    },
+    {
+     "type": "rect",
+     "rect": [
+      693,
+      132,
+      160,
+      160
+     ],
+     "bg": "#00000000",
+     "color": "#FF3E4A36",
+     "need_bind": "totk.ability.valid"
+    },
+    {
+     "type": "image",
+     "rect": [
+      693,
+      132,
+      160,
+      160
+     ],
+     "src": "romfs:/UI/Tex/Icon/Obj_Tooreroof.bntx.zs",
+     "need_bind": "totk.ability.ascend.owned"
+    },
+    {
+     "type": "image",
+     "rect": [
+      693,
+      132,
+      160,
+      160
+     ],
+     "src": "romfs:/UI/Tex/Icon/Obj_Tooreroof.bntx.zs",
+     "tint": "#66FFFFFF",
+     "need_bind": "totk.ability.valid",
+     "hide_bind": "totk.ability.ascend.owned",
+     "hide_eq": 1
+    },
+    {
+     "type": "label",
+     "rect": [
+      773,
+      320,
+      0,
+      34
+     ],
+     "text": "Ascend",
+     "text_scale": 6,
+     "align": "center",
+     "color": "#FFECE5C8",
+     "need_bind": "totk.ability.ascend.owned"
+    },
+    {
+     "type": "label",
+     "rect": [
+      773,
+      320,
+      0,
+      34
+     ],
+     "text": "Ascend",
+     "text_scale": 6,
+     "align": "center",
+     "color": "#FF8F907F",
+     "need_bind": "totk.ability.valid",
+     "hide_bind": "totk.ability.ascend.owned",
+     "hide_eq": 1
+    },
+    {
+     "type": "label",
+     "rect": [
+      773,
+      368,
+      0,
+      20
+     ],
+     "text": "Locked",
+     "text_scale": 4,
+     "align": "center",
+     "color": "#FF8F907F",
+     "need_bind": "totk.ability.valid",
+     "hide_bind": "totk.ability.ascend.owned",
+     "hide_eq": 1
+    },
+    {
+     "type": "rect",
+     "rect": [
+      934,
+      92,
+      290,
+      400
+     ],
+     "bg": "#E6121815",
+     "color": "#FF3E4A36",
+     "on_tap": "ability_select_3",
+     "need_bind": "totk.ability.valid"
+    },
+    {
+     "type": "rect",
+     "rect": [
+      999,
+      132,
+      160,
+      160
+     ],
+     "bg": "#00000000",
+     "color": "#FF3E4A36",
+     "need_bind": "totk.ability.valid"
+    },
+    {
+     "type": "image",
+     "rect": [
+      999,
+      132,
+      160,
+      160
+     ],
+     "src": "romfs:/UI/Tex/Icon/Obj_ReverseRecorder.bntx.zs",
+     "need_bind": "totk.ability.recall.owned"
+    },
+    {
+     "type": "image",
+     "rect": [
+      999,
+      132,
+      160,
+      160
+     ],
+     "src": "romfs:/UI/Tex/Icon/Obj_ReverseRecorder.bntx.zs",
+     "tint": "#66FFFFFF",
+     "need_bind": "totk.ability.valid",
+     "hide_bind": "totk.ability.recall.owned",
+     "hide_eq": 1
+    },
+    {
+     "type": "label",
+     "rect": [
+      1079,
+      320,
+      0,
+      34
+     ],
+     "text": "Recall",
+     "text_scale": 6,
+     "align": "center",
+     "color": "#FFECE5C8",
+     "need_bind": "totk.ability.recall.owned"
+    },
+    {
+     "type": "label",
+     "rect": [
+      1079,
+      320,
+      0,
+      34
+     ],
+     "text": "Recall",
+     "text_scale": 6,
+     "align": "center",
+     "color": "#FF8F907F",
+     "need_bind": "totk.ability.valid",
+     "hide_bind": "totk.ability.recall.owned",
+     "hide_eq": 1
+    },
+    {
+     "type": "label",
+     "rect": [
+      1079,
+      368,
+      0,
+      20
+     ],
+     "text": "Locked",
+     "text_scale": 4,
+     "align": "center",
+     "color": "#FF8F907F",
+     "need_bind": "totk.ability.valid",
+     "hide_bind": "totk.ability.recall.owned",
+     "hide_eq": 1
+    },
+    {
+     "type": "rect",
+     "rect": [
+      169,
+      508,
+      290,
+      400
+     ],
+     "bg": "#E6121815",
+     "color": "#FF3E4A36",
+     "on_tap": "ability_select_4",
+     "need_bind": "totk.ability.valid"
+    },
+    {
+     "type": "rect",
+     "rect": [
+      234,
+      548,
+      160,
+      160
+     ],
+     "bg": "#00000000",
+     "color": "#FF3E4A36",
+     "need_bind": "totk.ability.valid"
+    },
+    {
+     "type": "image",
+     "rect": [
+      234,
+      548,
+      160,
+      160
+     ],
+     "src": "romfs:/UI/Tex/Icon/Obj_AutoBuilder.bntx.zs",
+     "need_bind": "totk.ability.autobuild.owned"
+    },
+    {
+     "type": "image",
+     "rect": [
+      234,
+      548,
+      160,
+      160
+     ],
+     "src": "romfs:/UI/Tex/Icon/Obj_AutoBuilder.bntx.zs",
+     "tint": "#66FFFFFF",
+     "need_bind": "totk.ability.valid",
+     "hide_bind": "totk.ability.autobuild.owned",
+     "hide_eq": 1
+    },
+    {
+     "type": "label",
+     "rect": [
+      314,
+      736,
+      0,
+      34
+     ],
+     "text": "Autobuild",
+     "text_scale": 6,
+     "align": "center",
+     "color": "#FFECE5C8",
+     "need_bind": "totk.ability.autobuild.owned"
+    },
+    {
+     "type": "label",
+     "rect": [
+      314,
+      736,
+      0,
+      34
+     ],
+     "text": "Autobuild",
+     "text_scale": 6,
+     "align": "center",
+     "color": "#FF8F907F",
+     "need_bind": "totk.ability.valid",
+     "hide_bind": "totk.ability.autobuild.owned",
+     "hide_eq": 1
+    },
+    {
+     "type": "label",
+     "rect": [
+      314,
+      784,
+      0,
+      20
+     ],
+     "text": "Locked",
+     "text_scale": 4,
+     "align": "center",
+     "color": "#FF8F907F",
+     "need_bind": "totk.ability.valid",
+     "hide_bind": "totk.ability.autobuild.owned",
+     "hide_eq": 1
+    },
+    {
+     "type": "rect",
+     "rect": [
+      475,
+      508,
+      290,
+      400
+     ],
+     "bg": "#E6121815",
+     "color": "#FF3E4A36",
+     "on_tap": "ability_select_5",
+     "need_bind": "totk.ability.valid"
+    },
+    {
+     "type": "rect",
+     "rect": [
+      540,
+      548,
+      160,
+      160
+     ],
+     "bg": "#00000000",
+     "color": "#FF3E4A36",
+     "need_bind": "totk.ability.valid"
+    },
+    {
+     "type": "image",
+     "rect": [
+      540,
+      548,
+      160,
+      160
+     ],
+     "src": "romfs:/UI/Tex/Icon/Obj_Camera.bntx.zs",
+     "need_bind": "totk.ability.camera.owned"
+    },
+    {
+     "type": "image",
+     "rect": [
+      540,
+      548,
+      160,
+      160
+     ],
+     "src": "romfs:/UI/Tex/Icon/Obj_Camera.bntx.zs",
+     "tint": "#66FFFFFF",
+     "need_bind": "totk.ability.valid",
+     "hide_bind": "totk.ability.camera.owned",
+     "hide_eq": 1
+    },
+    {
+     "type": "label",
+     "rect": [
+      620,
+      736,
+      0,
+      34
+     ],
+     "text": "Camera",
+     "text_scale": 6,
+     "align": "center",
+     "color": "#FFECE5C8",
+     "need_bind": "totk.ability.camera.owned"
+    },
+    {
+     "type": "label",
+     "rect": [
+      620,
+      736,
+      0,
+      34
+     ],
+     "text": "Camera",
+     "text_scale": 6,
+     "align": "center",
+     "color": "#FF8F907F",
+     "need_bind": "totk.ability.valid",
+     "hide_bind": "totk.ability.camera.owned",
+     "hide_eq": 1
+    },
+    {
+     "type": "label",
+     "rect": [
+      620,
+      784,
+      0,
+      20
+     ],
+     "text": "Locked",
+     "text_scale": 4,
+     "align": "center",
+     "color": "#FF8F907F",
+     "need_bind": "totk.ability.valid",
+     "hide_bind": "totk.ability.camera.owned",
+     "hide_eq": 1
+    },
+    {
+     "type": "rect",
+     "rect": [
+      781,
+      508,
+      290,
+      400
+     ],
+     "bg": "#E6121815",
+     "color": "#FF3E4A36",
+     "on_tap": "ability_select_6",
+     "need_bind": "totk.ability.valid"
+    },
+    {
+     "type": "rect",
+     "rect": [
+      846,
+      548,
+      160,
+      160
+     ],
+     "bg": "#00000000",
+     "color": "#FF3E4A36",
+     "need_bind": "totk.ability.valid"
+    },
+    {
+     "type": "image",
+     "rect": [
+      846,
+      548,
+      160,
+      160
+     ],
+     "src": "romfs:/UI/Tex/Icon/Obj_Warp.bntx.zs",
+     "need_bind": "totk.ability.travel.owned"
+    },
+    {
+     "type": "image",
+     "rect": [
+      846,
+      548,
+      160,
+      160
+     ],
+     "src": "romfs:/UI/Tex/Icon/Obj_Warp.bntx.zs",
+     "tint": "#66FFFFFF",
+     "need_bind": "totk.ability.valid",
+     "hide_bind": "totk.ability.travel.owned",
+     "hide_eq": 1
+    },
+    {
+     "type": "label",
+     "rect": [
+      926,
+      736,
+      0,
+      34
+     ],
+     "text": "Travel",
+     "text_scale": 6,
+     "align": "center",
+     "color": "#FFECE5C8",
+     "need_bind": "totk.ability.travel.owned"
+    },
+    {
+     "type": "label",
+     "rect": [
+      926,
+      736,
+      0,
+      34
+     ],
+     "text": "Travel",
+     "text_scale": 6,
+     "align": "center",
+     "color": "#FF8F907F",
+     "need_bind": "totk.ability.valid",
+     "hide_bind": "totk.ability.travel.owned",
+     "hide_eq": 1
+    },
+    {
+     "type": "label",
+     "rect": [
+      926,
+      784,
+      0,
+      20
+     ],
+     "text": "Locked",
+     "text_scale": 4,
+     "align": "center",
+     "color": "#FF8F907F",
+     "need_bind": "totk.ability.valid",
+     "hide_bind": "totk.ability.travel.owned",
+     "hide_eq": 1
     },
     {
      "type": "label",
@@ -2298,7 +2959,7 @@
       620,
       480,
       0,
-      60
+      40
      ],
      "text": "No save data yet",
      "text_scale": 5,
@@ -2307,18 +2968,55 @@
      "need_bind": "!totk.ability.valid"
     },
     {
+     "type": "rect",
+     "rect": [
+      16,
+      924,
+      1208,
+      72
+     ],
+     "bg": "#E6121815",
+     "color": "#FF3E4A36"
+    },
+    {
      "type": "label",
      "rect": [
-      620,
-      480,
-      0,
-      60
+      88,
+      934,
+      200,
+      20
      ],
-     "text": "Coming in a later update",
-     "text_scale": 5,
-     "align": "center",
+     "text": "Battery",
+     "text_scale": 4,
      "color": "#FF8F907F",
-     "need_bind": "totk.ability.valid"
+     "need_bind": "totk.status.valid"
+    },
+    {
+     "type": "value",
+     "rect": [
+      88,
+      958,
+      200,
+      26
+     ],
+     "bind": "totk.status.max_battery",
+     "div": 100,
+     "text_scale": 5,
+     "color": "#FFE9C46A",
+     "need_bind": "ui.has.status.max_battery"
+    },
+    {
+     "type": "label",
+     "rect": [
+      1208,
+      950,
+      0,
+      20
+     ],
+     "text": "Current ability: needs a live reader",
+     "text_scale": 4,
+     "align": "right",
+     "color": "#FF8F907F"
     },
     {
      "type": "rect",

@@ -688,7 +688,9 @@ int main() {
     for (std::int64_t k : {std::int64_t(-1), std::int64_t(0), std::int64_t(1), std::int64_t(2),
                            std::int64_t(3), std::int64_t(4), kMin, kMax})
         assert(!act("totk.gear.swap", k) && !act("totk.inv.use", k));
-    for (std::int64_t k = -1; k <= 7; ++k)
+    for (std::int64_t k : {kMin, std::int64_t(-1), std::int64_t(0), std::int64_t(1),
+                           std::int64_t(2), std::int64_t(3), std::int64_t(4), std::int64_t(5),
+                           std::int64_t(6), std::int64_t(7), kMax}) // 0-6 and out of range
         assert(!act("totk.ability.select", k));
     // Unknown names, null name or instance.
     assert(!act("totk.bogus", 0) && !act("", 0) && !act("totk.ui.pagex", 0));
@@ -787,6 +789,34 @@ int main() {
 
     m->destroy(instance);
     assert(g_nothrow_live == nullptr); // destroy freed the instance
+
+    // Owned flags for all seven: a save owning only ability `a` (both IsGet and IsGetAnyway)
+    // publishes owned 1 for `a` and 0 for the other six.
+    {
+        constexpr const char* kObj[] = {"UltraHand",       "OneTouchBond", "Tooreroof",
+                                        "ReverseRecorder", "AutoBuilder",  "Camera", "Warp"};
+        static_assert(std::size(kObj) == totk::kAbilities);
+        for (int a = 0; a < totk::kAbilities; ++a) {
+            Host ho;
+            SaveDir od;
+            od.Put(Slot(1, "caption.sav"), Caption(2024, 1, 2, 8, 0, false));
+            od.Put(Slot(1, "progress.sav"),
+                   SaveBuilder()
+                       .Bool(std::string("IsGet.Obj_") + kObj[a], true)
+                       .Bool(std::string("IsGetAnyway.Obj_") + kObj[a], true)
+                       .Build());
+            void* one = m->create(&ho.api, "{}");
+            assert(one);
+            Configure(se, one, od);
+            PollNow(one);
+            SampleClean(m, one, ho);
+            assert(ho.ints.at("totk.ability.valid") == 1);
+            for (int b = 0; b < totk::kAbilities; ++b)
+                assert(ho.ints.at(std::string("totk.ability.") + totk::pub::kAbilityNames[b] +
+                                  ".owned") == (a == b ? 1 : 0));
+            m->destroy(one);
+        }
+    }
 
     // At most kMaxItems (400) per tab: a pouch of 450 publishes 400 items and their keys,
     // selection stops at 399, and sample still allocates nothing.
