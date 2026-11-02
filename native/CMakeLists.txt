@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# TotK companion module. Needs only the three header-only Eden Duo SDK headers: no fmt, json,
-# zstd, CPM or network.
+# TotK companion module. Needs only the three header-only Eden Duo SDK headers and the vendored
+# native/third_party/stb_truetype.h: no fmt, json, zstd, CPM or network.
 
 cmake_minimum_required(VERSION 3.22)
 project(dsmod-totk LANGUAGES CXX)
@@ -36,7 +36,7 @@ if(WIN32)
     target_sources(dsmod-totk PRIVATE "${MODULE_DIR}/0100F2C0115B6000.def")
 else()
     set(exports "${CMAKE_CURRENT_BINARY_DIR}/dsmod-totk.exports")
-    file(WRITE "${exports}" "{\n    global:\n        eden_dsmod_get_module;\n        eden_dsmod_get_extensions;\n        eden_dsmod_get_save_extensions;\n    local:\n        *;\n};\n")
+    file(WRITE "${exports}" "{\n    global:\n        eden_dsmod_get_module;\n        eden_dsmod_get_extensions;\n        eden_dsmod_get_font_extensions;\n        eden_dsmod_get_save_extensions;\n    local:\n        *;\n};\n")
     target_link_options(dsmod-totk PRIVATE "-Wl,--no-undefined" "-Wl,--version-script=${exports}")
     set_property(TARGET dsmod-totk APPEND PROPERTY LINK_DEPENDS "${exports}")
 endif()

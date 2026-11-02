@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Fake EdenDsmodHostApi for the totk_*_test programs: byte-map guest memory, call counters,
 // recorded publishes and logs, an in-memory romfs; a fake save directory (EdenDsmodHostSaveApi), a
-// GameData save builder and SARC/MSBT builders.
+// GameData save builder, SARC/MSBT/.bfotf builders and system font files for the font tests.
 // Test-only; never part of the module.
 #pragma once
 
@@ -12,7 +12,9 @@
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
+#include <initializer_list>
 #include <map>
 #include <mutex>
 #include <optional>
@@ -495,6 +497,45 @@ inline std::size_t EntryAt(const std::vector<std::uint8_t>& b, std::string_view 
             return at;
     assert(!"key not in save");
     return 0;
+}
+
+// A .bfotf of `plain` under `key` (the header totk_font.h decodes).
+inline std::vector<std::uint8_t> Bfotf(const std::vector<std::uint8_t>& plain, std::uint32_t key) {
+    std::vector<std::uint8_t> b(8);
+    const auto be = [&b](std::size_t at, std::uint32_t v) {
+        for (int i = 0; i < 4; ++i)
+            b[at + i] = std::uint8_t(v >> (24 - 8 * i));
+    };
+    be(0, 0x7F9A0218u ^ key);
+    be(4, std::uint32_t(plain.size()) ^ key);
+    for (std::size_t i = 0; i < plain.size(); ++i)
+        b.push_back(plain[i] ^ std::uint8_t(key >> (24 - 8 * (i & 3))));
+    return b;
+}
+
+// The first of `paths` that exists (also as Z:<path>, wine's view of /), or empty: font tests
+// use a system font found at test time and skip without one.
+inline std::vector<std::uint8_t> SystemFile(std::initializer_list<const char*> paths) {
+    for (const char* path : paths)
+        for (const std::string& p : {std::string{path}, "Z:" + std::string{path}})
+            if (std::FILE* f = std::fopen(p.c_str(), "rb")) {
+                std::vector<std::uint8_t> bytes;
+                for (int c; (c = std::fgetc(f)) != EOF;)
+                    bytes.push_back(std::uint8_t(c));
+                std::fclose(f);
+                return bytes;
+            }
+    return {};
+}
+// A CFF (OTTO) face like the game's text face, else TrueType; and a TrueType face for External.
+inline std::vector<std::uint8_t> SystemTextFont() {
+    return SystemFile({"/usr/share/fonts/opentype/inter/Inter-Regular.otf",
+                       "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                       "/usr/share/fonts/TTF/DejaVuSans.ttf"});
+}
+inline std::vector<std::uint8_t> SystemExtFont() {
+    return SystemFile({"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                       "/usr/share/fonts/TTF/DejaVuSans.ttf"});
 }
 
 } // namespace totk::test

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Bounds-checked little-endian reads over game files, and one whole read through read_romfs;
-// shared by the MSBT reader (totk_msbt.h) and the T8a dump (totk_dump.h).
+// shared by the MSBT reader (totk_msbt.h), the T8a dump (totk_dump.h) and the font (totk_font.h).
 #pragma once
 
 #include <cstdint>
@@ -44,10 +44,10 @@ struct Reader {
 };
 
 // The whole of `path`: a size query, then one read that must return exactly that size. The
-// host caps both (64 MiB [S1 mod_module_host.cpp:29,408]).
+// host caps both at 64 MiB [S1 mod_module_host.cpp:29,408]; a larger answer is refused here too.
 inline bool ReadAll(const EdenDsmodHostApi& h, const char* path, std::vector<std::uint8_t>& out) {
     const std::size_t size = h.read_romfs(h.userdata, path, 0, nullptr, 0);
-    if (size == 0)
+    if (size == 0 || size > (std::size_t{64} << 20))
         return false;
     out.resize(size);
     return h.read_romfs(h.userdata, path, 0, out.data(), size) == size;

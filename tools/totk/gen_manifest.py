@@ -2,10 +2,11 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Generate the Tears of the Kingdom companion package files (docs/PLAN.md T4).
 
-Writes packages/TearsOfTheKingdom/dualscreen/manifest.json, assets/map-blank.png and
-ASSETS.provenance.json. With --check, compares them with what is committed instead (exit 1 on a
-difference). Std-lib only; run with `python3 -I`. Nothing from the game is written: pictures and
-names come from the player's own files through the module at runtime.
+Writes packages/TearsOfTheKingdom/dualscreen/manifest.json, assets/map-blank.png,
+ASSETS.provenance.json and totk_font.txt. With --check, compares them with what is committed
+instead (exit 1 on a difference). Std-lib only; run with `python3 -I`. Nothing from the game is
+written: pictures, names and the font come from the player's own files through the module at
+runtime.
 """
 import argparse
 import json
@@ -24,6 +25,8 @@ FRAME = "#FF2E3842"
 TEXT = "#FFE6ECF2"
 DIM = "#FFA8B2BC"
 ACCENT = "#FFE8C46A"
+# The game font (PLAN.md T3a' B4): the module decodes this spec (totk_font.h) and serves the atlas.
+FONT_SPEC = "body:48"
 
 # Pages in totk.ui.page order: (id, tab caption, the domain whose .source/.valid the page shows).
 PAGES = [("gear", "Gear", "gear"), ("abilities", "Abilities", "ability"),
@@ -156,6 +159,8 @@ def manifest():
         "canvas_w": CANVAS_W,
         "canvas_h": CANVAS_H,
         "background": BG,
+        "font": "file:totk_font.txt",
+        "font_atlas": f"module:totk:font/{FONT_SPEC}",
         "haptics": {"enabled": True, "respect_system": True, "tap": "click", "drop": "confirm",
                     "refused": "reject"},
         "pages": pages,
@@ -186,7 +191,8 @@ def outputs():
     provenance = {"format": 1, "files": {"assets/map-blank.png": {
         "origin": "generated", "source": "tools/totk/gen_manifest.py -- 1x1 transparent"}}}
     return {"manifest.json": dump(manifest()), "assets/map-blank.png": blank_png(),
-            "ASSETS.provenance.json": dump(provenance)}
+            "ASSETS.provenance.json": dump(provenance),
+            "totk_font.txt": f"{FONT_SPEC}\n".encode()}
 
 
 def main(argv=None):

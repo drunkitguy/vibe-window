@@ -65,6 +65,9 @@ const EdenDsmodModuleApi* M() {
 const EdenDsmodModuleExtensions* Ext() {
     return eden_dsmod_get_extensions(EDEN_DSMOD_EXT_VERSION, EDEN_DSMOD_EXT_HASH);
 }
+const EdenDsmodFontExtensions* FontExt() {
+    return eden_dsmod_get_font_extensions(EDEN_DSMOD_FONT_EXT_VERSION, EDEN_DSMOD_FONT_EXT_HASH);
+}
 const EdenDsmodModuleSaveExtensions* SaveExt() {
     return eden_dsmod_get_save_extensions(EDEN_DSMOD_SAVE_EXT_VERSION, EDEN_DSMOD_SAVE_EXT_HASH);
 }
@@ -158,6 +161,16 @@ int main() {
            ext->struct_size == sizeof(EdenDsmodModuleExtensions) &&
            ext->abi_hash == EDEN_DSMOD_EXT_HASH && ext->configure && ext->on_action &&
            ext->load_image);
+
+    // eden_dsmod_get_font_extensions: version and hash gate, then the table the host checks.
+    assert(!eden_dsmod_get_font_extensions(EDEN_DSMOD_FONT_EXT_VERSION + 1,
+                                           EDEN_DSMOD_FONT_EXT_HASH));
+    assert(!eden_dsmod_get_font_extensions(EDEN_DSMOD_FONT_EXT_VERSION,
+                                           EDEN_DSMOD_FONT_EXT_HASH ^ 1));
+    const EdenDsmodFontExtensions* fe = FontExt();
+    assert(fe && fe->version == EDEN_DSMOD_FONT_EXT_VERSION &&
+           fe->struct_size == sizeof(EdenDsmodFontExtensions) &&
+           fe->abi_hash == EDEN_DSMOD_FONT_EXT_HASH && fe->decode_font);
 
     // supports_build: only the exact target string.
     assert(m->supports_build(totk::kTargetBuild));
@@ -506,19 +519,35 @@ int main() {
         assert(in.extensions && in.extensions->abi_hash == EDEN_DSMOD_EXT_HASH);
     }
 
-    // load_image: false for every key (icons are romfs: paths), without a host or sink call.
+    // load_image: false for every key but the font atlas (icons are romfs: paths), without a
+    // host or sink call; the atlas too while the romfs has no font. decode_font likewise.
     {
         bool sunk = false;
         const EdenDsmodImageSink sink = [](void* r, std::uint32_t, std::uint32_t,
                                            const std::uint8_t*, std::size_t) {
             *static_cast<bool*>(r) = true;
         };
+        const EdenDsmodFontSink font_sink = [](void* r, std::uint32_t, std::uint32_t,
+                                               const EdenDsmodFontGlyph*, std::uint32_t) {
+            *static_cast<bool*>(r) = true;
+        };
         for (const char* key : {"romfs:/UI/Tex/Icon/Weapon_Sword_001.bntx.zs",
                                 "module:totk:icon/Weapon_Sword_001", "module:totk:map/G/00-00/2",
-                                "", static_cast<const char*>(nullptr)})
+                                "module:totk:font/body:48", "module:totk:font/body:7",
+                                "module:totk:font/", "module:totk:font/body:48?p=0", "",
+                                static_cast<const char*>(nullptr)})
             assert(!ext->load_image(instance, &h.api, key, &sunk, sink));
         assert(!ext->load_image(nullptr, nullptr, nullptr, nullptr, nullptr));
-        assert(!sunk && h.MemoryCalls() == 0);
+        assert(!ext->load_image(nullptr, &h.api, "module:totk:font/body:48", &sunk, sink));
+        assert(!ext->load_image(instance, &h.api, "module:totk:font/body:48", &sunk, nullptr));
+        const std::string spec = "body:48\n";
+        const auto bytes = reinterpret_cast<const std::uint8_t*>(spec.data());
+        assert(!fe->decode_font(instance, bytes, spec.size(), &sunk, font_sink));
+        assert(!fe->decode_font(nullptr, bytes, spec.size(), &sunk, font_sink));
+        assert(!fe->decode_font(instance, nullptr, spec.size(), &sunk, font_sink));
+        assert(!fe->decode_font(instance, bytes, 0, &sunk, font_sink));
+        assert(!fe->decode_font(instance, bytes, spec.size(), &sunk, nullptr));
+        assert(!sunk && h.MemoryCalls() == 0 && !in.font);
     }
 
     // Module actions [docs/PLAN.md "Actions"] on the fixture save.
@@ -803,6 +832,64 @@ int main() {
             assert(hr.logs.empty());
         }
         m->destroy(blind);
+    }
+
+    // The font from the romfs (system fonts as .bfotf files; skipped without one): decode_font
+    // reports the dense run once, load_image the atlas it was measured on; a bad spec is refused.
+    if (const auto text = totk::test::SystemTextFont(), extf = totk::test::SystemExtFont();
+        !text.empty() && !extf.empty()) {
+        Host hf;
+        hf.PutRomfs(totk::font::kTextPath, totk::test::Bfotf(text, 0x12345678));
+        hf.PutRomfs(totk::font::kExtPath, totk::test::Bfotf(extf, 0x9ABCDEF0));
+        void* fi = m->create(&hf.api, "{}");
+        assert(fi);
+        struct Got {
+            int calls = 0;
+            std::uint32_t line = 0, first = 0, count = 0, w = 0, h = 0;
+            std::size_t size = 0;
+            std::uint16_t a_x = 0, a_y = 0, a_w = 0;
+        } got;
+        const EdenDsmodFontSink font_sink = [](void* r, std::uint32_t line, std::uint32_t first,
+                                               const EdenDsmodFontGlyph* glyphs, std::uint32_t n) {
+            auto& g = *static_cast<Got*>(r);
+            ++g.calls;
+            g.line = line;
+            g.first = first;
+            g.count = n;
+            g.a_x = glyphs['A' - first].x;
+            g.a_y = glyphs['A' - first].y;
+            g.a_w = glyphs['A' - first].w;
+        };
+        const EdenDsmodImageSink sink = [](void* r, std::uint32_t w, std::uint32_t h,
+                                           const std::uint8_t* pixels, std::size_t size) {
+            auto& g = *static_cast<Got*>(r);
+            ++g.calls;
+            g.w = w;
+            g.h = h;
+            g.size = pixels ? size : 0;
+        };
+        for (const char* bad : {"body:7", "ui:48", "", "body:48 x"}) {
+            const std::string spec = bad;
+            assert(!fe->decode_font(fi, reinterpret_cast<const std::uint8_t*>(spec.data()),
+                                    spec.size(), &got, font_sink));
+        }
+        assert(got.calls == 0);
+        const std::string spec = "body:48\n";
+        assert(fe->decode_font(fi, reinterpret_cast<const std::uint8_t*>(spec.data()), spec.size(),
+                               &got, font_sink));
+        assert(got.calls == 1 && got.line == 48 && got.first == 0x20 &&
+               got.count == 0xE068 - 0x20 + 1 && got.a_w > 0);
+        const auto atlas = static_cast<Instance*>(fi)->font;
+        assert(ext->load_image(fi, &hf.api, "module:totk:font/body:48", &got, sink));
+        assert(got.calls == 2 && got.w == atlas->width && got.h == atlas->height &&
+               got.size == std::size_t(got.w) * got.h * 4 && got.a_x + got.a_w <= got.w);
+        assert(static_cast<Instance*>(fi)->font == atlas); // the same atlas, not built again
+        assert(ext->load_image(fi, &hf.api, "module:totk:font/body:30", &got, sink));
+        assert(got.calls == 3 && static_cast<Instance*>(fi)->font->cap == 30);
+        assert(hf.MemoryCalls() == 0);
+        m->destroy(fi);
+    } else {
+        std::puts("totk_module_test: no system font found; font atlas cases skipped");
     }
 
     // 100 create/destroy cycles with a save to read: no hang, no leak. Some destroys land while

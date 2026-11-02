@@ -7,7 +7,8 @@
 // worker also loads the item names from the game's romfs (totk_msbt.h) and, once per session
 // when the player asks for it, logs T8a's texture dump (totk_dump.h).
 // Base extensions: module actions drive the UI state (page, tab, selection, map layer); game
-// actions are refused; load_image refuses every key (icons are romfs: paths the runtime reads).
+// actions are refused; load_image serves only the font atlas (icons are romfs: paths the runtime
+// reads). Font extension: decode_font builds that atlas from the game's own font (totk_font.h).
 
 #include <array>
 #include <chrono>
@@ -19,12 +20,14 @@
 #include <new>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <vector>
 
 #include "core/mods/modules/dsmod_module_sdk.h"
 #include "totk_build.h"
 #include "totk_dump.h"
+#include "totk_font.h"
 #include "totk_keys.h"
 #include "totk_msbt.h"
 #include "totk_offsets.h"
@@ -88,6 +91,12 @@ struct Instance {
     // holding its copy, frees it.
     std::shared_ptr<const totk::Snapshot> retired;
     bool names = false; // the item names loaded (totk.names.valid)
+
+    // The font atlas, built on first use by decode_font (tick thread) or load_image (asset
+    // worker); the lock is held while it builds so the two never build it twice.
+    std::mutex font_mutex;
+    std::shared_ptr<const totk::font::Atlas> font;
+
     std::thread worker; // started last in Create, joined in Destroy
 };
 
@@ -563,10 +572,62 @@ EdenDsmodBool OnAction(void* instance, const char* action, std::int64_t arg) {
     }
 }
 
-// Icons are romfs: paths the runtime decodes itself (T3a'); map tiles are T7. Every key fails
-// and the host gives up after its retries [S3 MODULE_GUIDE §1.4].
-EdenDsmodBool LoadImage(void*, const EdenDsmodHostApi*, const char*, void*, EdenDsmodImageSink) {
-    return false;
+// The atlas at `cap`, built from the romfs through the create host's read_romfs (decode_font gets
+// no host [S2 010055D009F78000.cpp:151]); null while the font is not readable.
+std::shared_ptr<const totk::font::Atlas> Font(Instance& in, std::uint32_t cap) {
+    std::scoped_lock lock{in.font_mutex};
+    if (!in.font || in.font->cap != cap) {
+        auto atlas = totk::font::Load(in.host, cap);
+        if (!atlas)
+            return nullptr;
+        in.font = std::move(atlas);
+    }
+    return in.font;
+}
+
+// The bytes are the package's totk_font.txt, a spec ("body:48", totk_font.h). False (no sink
+// call) on a bad spec or while the font is not readable: the host retries about once a second,
+// 30 times [S1 mod_assets.cpp:393-405].
+EdenDsmodBool DecodeFont(void* instance, const std::uint8_t* bytes, std::size_t size,
+                         void* receiver, EdenDsmodFontSink sink) {
+    try {
+        auto* in = static_cast<Instance*>(instance);
+        if (!in || !bytes || !sink || size == 0 || size > 256)
+            return false;
+        std::string_view spec{reinterpret_cast<const char*>(bytes), size};
+        while (!spec.empty() && (spec.back() == '\n' || spec.back() == '\r' || spec.back() == ' '))
+            spec.remove_suffix(1);
+        const auto cap = totk::font::ParseSpec(spec);
+        const auto atlas = cap ? Font(*in, *cap) : nullptr;
+        if (!atlas)
+            return false;
+        sink(receiver, atlas->cap, totk::font::kFirst, atlas->glyphs.data(),
+             std::uint32_t(atlas->glyphs.size()));
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+// Only module:totk:font/<spec>, the font atlas. Icons are romfs: paths the runtime decodes itself
+// (T3a'); map tiles are T7. Every other key fails and the host gives up after its retries
+// [S3 MODULE_GUIDE §1.4].
+EdenDsmodBool LoadImage(void* instance, const EdenDsmodHostApi*, const char* key, void* receiver,
+                        EdenDsmodImageSink sink) {
+    try {
+        constexpr std::string_view prefix = "module:totk:font/";
+        auto* in = static_cast<Instance*>(instance);
+        if (!in || !key || !sink || !std::string_view{key}.starts_with(prefix))
+            return false;
+        const auto cap = totk::font::ParseSpec(std::string_view{key}.substr(prefix.size()));
+        const auto atlas = cap ? Font(*in, *cap) : nullptr;
+        if (!atlas)
+            return false;
+        sink(receiver, atlas->width, atlas->height, atlas->rgba.data(), atlas->rgba.size());
+        return true;
+    } catch (...) {
+        return false;
+    }
 }
 
 const EdenDsmodModuleApi kModule{
@@ -589,6 +650,13 @@ const EdenDsmodModuleExtensions kExtensions{
     Configure,              OnAction,                          LoadImage,
 };
 
+const EdenDsmodFontExtensions kFontExtensions{
+    EDEN_DSMOD_FONT_EXT_VERSION,
+    sizeof(EdenDsmodFontExtensions),
+    EDEN_DSMOD_FONT_EXT_HASH,
+    DecodeFont,
+};
+
 const EdenDsmodModuleSaveExtensions kSaveExtensions{
     EDEN_DSMOD_SAVE_EXT_VERSION,
     sizeof(EdenDsmodModuleSaveExtensions),
@@ -600,6 +668,7 @@ const EdenDsmodModuleSaveExtensions kSaveExtensions{
 
 DSMOD_SDK_EXPORT_MODULE(kModule)
 DSMOD_SDK_EXPORT_EXTENSIONS(kExtensions)
+DSMOD_SDK_EXPORT_FONT_EXTENSIONS(kFontExtensions)
 // The SDK has no save macro [S3 MODULE_GUIDE §1.5]; this is the generic getter the macros expand
 // to, as the SMO module does [S2 native/modules/0100000000010000.cpp:1499].
 DSMOD_SDK_DEFINE_GETTER(eden_dsmod_get_save_extensions, EdenDsmodModuleSaveExtensions,

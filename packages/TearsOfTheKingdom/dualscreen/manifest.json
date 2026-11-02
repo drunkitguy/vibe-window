@@ -7,6 +7,8 @@
  "canvas_w": 1240,
  "canvas_h": 1080,
  "background": "#FF101418",
+ "font": "file:totk_font.txt",
+ "font_atlas": "module:totk:font/body:48",
  "haptics": {
   "enabled": true,
   "respect_system": true,
