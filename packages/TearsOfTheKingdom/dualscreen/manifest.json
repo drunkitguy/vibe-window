@@ -137,11 +137,12 @@
      "type": "label",
      "rect": [
       28,
-      124,
+      125,
       276,
-      16
+      10
      ],
      "text": "WEAPON",
+     "text_scale": 2,
      "color": "#FFA8B2BC",
      "need_bind": "ui.gear.weapon.known"
     },
@@ -151,7 +152,7 @@
       24,
       140,
       284,
-      380
+      430
      ],
      "bg": "#FF1A2028",
      "color": "#FF2E3842",
@@ -199,9 +200,9 @@
     {
      "type": "label",
      "rect": [
-      36,
+      166,
       300,
-      260,
+      0,
       40
      ],
      "text": "None",
@@ -239,7 +240,7 @@
      "type": "label",
      "rect": [
       36,
-      528,
+      520,
       260,
       36
      ],
@@ -253,11 +254,12 @@
      "type": "label",
      "rect": [
       328,
-      124,
+      125,
       276,
-      16
+      10
      ],
      "text": "BOW",
+     "text_scale": 2,
      "color": "#FFA8B2BC",
      "need_bind": "ui.gear.bow.known"
     },
@@ -267,7 +269,7 @@
       324,
       140,
       284,
-      380
+      430
      ],
      "bg": "#FF1A2028",
      "color": "#FF2E3842",
@@ -315,9 +317,9 @@
     {
      "type": "label",
      "rect": [
-      336,
+      466,
       300,
-      260,
+      0,
       40
      ],
      "text": "None",
@@ -330,7 +332,7 @@
      "type": "label",
      "rect": [
       336,
-      528,
+      520,
       260,
       36
      ],
@@ -344,11 +346,12 @@
      "type": "label",
      "rect": [
       628,
-      124,
+      125,
       276,
-      16
+      10
      ],
      "text": "SHIELD",
+     "text_scale": 2,
      "color": "#FFA8B2BC",
      "need_bind": "ui.gear.shield.known"
     },
@@ -358,7 +361,7 @@
       624,
       140,
       284,
-      380
+      430
      ],
      "bg": "#FF1A2028",
      "color": "#FF2E3842",
@@ -406,9 +409,9 @@
     {
      "type": "label",
      "rect": [
-      636,
+      766,
       300,
-      260,
+      0,
       40
      ],
      "text": "None",
@@ -446,7 +449,7 @@
      "type": "label",
      "rect": [
       636,
-      528,
+      520,
       260,
       36
      ],
@@ -460,11 +463,12 @@
      "type": "label",
      "rect": [
       928,
-      124,
+      125,
       276,
-      16
+      10
      ],
      "text": "ARROWS",
+     "text_scale": 2,
      "color": "#FFA8B2BC",
      "need_bind": "ui.gear.arrow.known"
     },
@@ -474,7 +478,7 @@
       924,
       140,
       284,
-      380
+      430
      ],
      "bg": "#FF1A2028",
      "color": "#FF2E3842",
@@ -522,9 +526,9 @@
     {
      "type": "label",
      "rect": [
-      936,
+      1066,
       300,
-      260,
+      0,
       40
      ],
      "text": "None",
@@ -536,9 +540,9 @@
     {
      "type": "label",
      "rect": [
-      24,
+      620,
       400,
-      1192,
+      0,
       60
      ],
      "text": "No save data yet",
@@ -687,9 +691,9 @@
     {
      "type": "label",
      "rect": [
-      24,
+      620,
       400,
-      1192,
+      0,
       60
      ],
      "text": "Coming in a later update",
@@ -837,9 +841,9 @@
     {
      "type": "label",
      "rect": [
-      24,
+      620,
       400,
-      1192,
+      0,
       60
      ],
      "text": "Coming in a later update",
@@ -987,9 +991,9 @@
     {
      "type": "label",
      "rect": [
-      24,
+      620,
       400,
-      1192,
+      0,
       60
      ],
      "text": "Coming in a later update",

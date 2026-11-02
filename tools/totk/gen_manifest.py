@@ -101,9 +101,10 @@ def gear_page(derived, actions):
         derived.append({"name": has_value, "expr": exists(f"{g}.{value_field}")})
         actions[f"gear_swap_{k}"] = {"kind": "module", "action": "totk.gear.swap", "argument": k}
         widgets += [
-            {"type": "label", "rect": [x + 4, 124, 276, 16], "text": caption, "color": DIM,
-             "need_bind": known},
-            {"type": "rect", "rect": [x, 140, 284, 380], "bg": PANEL, "color": FRAME,
+            # Slot caption, 10 px text 5 px clear of the strip (ends at 120) and the card (140).
+            {"type": "label", "rect": [x + 4, 125, 276, 10], "text": caption, "text_scale": 2,
+             "color": DIM, "need_bind": known},
+            {"type": "rect", "rect": [x, 140, 284, 430], "bg": PANEL, "color": FRAME,
              "on_hold": f"gear_swap_{k}", "need_bind": known},
             {"type": "image", "rect": [x + 62, 160, 160, 160], "src_bind": f"{g}.icon",
              "need_bind": f"{g}.present"},
@@ -111,7 +112,8 @@ def gear_page(derived, actions):
              "color": TEXT, "wrap_width": 260, "max_lines": 2, "need_bind": f"{g}.present"},
             {"type": "value", "rect": [x + 12, 430, 260, 40], "bind": f"{g}.{value_field}",
              "text": prefix, "color": TEXT, "need_bind": has_value},
-            {"type": "label", "rect": [x + 12, 300, 260, 40], "text": "None", "text_scale": 4,
+            # Centre-aligned text is centred on rect x (the runtime's anchor), here the card's.
+            {"type": "label", "rect": [x + 142, 300, 0, 40], "text": "None", "text_scale": 4,
              "align": "center", "color": DIM, "need_bind": none},
         ]
         if slot in FUSES:
@@ -122,11 +124,10 @@ def gear_page(derived, actions):
                  "color": DIM, "wrap_width": 260, "max_lines": 1, "need_bind": f"{g}.fuse"},
             ]
         if slot in EFFECTS:
-            # Under the fuse line, below the card's lower edge (the card has no room left).
-            widgets.append({"type": "label", "rect": [x + 12, 528, 260, 36],
+            widgets.append({"type": "label", "rect": [x + 12, 520, 260, 36],
                             "bind_text": f"{g}.effect", "color": ACCENT, "wrap_width": 260,
                             "max_lines": 1, "need_bind": f"{g}.present"})
-    widgets.append({"type": "label", "rect": [24, 400, 1192, 60], "text": "No save data yet",
+    widgets.append({"type": "label", "rect": [620, 400, 0, 60], "text": "No save data yet",
                     "text_scale": 5, "align": "center", "color": DIM,
                     "need_bind": "!totk.gear.valid"})
     return widgets
@@ -134,7 +135,7 @@ def gear_page(derived, actions):
 
 def placeholder_page():
     """Abilities, Inventory and Map are built in T5-T7; until then their tab shows this."""
-    return [{"type": "label", "rect": [24, 400, 1192, 60], "text": "Coming in a later update",
+    return [{"type": "label", "rect": [620, 400, 0, 60], "text": "Coming in a later update",
              "text_scale": 5, "align": "center", "color": DIM}]
 
 

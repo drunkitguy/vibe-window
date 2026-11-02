@@ -8,6 +8,7 @@
 #pragma once
 
 #include <cstddef>
+#include <iterator>
 #include <string>
 #include <string_view>
 
@@ -82,8 +83,12 @@ enum Action { kActPage, kActInvTab, kActInvTabNext, kActInvSelect, kActMapLayer,
 inline constexpr const char* kActionNames[kActions] = {
     "totk.ui.page",  "totk.inv.tab",  "totk.inv.tab_next",  "totk.inv.select",
     "totk.map.layer", "totk.gear.swap", "totk.inv.use", "totk.ability.select"};
-inline constexpr int kPages = 4;  // totk.ui.page: 0 gear, 1 abilities, 2 inventory, 3 map
-inline constexpr int kLayers = 3; // totk.map.layer: 0 surface, 1 sky, 2 depths
+// Argument range [0, n) per action; 0: any argument (tab_next ignores it, select and use take
+// the slot index from "$payload"). ui.page: 0 gear, 1 abilities, 2 inventory, 3 map; inv.tab:
+// the 8 tabs; map.layer: 0 surface, 1 sky, 2 depths; gear.swap: <s>; ability.select: <a>.
+inline constexpr int kActionArgs[kActions] = {4, 8, 0, 0, 3, 4, 0, 7};
+static_assert(kActionArgs[kActGearSwap] == std::size(kGearSlotNames) &&
+              kActionArgs[kActAbilitySelect] == std::size(kAbilityNames));
 
 // kActions when the name is not a module action.
 inline int ActionIndex(std::string_view name) {

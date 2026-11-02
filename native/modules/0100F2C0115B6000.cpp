@@ -33,6 +33,7 @@ constexpr auto kPollInterval = std::chrono::seconds(2);
 namespace pub = totk::pub;
 static_assert(std::size(pub::kGearSlotNames) == totk::kGearSlots);
 static_assert(std::size(pub::kAbilityNames) == totk::kAbilities);
+static_assert(pub::kActionArgs[pub::kActInvTab] == totk::kTabs);
 constexpr int kPageInventory = 2;
 
 // Every key sample publishes with a computed name, built once in create so sample never allocates.
@@ -65,9 +66,9 @@ struct Instance {
     // bits below need no lock; the worker never touches them.
     int page = 0, tab = 0, sel = 0, layer = 0;
     // Refused actions: one log line per action name per session, written by the next tick (the
-    // host struct is borrowed per call, and on_action gets none). Bit kActions: an unknown name.
+    // host struct is borrowed per call, and on_action gets none). An unknown name is refused
+    // without a line of ours: the runtime logs every decline by name [S1 mod_module.cpp:335].
     std::uint32_t refused = 0, logged = 0;
-    char unknown[64] = {}; // the first unknown action name, for its log line
 
     std::mutex mutex; // guards everything below; sample holds it only to copy `snapshot`
     std::condition_variable wake;
@@ -380,21 +381,19 @@ void Tick(void* instance, const EdenDsmodHostApi* host) {
         auto* in = static_cast<Instance*>(instance);
         if (!in || !host || !host->log || !(in->refused & ~in->logged))
             return;
-        for (int a = 0; a <= pub::kActions; ++a) {
+        for (int a = 0; a < pub::kActions; ++a) {
             const std::uint32_t bit = 1u << a;
             if (!(in->refused & bit) || (in->logged & bit))
                 continue;
             in->logged |= bit;
             char line[160];
-            if (a == pub::kActions)
-                std::snprintf(line, sizeof line, "totk: unknown action '%s' refused", in->unknown);
-            else if (a >= pub::kActGearSwap)
+            if (a >= pub::kActGearSwap)
                 std::snprintf(line, sizeof line, "totk: %s disabled: no verified offsets",
                               pub::kActionNames[a]);
             else
                 std::snprintf(line, sizeof line, "totk: %s refused: argument out of range",
                               pub::kActionNames[a]);
-            host->log(host->userdata, 1u, line);
+            host->log(host->userdata, EDEN_DSMOD_LOG_INFO, line);
         }
     } catch (...) {
     }
@@ -424,12 +423,12 @@ EdenDsmodBool OnAction(void* instance, const char* action, std::int64_t arg) {
         const int a = pub::ActionIndex(action);
         switch (a) {
         case pub::kActPage:
-            if (arg < 0 || arg >= pub::kPages)
+            if (arg < 0 || arg >= pub::kActionArgs[a])
                 break;
             in->page = int(arg);
             return true;
         case pub::kActInvTab:
-            if (arg < 0 || arg >= totk::kTabs)
+            if (arg < 0 || arg >= pub::kActionArgs[a])
                 break;
             in->tab = int(arg);
             in->sel = 0;
@@ -451,16 +450,15 @@ EdenDsmodBool OnAction(void* instance, const char* action, std::int64_t arg) {
             return true;
         }
         case pub::kActMapLayer:
-            if (arg < 0 || arg >= pub::kLayers)
+            if (arg < 0 || arg >= pub::kActionArgs[a])
                 break;
             in->layer = int(arg);
             return true;
         default: // kActGearSwap, kActInvUse, kActAbilitySelect: no verified offsets; or unknown
-            if (a == pub::kActions && !(in->refused & (1u << a)))
-                std::snprintf(in->unknown, sizeof in->unknown, "%s", action);
             break;
         }
-        in->refused |= 1u << a;
+        if (a < pub::kActions)
+            in->refused |= 1u << a;
         return false;
     } catch (...) {
         return false;

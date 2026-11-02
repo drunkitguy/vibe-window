@@ -553,8 +553,7 @@ int main() {
         "totk: totk.map.layer refused: argument out of range",
         "totk: totk.gear.swap disabled: no verified offsets",
         "totk: totk.inv.use disabled: no verified offsets",
-        "totk: totk.ability.select disabled: no verified offsets",
-        "totk: unknown action 'totk.bogus' refused"};
+        "totk: totk.ability.select disabled: no verified offsets"}; // unknown names: no line
     assert(h.logs == lines);
     assert(!act("totk.gear.swap", 0) && !act("totk.other", 0) && !act("totk.ui.page", 9));
     m->tick(instance, &h.api);
