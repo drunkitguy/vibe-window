@@ -28,11 +28,13 @@ int main() {
     assert(pub::ActionIndex("TOTK.UI.PAGE") == pub::kActions);
     assert(pub::ActionIndex("totk.ui.page ") == pub::kActions);
 
-    // Argument ranges: page 0-2 (home, abilities, map), tab 0-7, layer 0-2, gear.swap <s>, ability.select <a>; 0 = any.
+    // Argument ranges: page 0-2 (home, abilities, map), tab 0-7, layer 0-2, gear.swap <s>,
+    // ability.select <a>; 0 = any.
     assert(pub::kActionArgs[pub::kActPage] == 3 && pub::kActionArgs[pub::kActInvTab] == 8 &&
            pub::kActionArgs[pub::kActMapLayer] == 3 && pub::kActionArgs[pub::kActGearSwap] == 4 &&
            pub::kActionArgs[pub::kActAbilitySelect] == 7 &&
-           pub::kActionArgs[pub::kActInvTabNext] == 0 && pub::kActionArgs[pub::kActInvSelect] == 0 &&
+           pub::kActionArgs[pub::kActInvTabNext] == 0 &&
+           pub::kActionArgs[pub::kActInvSelect] == 0 &&
            pub::kActionArgs[pub::kActInvUse] == 0);
 
     // Expand fills the one placeholder.

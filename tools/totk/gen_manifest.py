@@ -60,7 +60,7 @@ ABILITIES = [("ultrahand", "Ultrahand", "UltraHand"), ("fuse", "Fuse", "OneTouch
 # name. A set entry that does not load draws nothing, and the fallback under it still reads.
 TEX = {role: None for role in (
     "header", "tab_on", "slot", "detail", "equip_panel", "plate", "bar_bg", "heart", "stamina",
-    "rupee", "battery", *(f"cat_{k}" for k in range(len(CATEGORIES))))}
+    "rupee", "battery")}
 # R5's first candidate for the ability icons: the item icon of the save's Obj_<X> (UNVERIFIED).
 TEX.update({f"ability_{a}": {"src": f"romfs:/UI/Tex/Icon/Obj_{x}.bntx.zs"}
             for a, _, x in ABILITIES})
@@ -68,6 +68,8 @@ TEX.update({f"ability_{a}": {"src": f"romfs:/UI/Tex/Icon/Obj_{x}.bntx.zs"}
 
 def textured(role, rect, fallback, **extra):
     """The fallback widgets, then TEX[role] over them at `rect` with `extra` (gates, tint)."""
+    # shortcut: opaque fallbacks (the heart and stamina squares) show through a texture with
+    # transparent parts; the T8a commit that fills TEX must drop or move those fallbacks.
     tex = TEX[role]
     return fallback + ([{"type": "image", "rect": rect, **tex, **extra}] if tex else [])
 
@@ -131,7 +133,7 @@ def notice():
         {"type": "label", "rect": [100, 350, 1040, 150], "text": "Companion unavailable",
          "text_scale": 5, "color": TEXT, "wrap_width": 1040, **gate},
         {"type": "label", "rect": [100, 550, 1040, 220], "bind_text": "module_error_message",
-         "text_scale": 3, "color": DIM, "wrap_width": 1040, "max_lines": 4, **gate},
+         "text_scale": 4, "color": DIM, "wrap_width": 1040, "max_lines": 4, **gate},
     ]
 
 
@@ -144,12 +146,11 @@ def inventory_side(derived, actions):
         current = f"ui.inv.tab{k}"
         derived.append({"name": current, "cmp": "eq", "a": "totk.inv.tab", "b": k})
         actions[f"inv_tab_{k}"] = {"kind": "module", "action": "totk.inv.tab", "argument": k}
-        tab = [{"type": "button", "rect": [x, 84, 78, 72], "text": "", "border": 2,
-                "bg": PANEL, "color": EDGE, "on_tap": f"inv_tab_{k}"},
-               {"type": "label", "rect": [x + 39, 126, 0, 20], "text": short, "text_scale": 4,
-                "align": "center", "color": TEXT}]
-        widgets += textured(f"cat_{k}", [x + 11, 92, 56, 56], tab)
         widgets += [
+            {"type": "button", "rect": [x, 84, 78, 72], "text": "", "border": 2, "bg": PANEL,
+             "color": EDGE, "on_tap": f"inv_tab_{k}"},
+            {"type": "label", "rect": [x + 39, 126, 0, 20], "text": short, "text_scale": 4,
+             "align": "center", "color": TEXT},
             {"type": "value", "rect": [x + 70, 90, 0, 20], "bind": f"totk.inv.tab{k}.count",
              "text_scale": 4, "align": "right", "color": VALUE, "need_bind": "totk.inv.valid"},
             {"type": "rect", "rect": [x + 8, 152, 62, 4], "bg": SELECT, "color": CLEAR,
@@ -187,7 +188,7 @@ def status_column(derived, actions):
     hearts = has(derived, "totk.status.hearts", "totk.status.max_hearts")
     stamina = has(derived, "totk.status.max_stamina")
     widgets = panel([640, 84, 592, 120])
-    # Bars end at x 1052 (R5: 1072) so a right-aligned "Max 3000" at scale 5 fits beside them
+    # Bars end at x 1032 (R5: 1072) so a right-aligned "Max 30000" at scale 5 fits beside them
     # in the built-in font as well.
     for y, role, colour, bar, value in (
             (96, "heart", HEART, {"bind": "totk.status.hearts",
@@ -201,7 +202,7 @@ def status_column(derived, actions):
         widgets += textured(role, [656, y, 44, 44], [
             {"type": "rect", "rect": [664, y + 8, 28, 28], "bg": colour, "color": CLEAR}])
         widgets += [
-            {"type": "bar", "rect": [712, y + 8, 340, 22], "bg": BG, "color": colour, **bar},
+            {"type": "bar", "rect": [712, y + 8, 320, 22], "bg": BG, "color": colour, **bar},
             {"type": "value", "rect": [1220, y + 2, 0, 32], "text_scale": 5, "align": "right",
              "color": VALUE, **value},
         ]
@@ -221,18 +222,21 @@ def status_column(derived, actions):
         chip = {"type": "rect", "rect": [x, 212, 192, 64], "bg": PANEL, "color": EDGE}
         if role is None:
             chip["on_hold"] = "gear_swap_3"
-        icon = [x + 12, 224, 40, 40]
-        frame = [{"type": "rect", "rect": icon, "bg": CLEAR, "color": EDGE}]
-        widgets += [chip, *(textured(role, icon, frame) if role else frame)]
-        if role is None:
+        # A 32 px icon slot leaves 140 px for "999,999" at scale 5 in the built-in font.
+        icon = [x + 10, 228, 32, 32]
+        widgets.append(chip)
+        if role:  # the caption names the chip, so a missing texture needs no fallback
+            widgets += textured(role, icon, [])
+        else:  # the arrow icon's frame, under its src_bind picture
+            widgets.append({"type": "rect", "rect": icon, "bg": CLEAR, "color": EDGE})
             widgets.append({"type": "image", "rect": icon, "src_bind": f"{g}.icon",
                             "need_bind": f"{g}.present"})
-            widgets.append({"type": "label", "rect": [x + 64, 246, 120, 20], "text": "None",
+            widgets.append({"type": "label", "rect": [x + 48, 246, 136, 20], "text": "None",
                             "text_scale": 4, "color": DIM, "need_bind": none})
         widgets += [
-            {"type": "label", "rect": [x + 64, 220, 120, 20], "text": caption, "text_scale": 4,
+            {"type": "label", "rect": [x + 48, 220, 136, 20], "text": caption, "text_scale": 4,
              "color": DIM, "need_bind": gate},
-            {"type": "value", "rect": [x + 64, 244, 120, 26], "text_scale": 5, "color": VALUE,
+            {"type": "value", "rect": [x + 48, 244, 136, 26], "text_scale": 5, "color": VALUE,
              **value},
         ]
     return widgets
@@ -254,7 +258,8 @@ def equipment(derived, actions):
          "align": "center", "color": TEXT, "wrap_width": 256, "max_lines": 2, "line_gap": 8,
          "need_bind": f"{w}.present"},
         {"type": "label", "rect": [936, 768, 0, 26], "bind_text": f"{w}.effect",
-         "text_scale": 4, "align": "center", "color": VALUE, "need_bind": f"{w}.present"},
+         "text_scale": 4, "align": "center", "color": VALUE, "wrap_width": 256, "max_lines": 1,
+         "fit_text": True, "need_bind": f"{w}.present"},
         {"type": "label", "rect": [936, 800, 0, 24], "bind_text": f"{w}.fuse_name",
          "text_scale": 4, "align": "center", "color": DIM, "wrap_width": 256, "max_lines": 1,
          "need_bind": f"{w}.fuse"},
@@ -293,7 +298,8 @@ def ability_bar(actions):
     widgets = panel([0, 940, 1240, 108], "bar_bg")
     for k, (a, name, _) in enumerate(ABILITIES):
         x, owned = 18 + 172 * k, f"totk.ability.{a}.owned"
-        locked = {"hide_bind": owned, "hide_eq": 1}
+        # Locked: the save says not owned (no save: neither variant shows).
+        locked = {"need_bind": "totk.ability.valid", "hide_bind": owned, "hide_eq": 1}
         actions[f"ability_select_{k}"] = {"kind": "module", "action": "totk.ability.select",
                                           "argument": k}
         icon = [x + 54, 946, 64, 64]

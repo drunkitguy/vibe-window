@@ -279,6 +279,7 @@ class GenManifestTest(unittest.TestCase):
                 self.assertEqual(tab["rect"], [{2: 140, 0: 470, 1: 800}[j], 8, 300, 60])
                 self.assertEqual(self.action(tab["on_tap"]), self.page_action(j), (page_id, j))
                 self.assertEqual(tab["color"], gen_manifest.TEXT if j == k else gen_manifest.DIM)
+                self.assertEqual(tab["text_scale"], 6)  # R5: tab labels at scale 6
             rings = [w for w in widgets if w.get("pill") and w.get("color") == gen_manifest.SELECT]
             self.assertEqual([r["rect"][0] for r in rings], [gen_manifest.TAB_X[k]], page_id)
             left, right = {0: (2, 1), 1: (0, 2), 2: (1, 0)}[k]
@@ -333,14 +334,84 @@ class GenManifestTest(unittest.TestCase):
             self.assertTrue(all(w.get("src", "").endswith(f"/Obj_{x}.bntx.zs")
                                 for w in parts if w["type"] == "image"))
             owned_key = f"totk.ability.{a}.owned"
-            for owned in (None, 0, 1):
-                snap = {"totk.ready": 1} if owned is None else {"totk.ready": 1, owned_key: owned}
-                shown = [w for w in parts if self.visible(w, snap)]
-                self.assertEqual(len(shown), 2, (a, owned))
-                full = owned == 1
-                self.assertEqual({w.get("color", w.get("tint")) for w in shown},
-                                 {gen_manifest.TEXT if full else gen_manifest.DIM,
-                                  None if full else gen_manifest.LOCKED}, (a, owned))
+            for valid, owned, expect in ((None, None, None), (0, None, None), (1, 0, "locked"),
+                                         (1, None, "locked"), (1, 1, "owned")):
+                snap = {"totk.ready": 1}
+                if valid is not None:
+                    snap["totk.ability.valid"] = valid
+                if owned is not None:
+                    snap[owned_key] = owned
+                shown = {w.get("color", w.get("tint")) for w in parts if self.visible(w, snap)}
+                self.assertEqual(shown, {
+                    None: set(), "owned": {gen_manifest.TEXT, None},
+                    "locked": {gen_manifest.DIM, gen_manifest.LOCKED}}[expect], (a, valid, owned))
+
+    def one(self, widgets, **fields):
+        found = [w for w in widgets if all(w.get(k) == v for k, v in fields.items())]
+        self.assertEqual(len(found), 1, fields)
+        return found[0]
+
+    def test_status_and_text_gates(self):
+        """Status bars, values and captions, the category counts and names, the source line and
+        the later pages: exact binds, and each shown only while its keys are published (a .valid
+        key also hides at 0; a value of 0 still shows)."""
+        home, st = self.page("home"), "totk.status."
+        hearts, stamina = [st + "hearts", st + "max_hearts"], [st + "max_stamina"]
+        cases = [
+            (self.one(home, type="bar", bind=st + "hearts", max_bind=st + "max_hearts",
+                      color=gen_manifest.HEART), hearts),
+            (self.one(home, type="value", bind=st + "hearts", max_bind=st + "max_hearts",
+                      max_sep="/", align="right", rect=[1220, 98, 0, 32]), hearts),
+            (self.one(home, type="bar", bind=st + "max_stamina", max_bind=st + "max_stamina",
+                      color=gen_manifest.STAMINA), stamina),
+            (self.one(home, type="value", bind=st + "max_stamina", text="Max ", align="right",
+                      rect=[1220, 152, 0, 32]), stamina),
+            (self.one(home, type="value", bind=st + "rupees", group=True), [st + "rupees"]),
+            (self.one(home, type="value", bind=st + "max_battery", div=100),
+             [st + "max_battery"]),
+            (self.one(home, type="label", text="Rupees"), [st + "valid"]),
+            (self.one(home, type="label", text="Battery"), [st + "valid"]),
+            *((self.one(home, type="value", bind=f"totk.inv.tab{k}.count", align="right",
+                        rect=[8 + 78 * k + 70, 90, 0, 20]), ["totk.inv.valid"])
+              for k in range(8)),
+        ]
+        names = self.one(home, text_bind="totk.inv.tab")
+        self.assertEqual(names["text_map"], {str(k): n for k, n in enumerate([
+            "Weapons", "Bows and Arrows", "Shields", "Armor", "Materials", "Food",
+            "Zonai Devices", "Key Items"])})
+        cases.append((names, ["totk.inv.valid"]))
+        for page_id, domain in (("home", "gear"), ("abilities", "ability"), ("map", "map")):
+            ws = self.page(page_id)
+            source = self.one(ws, text_bind=f"totk.{domain}.source", rect=[8, 1052, 600, 24],
+                              text_map={"1": "From last save", "2": "Live"})
+            cases.append((source, [f"totk.{domain}.valid"]))
+            if page_id != "home":
+                later = self.one(ws, text="Coming in a later update")
+                cases.append((later, [f"totk.{domain}.valid"]))
+        for w, keys in cases:
+            snap = {"totk.ready": 1, **{k: 1 for k in keys}}
+            self.assertTrue(self.visible(w, snap), w)
+            for k in keys:
+                self.assertFalse(self.visible(w, {x: v for x, v in snap.items() if x != k}),
+                                 (w, k))
+                self.assertEqual(self.visible(w, {**snap, k: 0}), not k.endswith(".valid"),
+                                 (w, k))
+
+    def test_plate_and_anchors(self):
+        """The plate shows the weapon's own icon and fuse badge; every centre- or right-aligned
+        label and value is anchored at its column's centre (rect x, width 0)."""
+        home, w = self.page("home"), "totk.gear.weapon"
+        self.one(home, rect=[808, 420, 256, 256], src_bind=f"{w}.icon",
+                 need_bind=f"{w}.present")
+        self.one(home, rect=[1000, 420, 72, 72], src_bind=f"{w}.fuse_icon",
+                 need_bind=f"{w}.fuse")
+        anchors = {320, 620, 936, 1156, 1220} | {104 + 172 * k for k in range(7)} | \
+            {47 + 78 * k for k in range(8)} | {78 + 78 * k for k in range(8)}
+        for page_id, _, _ in gen_manifest.PAGES:
+            for wd in self.page(page_id):
+                if wd["type"] in ("label", "value") and wd.get("align") in ("center", "right"):
+                    self.assertEqual(wd["rect"][2], 0, (page_id, wd))
+                    self.assertIn(wd["rect"][0], anchors, (page_id, wd))
 
     def test_textures_over_fallbacks(self):
         """Every picture sits over a widget drawn before it that covers its rect, so a texture or

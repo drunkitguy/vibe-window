@@ -544,7 +544,7 @@
      "rect": [
       712,
       104,
-      340,
+      320,
       22
      ],
      "bg": "#FF0A0E0D",
@@ -585,7 +585,7 @@
      "rect": [
       712,
       158,
-      340,
+      320,
       22
      ],
      "bg": "#FF0A0E0D",
@@ -621,22 +621,11 @@
      "color": "#FF3E4A36"
     },
     {
-     "type": "rect",
-     "rect": [
-      652,
-      224,
-      40,
-      40
-     ],
-     "bg": "#00000000",
-     "color": "#FF3E4A36"
-    },
-    {
      "type": "label",
      "rect": [
-      704,
+      688,
       220,
-      120,
+      136,
       20
      ],
      "text": "Rupees",
@@ -647,9 +636,9 @@
     {
      "type": "value",
      "rect": [
-      704,
+      688,
       244,
-      120,
+      136,
       26
      ],
      "text_scale": 5,
@@ -670,22 +659,11 @@
      "color": "#FF3E4A36"
     },
     {
-     "type": "rect",
-     "rect": [
-      852,
-      224,
-      40,
-      40
-     ],
-     "bg": "#00000000",
-     "color": "#FF3E4A36"
-    },
-    {
      "type": "label",
      "rect": [
-      904,
+      888,
       220,
-      120,
+      136,
       20
      ],
      "text": "Battery",
@@ -696,9 +674,9 @@
     {
      "type": "value",
      "rect": [
-      904,
+      888,
       244,
-      120,
+      136,
       26
      ],
      "text_scale": 5,
@@ -722,10 +700,10 @@
     {
      "type": "rect",
      "rect": [
-      1052,
-      224,
-      40,
-      40
+      1050,
+      228,
+      32,
+      32
      ],
      "bg": "#00000000",
      "color": "#FF3E4A36"
@@ -733,10 +711,10 @@
     {
      "type": "image",
      "rect": [
-      1052,
-      224,
-      40,
-      40
+      1050,
+      228,
+      32,
+      32
      ],
      "src_bind": "totk.gear.arrow.icon",
      "need_bind": "totk.gear.arrow.present"
@@ -744,9 +722,9 @@
     {
      "type": "label",
      "rect": [
-      1104,
+      1088,
       246,
-      120,
+      136,
       20
      ],
      "text": "None",
@@ -757,9 +735,9 @@
     {
      "type": "label",
      "rect": [
-      1104,
+      1088,
       220,
-      120,
+      136,
       20
      ],
      "text": "Arrows",
@@ -770,9 +748,9 @@
     {
      "type": "value",
      "rect": [
-      1104,
+      1088,
       244,
-      120,
+      136,
       26
      ],
      "text_scale": 5,
@@ -854,6 +832,9 @@
      "text_scale": 4,
      "align": "center",
      "color": "#FFE9C46A",
+     "wrap_width": 256,
+     "max_lines": 1,
+     "fit_text": true,
      "need_bind": "totk.gear.weapon.present"
     },
     {
@@ -1180,6 +1161,7 @@
      ],
      "src": "romfs:/UI/Tex/Icon/Obj_UltraHand.bntx.zs",
      "tint": "#66FFFFFF",
+     "need_bind": "totk.ability.valid",
      "hide_bind": "totk.ability.ultrahand.owned",
      "hide_eq": 1
     },
@@ -1209,6 +1191,7 @@
      "text_scale": 4,
      "align": "center",
      "color": "#FF8F907F",
+     "need_bind": "totk.ability.valid",
      "hide_bind": "totk.ability.ultrahand.owned",
      "hide_eq": 1
     },
@@ -1245,6 +1228,7 @@
      ],
      "src": "romfs:/UI/Tex/Icon/Obj_OneTouchBond.bntx.zs",
      "tint": "#66FFFFFF",
+     "need_bind": "totk.ability.valid",
      "hide_bind": "totk.ability.fuse.owned",
      "hide_eq": 1
     },
@@ -1274,6 +1258,7 @@
      "text_scale": 4,
      "align": "center",
      "color": "#FF8F907F",
+     "need_bind": "totk.ability.valid",
      "hide_bind": "totk.ability.fuse.owned",
      "hide_eq": 1
     },
@@ -1310,6 +1295,7 @@
      ],
      "src": "romfs:/UI/Tex/Icon/Obj_Tooreroof.bntx.zs",
      "tint": "#66FFFFFF",
+     "need_bind": "totk.ability.valid",
      "hide_bind": "totk.ability.ascend.owned",
      "hide_eq": 1
     },
@@ -1339,6 +1325,7 @@
      "text_scale": 4,
      "align": "center",
      "color": "#FF8F907F",
+     "need_bind": "totk.ability.valid",
      "hide_bind": "totk.ability.ascend.owned",
      "hide_eq": 1
     },
@@ -1375,6 +1362,7 @@
      ],
      "src": "romfs:/UI/Tex/Icon/Obj_ReverseRecorder.bntx.zs",
      "tint": "#66FFFFFF",
+     "need_bind": "totk.ability.valid",
      "hide_bind": "totk.ability.recall.owned",
      "hide_eq": 1
     },
@@ -1404,6 +1392,7 @@
      "text_scale": 4,
      "align": "center",
      "color": "#FF8F907F",
+     "need_bind": "totk.ability.valid",
      "hide_bind": "totk.ability.recall.owned",
      "hide_eq": 1
     },
@@ -1440,6 +1429,7 @@
      ],
      "src": "romfs:/UI/Tex/Icon/Obj_AutoBuilder.bntx.zs",
      "tint": "#66FFFFFF",
+     "need_bind": "totk.ability.valid",
      "hide_bind": "totk.ability.autobuild.owned",
      "hide_eq": 1
     },
@@ -1469,6 +1459,7 @@
      "text_scale": 4,
      "align": "center",
      "color": "#FF8F907F",
+     "need_bind": "totk.ability.valid",
      "hide_bind": "totk.ability.autobuild.owned",
      "hide_eq": 1
     },
@@ -1505,6 +1496,7 @@
      ],
      "src": "romfs:/UI/Tex/Icon/Obj_Camera.bntx.zs",
      "tint": "#66FFFFFF",
+     "need_bind": "totk.ability.valid",
      "hide_bind": "totk.ability.camera.owned",
      "hide_eq": 1
     },
@@ -1534,6 +1526,7 @@
      "text_scale": 4,
      "align": "center",
      "color": "#FF8F907F",
+     "need_bind": "totk.ability.valid",
      "hide_bind": "totk.ability.camera.owned",
      "hide_eq": 1
     },
@@ -1570,6 +1563,7 @@
      ],
      "src": "romfs:/UI/Tex/Icon/Obj_Warp.bntx.zs",
      "tint": "#66FFFFFF",
+     "need_bind": "totk.ability.valid",
      "hide_bind": "totk.ability.travel.owned",
      "hide_eq": 1
     },
@@ -1599,6 +1593,7 @@
      "text_scale": 4,
      "align": "center",
      "color": "#FF8F907F",
+     "need_bind": "totk.ability.valid",
      "hide_bind": "totk.ability.travel.owned",
      "hide_eq": 1
     },
@@ -1764,7 +1759,7 @@
       220
      ],
      "bind_text": "module_error_message",
-     "text_scale": 3,
+     "text_scale": 4,
      "color": "#FF8F907F",
      "wrap_width": 1040,
      "max_lines": 4,
@@ -1977,7 +1972,7 @@
       220
      ],
      "bind_text": "module_error_message",
-     "text_scale": 3,
+     "text_scale": 4,
      "color": "#FF8F907F",
      "wrap_width": 1040,
      "max_lines": 4,
@@ -2190,7 +2185,7 @@
       220
      ],
      "bind_text": "module_error_message",
-     "text_scale": 3,
+     "text_scale": 4,
      "color": "#FF8F907F",
      "wrap_width": 1040,
      "max_lines": 4,
