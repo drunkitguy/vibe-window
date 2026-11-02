@@ -76,9 +76,9 @@ class CheckManifestTest(unittest.TestCase):
                     "totk.inv.{i}.icon", "totk.inv.12.icon", "totk.inv.tab7.count"):
             self.assertTrue(listed(key), key)
         for key in ("totk.gear.head.present", "totk.inv.01.icon", "totk.inv.tab8.count",
-                    "totk.gear.swap", "totk.inv.sel.caption"):
+                    "totk.gear.swap", "totk.inv.sel.colour"):
             self.assertFalse(listed(key), key)
-        self.assertTrue(listed("totk.names.valid"))
+        self.assertTrue(listed("totk.names.valid") and listed("totk.inv.sel.caption"))
 
     def test_unknown_object_key(self):
         self.fails(lambda m: self.home(m)[0].update(bogus_key=1), "key 'bogus_key'")
@@ -124,8 +124,8 @@ class CheckManifestTest(unittest.TestCase):
     def test_bind_not_in_keys_header(self):
         self.fails(lambda m: self.home(m)[0].update(need_bind="totk.gear.helmet.present"),
                    "'totk.gear.helmet.present'")
-        self.fails(lambda m: self.home(m)[0].update(need_bind="!totk.inv.sel.caption"),
-                   "'totk.inv.sel.caption'")
+        self.fails(lambda m: self.home(m)[0].update(need_bind="!totk.inv.sel.colour"),
+                   "'totk.inv.sel.colour'")
         self.fails(lambda m: m["derived"].append({"name": "x", "expr": "totk.bogus * 2"}),
                    "'totk.bogus'")
 
@@ -253,7 +253,28 @@ class GenManifestTest(unittest.TestCase):
             hv = self.value(w["hide_bind"], snap) or 0
             if "hide_eq" in w and hv == w["hide_eq"]:
                 return False
+            if hv < w.get("keep_min", hv) or hv > w.get("keep_max", hv):
+                return False
         return True
+
+    def element(self, w, i):
+        """Repeat template `w` as element i: "{i}" replaced in its strings, keep bounds "{i}" -> i
+        (the runtime's ExpandWidgets)."""
+        e = {k: v.replace("{i}", str(i)) if isinstance(v, str) else v for k, v in w.items()}
+        for k in ("keep_min", "keep_max"):
+            if w.get(k) == "{i}":
+                e[k] = i
+        return e
+
+    def named(self, roles):
+        """The manifest with every TEX role in `roles` named romfs:/T8A/<role> (as after T8a)."""
+        saved = dict(gen_manifest.TEX)
+        try:
+            gen_manifest.TEX.update({r: {"src": f"romfs:/T8A/{r}"} for r in roles})
+            return gen_manifest.manifest()
+        finally:
+            gen_manifest.TEX.clear()
+            gen_manifest.TEX.update(saved)
 
     def test_committed_files_are_generated(self):
         for name, data in gen_manifest.outputs().items():
@@ -280,7 +301,8 @@ class GenManifestTest(unittest.TestCase):
                 self.assertEqual(self.action(tab["on_tap"]), self.page_action(j), (page_id, j))
                 self.assertEqual(tab["color"], gen_manifest.TEXT if j == k else gen_manifest.DIM)
                 self.assertEqual(tab["text_scale"], 6)  # R5: tab labels at scale 6
-            rings = [w for w in widgets if w.get("pill") and w.get("color") == gen_manifest.SELECT]
+            rings = [w for w in widgets if w.get("pill") and w.get("color") == gen_manifest.SELECT
+                     and w["rect"][1] == 8]
             self.assertEqual([r["rect"][0] for r in rings], [gen_manifest.TAB_X[k]], page_id)
             left, right = {0: (2, 1), 1: (0, 2), 2: (1, 0)}[k]
             for glyph, target in (("", left), ("", right)):
@@ -300,7 +322,8 @@ class GenManifestTest(unittest.TestCase):
     def test_card_hold_sends_its_slot(self):
         """Holding the weapon, bow or shield card or the arrows chip sends totk.gear.swap with
         that slot (0-3)."""
-        holds = {tuple(w["rect"]): w["on_hold"] for w in self.page("home") if "on_hold" in w}
+        holds = {tuple(w["rect"]): w["on_hold"] for w in self.page("home")
+                 if w.get("on_hold", "").startswith("gear_swap_")}
         expect = {(1100, 324, 112, 112): 0, (1100, 494, 112, 112): 1, (1100, 664, 112, 112): 2,
                   (1040, 212, 192, 64): 3}
         self.assertEqual(set(holds), set(expect))
@@ -309,16 +332,178 @@ class GenManifestTest(unittest.TestCase):
                 "kind": "module", "action": "totk.gear.swap", "argument": k}, k)
 
     def test_category_tabs(self):
-        """Category tab k sends totk.inv.tab k; its underline shows only while totk.inv.tab == k."""
+        """Category tab k sends totk.inv.tab k; its underline shows only while totk.inv.tab == k;
+        its label is text there and dim elsewhere; with TEX.cat_<k> named (T8a), its icon is drawn
+        at full tint on the current tab and B3FFFFFF on the others, one variant at a time."""
         tabs = [w for w in self.page("home") if w.get("on_tap", "").startswith("inv_tab_")]
         self.assertEqual([w["rect"][0] for w in tabs], [8 + 78 * k for k in range(8)])
+        named = next(p for p in self.named([f"cat_{k}" for k in range(8)])["pages"]
+                     if p["id"] == "home")["widgets"]
+        shorts = [s for s, _ in gen_manifest.CATEGORIES]
+        self.assertEqual(shorts, ["WPN", "BOW", "SHD", "ARM", "MAT", "FOOD", "ZON", "KEY"])
         for k, tab in enumerate(tabs):
             self.assertEqual(self.action(tab["on_tap"]), {
                 "kind": "module", "action": "totk.inv.tab", "argument": k})
             line = next(w for w in self.page("home") if w["rect"] == [8 + 78 * k + 8, 152, 62, 4])
+            labels = [w for w in self.page("home") if w.get("text") == shorts[k] and
+                      w["rect"] == [8 + 78 * k + 39, 126, 0, 20]]
+            icons = [w for w in named if w.get("src") == f"romfs:/T8A/cat_{k}"]
+            self.assertEqual(len(labels), 2, k)
+            self.assertEqual(len(icons), 2, k)
+            for icon in icons:
+                self.assertEqual(icon["rect"], [8 + 78 * k + 11, 92, 56, 56])
             for current in range(8):
                 snap = {"totk.ready": 1, "totk.inv.tab": current}
                 self.assertEqual(self.visible(line, snap), current == k, (k, current))
+                self.assertEqual([w["color"] for w in labels if self.visible(w, snap)],
+                                 [gen_manifest.TEXT if current == k else gen_manifest.DIM])
+                self.assertEqual([w.get("tint") for w in icons if self.visible(w, snap)],
+                                 [None if current == k else "#B3FFFFFF"], (k, current))
+
+    GRID_KEYS = {"repeat": 400, "repeat_bind": "totk.inv.count", "repeat_cols": 5,
+                 "repeat_dx": 124, "repeat_row_dy": 124, "scroll": "inv_grid"}
+
+    def grid(self):
+        return [w for w in self.page("home") if "scroll" in w]
+
+    def test_grid_region_and_templates(self):
+        """One scroll region inv_grid over the grid frame (5 columns, 124 px rows, the item count,
+        offset reset on a tab change); every grid template repeats 400 times along it."""
+        home = next(p for p in self.m["pages"] if p["id"] == "home")
+        self.assertEqual(home["scrolls"], [{
+            "id": "inv_grid", "rect": [8, 194, 624, 520], "count_bind": "totk.inv.count",
+            "row_h": 124, "cols": 5, "reset_bind": "totk.inv.tab", "bar": gen_manifest.DIM,
+            "bar_w": 4}])
+        self.assertTrue(all(p.get("scrolls") is None for p in self.m["pages"] if p is not home))
+        grid = self.grid()
+        self.assertEqual(len(grid), 10)
+        for w in grid:
+            self.assertEqual({k: w[k] for k in self.GRID_KEYS}, self.GRID_KEYS, w)
+        self.one(grid, type="image", rect=[16, 202, 108, 108], src_bind="totk.inv.{i}.icon",
+                 draggable=None)
+        self.one(grid, type="image", rect=[16, 202, 40, 40], src_bind="totk.inv.{i}.fuse_icon")
+
+    def grid_role(self, w):
+        if w.get("on_tap"):
+            return "tap"
+        if w.get("draggable"):
+            return "drag"
+        if w["type"] == "image":
+            return "fuse" if w["src_bind"].endswith(".fuse_icon") else "icon"
+        if w["type"] == "value":
+            return "count" if w.get("text") == "x" else "durability"
+        if w.get("bg") == gen_manifest.SHADE:
+            return "shade"
+        if w["rect"] == [107, 205, 14, 14]:
+            return "mark"
+        if w.get("frame") == 4 and w.get("color") == gen_manifest.SELECT:
+            return "cursor"
+        return "slot" if w.get("bg") == gen_manifest.PANEL else f"unknown {w}"
+
+    def test_grid_cell_states(self):
+        """Element i's visible cell parts per state: the value shade and number only for kind 1
+        (durability) or 2 ("x" count), never for kind 0 or an absent kind (a value of 0 still
+        shows); the equipped mark only at .equipped 1; the cursor and the drag handle only on the
+        selected element (totk.inv.sel == i)."""
+        i, base = 3, ["slot", "icon", "fuse", "tap"]
+        for state, snap, expect in (
+                ("durability, equipped, selected",
+                 {"kind": 1, "value": 42, "equipped": 1, "sel": 3},
+                 base + ["drag", "shade", "durability", "mark", "cursor"]),
+                ("count 0, not equipped, other selected",
+                 {"kind": 2, "value": 0, "equipped": 0, "sel": 2}, base + ["shade", "count"]),
+                ("armor: kind 0", {"kind": 0, "sel": 4}, base),
+                ("nothing published but the selection", {"sel": 0}, base),
+                ("selected, kind 3 (unknown)", {"kind": 3, "value": 5, "sel": 3},
+                 base + ["drag", "cursor"])):
+            full = {"totk.ready": 1, "totk.inv.valid": 1, "totk.inv.count": 5}
+            for k, v in snap.items():
+                full["totk.inv.sel" if k == "sel" else f"totk.inv.{i}.{k}"] = v
+            shown = sorted(self.grid_role(w) for w in self.grid()
+                           if self.visible(self.element(w, i), full))
+            self.assertEqual(shown, sorted(expect), state)
+        for w in self.grid():
+            if w["type"] == "value":
+                self.assertEqual((w["bind"], w["align"], w["rect"]),
+                                 ("totk.inv.{i}.value", "right", [122, 288, 0, 20]))
+            if self.grid_role(w) == "mark":
+                self.assertEqual(w["need_bind"], "totk.inv.{i}.equipped")
+
+    def test_inventory_gestures(self):
+        """Tap a cell: totk.inv.select with the cell's index; hold a cell or the detail icon:
+        totk.inv.use (refused). Only the selected cell drags (the rest scroll and swipe), its hold
+        is drawn above it (runtime 16 arms a hold over a drag only then), and the detail pane takes
+        the drop as totk.inv.use. Swiping the grid left: the next category."""
+        grid, home = self.grid(), self.page("home")
+        tap = self.one(grid, on_tap="inv_select")
+        self.assertEqual((tap["payload"], tap["on_hold"], tap["rect"]),
+                         ("{i}", "inv_use", [12, 198, 116, 116]))
+        self.assertEqual(self.action("inv_select"), {"kind": "module", "action": "totk.inv.select",
+                                                     "argument": "$payload"})
+        use = {"kind": "module", "action": "totk.inv.use", "argument": 0}
+        self.assertEqual(self.action("inv_use"), use)
+        drags = [w for w in self.m["pages"][0]["widgets"] if w.get("draggable")]
+        self.assertEqual(len(drags), 1)
+        drag = drags[0]
+        self.assertEqual((drag["payload"], drag["select_group"], drag["src_bind"]),
+                         ("{i}", "inv", "totk.inv.{i}.icon"))
+        for sel in (2, 3, 4):
+            snap = {"totk.ready": 1, "totk.inv.sel": sel}
+            self.assertEqual(self.visible(self.element(drag, 3), snap), sel == 3)
+        self.assertGreater(home.index(tap), home.index(drag))
+        drop = self.one(home, drop_action="inv_use")
+        self.assertEqual((drop["rect"], drop["accept_group"], drop["highlight_color"]),
+                         ([8, 722, 624, 206], "inv", gen_manifest.SELECT))
+        self.assertEqual(home.index(drop), max(i for i, w in enumerate(home)
+                                               if 722 <= w["rect"][1] < 928 and
+                                               w["rect"][0] < 632))
+        holds = [w for w in home if w.get("on_hold") == "inv_use"]
+        self.assertEqual(sorted(w["rect"] for w in holds),
+                         [[12, 198, 116, 116], [20, 736, 128, 128]])
+        frame = self.one(home, rect=[8, 194, 624, 520], type="rect")
+        self.assertEqual(self.action(frame["on_swipe_left"]), {
+            "kind": "module", "action": "totk.inv.tab_next", "argument": 0})
+
+    def test_detail_pane(self):
+        """The selected item's parts per state: icon slot and every text only while a selection is
+        published (.kind; an absent text would draw "-"); Equipped badge only at .equipped 1;
+        "Durability n" for kind 1, "x n" for kind 2 (0 shows), nothing for kind 0 or absent; food's
+        hearts only while published. Texts bind their exact keys."""
+        sel, home = "totk.inv.sel", self.page("home")
+        pane = [w for w in home if 722 <= w["rect"][1] < 928 and w["rect"][0] < 632 and
+                w["rect"] != [8, 722, 624, 206]]
+        roles = {
+            "slot": self.one(pane, type="rect", rect=[20, 736, 128, 128]),
+            "icon": self.one(pane, type="image", src_bind=f"{sel}.icon", rect=[20, 736, 128, 128]),
+            "name": self.one(pane, bind_text=f"{sel}.name", rect=[164, 738, 340, 34],
+                             text_scale=6, max_lines=1, fit_text=True),
+            "ring": self.one(pane, type="button", rect=[512, 738, 108, 32], pill=True),
+            "badge": self.one(pane, text="Equipped", align="center", rect=[566, 744, 0, 20]),
+            "durability": self.one(pane, type="value", bind=f"{sel}.value", text="Durability ",
+                                   rect=[164, 778, 280, 26], text_scale=5),
+            "count": self.one(pane, type="value", bind=f"{sel}.value", text="x",
+                              rect=[164, 778, 280, 26], text_scale=5),
+            "hearts": self.one(pane, type="value", bind=f"{sel}.hearts", align="right"),
+            "fuse": self.one(pane, bind_text=f"{sel}.fuse_name", rect=[164, 808, 220, 24]),
+            "effect": self.one(pane, bind_text=f"{sel}.effect", rect=[620, 808, 0, 24],
+                               align="right"),
+            "caption": self.one(pane, bind_text=f"{sel}.caption", rect=[164, 836, 456, 84],
+                                text_scale=4, wrap_width=456, max_lines=3),
+        }
+        self.assertEqual(len(pane), len(roles))
+        texts = ["name", "fuse", "effect", "caption"]
+        item = ["slot", "icon"] + texts
+        for state, snap, expect in (
+                ("nothing selected", {}, []),
+                ("weapon, equipped", {"kind": 1, "value": 42, "equipped": 1},
+                 item + ["ring", "badge", "durability"]),
+                ("food: count 0, hearts 0", {"kind": 2, "value": 0, "equipped": 0, "hearts": 0},
+                 item + ["count", "hearts"]),
+                ("armor", {"kind": 0}, item)):
+            full = {"totk.ready": 1, "totk.inv.valid": 1,
+                    **{f"{sel}.{k}": v for k, v in snap.items()}}
+            shown = sorted(r for r, w in roles.items() if self.visible(w, full))
+            self.assertEqual(shown, sorted(expect), state)
 
     def test_ability_bar(self):
         """Ability k taps totk.ability.select k; its icon and name show owned or locked."""
@@ -405,7 +590,7 @@ class GenManifestTest(unittest.TestCase):
                  need_bind=f"{w}.present")
         self.one(home, rect=[1000, 420, 72, 72], src_bind=f"{w}.fuse_icon",
                  need_bind=f"{w}.fuse")
-        anchors = {320, 620, 936, 1156, 1220} | {104 + 172 * k for k in range(7)} | \
+        anchors = {122, 320, 566, 620, 936, 1156, 1220} | {104 + 172 * k for k in range(7)} | \
             {47 + 78 * k for k in range(8)} | {78 + 78 * k for k in range(8)}
         for page_id, _, _ in gen_manifest.PAGES:
             for wd in self.page(page_id):
@@ -462,6 +647,15 @@ class GenManifestTest(unittest.TestCase):
             snap = {"totk.ready": 1} if count is None else {"totk.ready": 1,
                                                             "totk.inv.count": count}
             self.assertEqual(self.visible(nothing, snap), shown, count)
+
+    def test_bound_texts_gated(self):
+        """Every label bound to a totk.* text has a need_bind: the runtime draws an absent text as
+        "-", so a line shows only with its item (whose optional texts the module publishes, empty
+        when there is nothing)."""
+        for page_id, _, _ in gen_manifest.PAGES:
+            for w in self.page(page_id):
+                if w.get("bind_text", "").startswith("totk."):
+                    self.assertTrue(w.get("need_bind"), (page_id, w))
 
     def test_notice(self):
         """The notice covers every page while totk.ready is absent or 0, and goes at 1."""

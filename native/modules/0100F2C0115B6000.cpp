@@ -123,14 +123,16 @@ struct Names {
 constexpr int kNameTries = 30;
 
 // Ids become names where PouchContent.msbt has an <id>_Name label; otherwise the id stays.
+// Captions come from <id>_Caption [S28 §4] (the detail pane's text).
 void ApplyNames(totk::Snapshot& s, const totk::msbt::Labels& labels) {
-    const auto name = [&](const std::string& id) {
-        const auto it = id.empty() ? labels.end() : labels.find(id + "_Name");
+    const auto text = [&](const std::string& id, const char* suffix) {
+        const auto it = id.empty() ? labels.end() : labels.find(id + suffix);
         return it == labels.end() ? std::string{} : it->second;
     };
     const auto apply = [&](totk::Item& it) {
-        it.name = name(it.id);
-        it.fuse_name = name(it.fuse_id);
+        it.name = text(it.id, "_Name");
+        it.fuse_name = text(it.fuse_id, "_Name");
+        it.caption = text(it.id, "_Caption");
     };
     for (auto& gear : s.gear)
         if (gear)
@@ -332,6 +334,13 @@ struct Out {
     void T(const std::string& k, const std::string& v) const {
         T(k.c_str(), v.c_str());
     }
+    // Published even when empty: the runtime draws an absent bind_text as "-" [S1
+    // mod_ui_expand.cpp:368-371], so optional text lines (the detail pane's fuse, effect and
+    // caption, a present gear item's effect) are "" when there is nothing.
+    void Line(const char* k, const char* v) const {
+        if (h.publish_text)
+            h.publish_text(h.userdata, k, v ? v : "");
+    }
     void F(const char* k, double v) const {
         if (h.publish_f64)
             h.publish_f64(h.userdata, k, v);
@@ -396,7 +405,8 @@ void PublishGear(const Out& o, const Keys& k, const totk::Snapshot& s) {
                 o.T(key[pub::kFuseIcon], item->fuse_icon);
             }
         }
-        o.T(key[pub::kEffect].c_str(), item->effect);
+        if (i != 3) // the effect line of the weapon, bow and shield: "" for none, never absent
+            o.Line(key[pub::kEffect].c_str(), item->effect);
     }
 }
 
@@ -434,9 +444,10 @@ void PublishInventory(const Out& o, const Instance& in, const totk::Snapshot& s)
         o.I(pub::kInvSelValue, it.value);
     if (it.equipped)
         o.I(pub::kInvSelEquipped, *it.equipped ? 1 : 0);
-    if (!it.fuse_id.empty())
-        o.T(pub::kInvSelFuseName, Shown(it.fuse_name, it.fuse_id).c_str());
-    o.T(pub::kInvSelEffect, it.effect);
+    o.Line(pub::kInvSelFuseName,
+           it.fuse_id.empty() ? nullptr : Shown(it.fuse_name, it.fuse_id).c_str());
+    o.Line(pub::kInvSelEffect, it.effect);
+    o.Line(pub::kInvSelCaption, it.caption.c_str());
     if (it.hearts)
         o.I(pub::kInvSelHearts, *it.hearts);
 }

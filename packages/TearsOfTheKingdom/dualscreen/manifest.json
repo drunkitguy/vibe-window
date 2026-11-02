@@ -45,7 +45,22 @@
      "text": "WPN",
      "text_scale": 4,
      "align": "center",
-     "color": "#FFECE5C8"
+     "color": "#FFECE5C8",
+     "need_bind": "ui.inv.tab0"
+    },
+    {
+     "type": "label",
+     "rect": [
+      47,
+      126,
+      0,
+      20
+     ],
+     "text": "WPN",
+     "text_scale": 4,
+     "align": "center",
+     "color": "#FF8F907F",
+     "need_bind": "!ui.inv.tab0"
     },
     {
      "type": "value",
@@ -98,7 +113,22 @@
      "text": "BOW",
      "text_scale": 4,
      "align": "center",
-     "color": "#FFECE5C8"
+     "color": "#FFECE5C8",
+     "need_bind": "ui.inv.tab1"
+    },
+    {
+     "type": "label",
+     "rect": [
+      125,
+      126,
+      0,
+      20
+     ],
+     "text": "BOW",
+     "text_scale": 4,
+     "align": "center",
+     "color": "#FF8F907F",
+     "need_bind": "!ui.inv.tab1"
     },
     {
      "type": "value",
@@ -151,7 +181,22 @@
      "text": "SHD",
      "text_scale": 4,
      "align": "center",
-     "color": "#FFECE5C8"
+     "color": "#FFECE5C8",
+     "need_bind": "ui.inv.tab2"
+    },
+    {
+     "type": "label",
+     "rect": [
+      203,
+      126,
+      0,
+      20
+     ],
+     "text": "SHD",
+     "text_scale": 4,
+     "align": "center",
+     "color": "#FF8F907F",
+     "need_bind": "!ui.inv.tab2"
     },
     {
      "type": "value",
@@ -204,7 +249,22 @@
      "text": "ARM",
      "text_scale": 4,
      "align": "center",
-     "color": "#FFECE5C8"
+     "color": "#FFECE5C8",
+     "need_bind": "ui.inv.tab3"
+    },
+    {
+     "type": "label",
+     "rect": [
+      281,
+      126,
+      0,
+      20
+     ],
+     "text": "ARM",
+     "text_scale": 4,
+     "align": "center",
+     "color": "#FF8F907F",
+     "need_bind": "!ui.inv.tab3"
     },
     {
      "type": "value",
@@ -257,7 +317,22 @@
      "text": "MAT",
      "text_scale": 4,
      "align": "center",
-     "color": "#FFECE5C8"
+     "color": "#FFECE5C8",
+     "need_bind": "ui.inv.tab4"
+    },
+    {
+     "type": "label",
+     "rect": [
+      359,
+      126,
+      0,
+      20
+     ],
+     "text": "MAT",
+     "text_scale": 4,
+     "align": "center",
+     "color": "#FF8F907F",
+     "need_bind": "!ui.inv.tab4"
     },
     {
      "type": "value",
@@ -310,7 +385,22 @@
      "text": "FOOD",
      "text_scale": 4,
      "align": "center",
-     "color": "#FFECE5C8"
+     "color": "#FFECE5C8",
+     "need_bind": "ui.inv.tab5"
+    },
+    {
+     "type": "label",
+     "rect": [
+      437,
+      126,
+      0,
+      20
+     ],
+     "text": "FOOD",
+     "text_scale": 4,
+     "align": "center",
+     "color": "#FF8F907F",
+     "need_bind": "!ui.inv.tab5"
     },
     {
      "type": "value",
@@ -363,7 +453,22 @@
      "text": "ZON",
      "text_scale": 4,
      "align": "center",
-     "color": "#FFECE5C8"
+     "color": "#FFECE5C8",
+     "need_bind": "ui.inv.tab6"
+    },
+    {
+     "type": "label",
+     "rect": [
+      515,
+      126,
+      0,
+      20
+     ],
+     "text": "ZON",
+     "text_scale": 4,
+     "align": "center",
+     "color": "#FF8F907F",
+     "need_bind": "!ui.inv.tab6"
     },
     {
      "type": "value",
@@ -416,7 +521,22 @@
      "text": "KEY",
      "text_scale": 4,
      "align": "center",
-     "color": "#FFECE5C8"
+     "color": "#FFECE5C8",
+     "need_bind": "ui.inv.tab7"
+    },
+    {
+     "type": "label",
+     "rect": [
+      593,
+      126,
+      0,
+      20
+     ],
+     "text": "KEY",
+     "text_scale": 4,
+     "align": "center",
+     "color": "#FF8F907F",
+     "need_bind": "!ui.inv.tab7"
     },
     {
      "type": "value",
@@ -476,7 +596,203 @@
       520
      ],
      "bg": "#E6121815",
-     "color": "#FF3E4A36"
+     "color": "#FF3E4A36",
+     "on_swipe_left": "inv_tab_next"
+    },
+    {
+     "type": "rect",
+     "rect": [
+      12,
+      198,
+      116,
+      116
+     ],
+     "bg": "#E6121815",
+     "color": "#FF3E4A36",
+     "repeat": 400,
+     "repeat_bind": "totk.inv.count",
+     "repeat_cols": 5,
+     "repeat_dx": 124,
+     "repeat_row_dy": 124,
+     "scroll": "inv_grid"
+    },
+    {
+     "type": "image",
+     "rect": [
+      16,
+      202,
+      108,
+      108
+     ],
+     "src_bind": "totk.inv.{i}.icon",
+     "repeat": 400,
+     "repeat_bind": "totk.inv.count",
+     "repeat_cols": 5,
+     "repeat_dx": 124,
+     "repeat_row_dy": 124,
+     "scroll": "inv_grid"
+    },
+    {
+     "type": "image",
+     "rect": [
+      16,
+      202,
+      108,
+      108
+     ],
+     "src_bind": "totk.inv.{i}.icon",
+     "draggable": true,
+     "payload": "{i}",
+     "select_group": "inv",
+     "hide_bind": "totk.inv.sel",
+     "keep_min": "{i}",
+     "keep_max": "{i}",
+     "repeat": 400,
+     "repeat_bind": "totk.inv.count",
+     "repeat_cols": 5,
+     "repeat_dx": 124,
+     "repeat_row_dy": 124,
+     "scroll": "inv_grid"
+    },
+    {
+     "type": "image",
+     "rect": [
+      16,
+      202,
+      40,
+      40
+     ],
+     "src_bind": "totk.inv.{i}.fuse_icon",
+     "repeat": 400,
+     "repeat_bind": "totk.inv.count",
+     "repeat_cols": 5,
+     "repeat_dx": 124,
+     "repeat_row_dy": 124,
+     "scroll": "inv_grid"
+    },
+    {
+     "type": "rect",
+     "rect": [
+      68,
+      286,
+      56,
+      24
+     ],
+     "bg": "#A0000000",
+     "color": "#00000000",
+     "keep_min": 1,
+     "keep_max": 2,
+     "hide_bind": "totk.inv.{i}.kind",
+     "repeat": 400,
+     "repeat_bind": "totk.inv.count",
+     "repeat_cols": 5,
+     "repeat_dx": 124,
+     "repeat_row_dy": 124,
+     "scroll": "inv_grid"
+    },
+    {
+     "type": "value",
+     "rect": [
+      122,
+      288,
+      0,
+      20
+     ],
+     "bind": "totk.inv.{i}.value",
+     "text_scale": 4,
+     "align": "right",
+     "color": "#FFE9C46A",
+     "hide_bind": "totk.inv.{i}.kind",
+     "keep_min": 1,
+     "keep_max": 1,
+     "repeat": 400,
+     "repeat_bind": "totk.inv.count",
+     "repeat_cols": 5,
+     "repeat_dx": 124,
+     "repeat_row_dy": 124,
+     "scroll": "inv_grid"
+    },
+    {
+     "type": "value",
+     "rect": [
+      122,
+      288,
+      0,
+      20
+     ],
+     "bind": "totk.inv.{i}.value",
+     "text": "x",
+     "text_scale": 4,
+     "align": "right",
+     "color": "#FFE9C46A",
+     "hide_bind": "totk.inv.{i}.kind",
+     "keep_min": 2,
+     "keep_max": 2,
+     "repeat": 400,
+     "repeat_bind": "totk.inv.count",
+     "repeat_cols": 5,
+     "repeat_dx": 124,
+     "repeat_row_dy": 124,
+     "scroll": "inv_grid"
+    },
+    {
+     "type": "rect",
+     "rect": [
+      107,
+      205,
+      14,
+      14
+     ],
+     "bg": "#FF6FF0C0",
+     "color": "#00000000",
+     "need_bind": "totk.inv.{i}.equipped",
+     "repeat": 400,
+     "repeat_bind": "totk.inv.count",
+     "repeat_cols": 5,
+     "repeat_dx": 124,
+     "repeat_row_dy": 124,
+     "scroll": "inv_grid"
+    },
+    {
+     "type": "rect",
+     "rect": [
+      12,
+      198,
+      116,
+      116
+     ],
+     "bg": "#00000000",
+     "color": "#FF6FF0C0",
+     "frame": 4,
+     "hide_bind": "totk.inv.sel",
+     "keep_min": "{i}",
+     "keep_max": "{i}",
+     "repeat": 400,
+     "repeat_bind": "totk.inv.count",
+     "repeat_cols": 5,
+     "repeat_dx": 124,
+     "repeat_row_dy": 124,
+     "scroll": "inv_grid"
+    },
+    {
+     "type": "rect",
+     "rect": [
+      12,
+      198,
+      116,
+      116
+     ],
+     "bg": "#00000000",
+     "color": "#00000000",
+     "on_tap": "inv_select",
+     "on_hold": "inv_use",
+     "payload": "{i}",
+     "repeat": 400,
+     "repeat_bind": "totk.inv.count",
+     "repeat_cols": 5,
+     "repeat_dx": 124,
+     "repeat_row_dy": 124,
+     "scroll": "inv_grid"
     },
     {
      "type": "label",
@@ -516,6 +832,185 @@
      ],
      "bg": "#E6121815",
      "color": "#FF3E4A36"
+    },
+    {
+     "type": "rect",
+     "rect": [
+      20,
+      736,
+      128,
+      128
+     ],
+     "bg": "#E6121815",
+     "color": "#FF3E4A36",
+     "on_hold": "inv_use",
+     "need_bind": "ui.has.inv.sel.kind"
+    },
+    {
+     "type": "image",
+     "rect": [
+      20,
+      736,
+      128,
+      128
+     ],
+     "src_bind": "totk.inv.sel.icon",
+     "need_bind": "ui.has.inv.sel.kind"
+    },
+    {
+     "type": "label",
+     "rect": [
+      164,
+      738,
+      340,
+      34
+     ],
+     "bind_text": "totk.inv.sel.name",
+     "text_scale": 6,
+     "color": "#FFECE5C8",
+     "wrap_width": 340,
+     "max_lines": 1,
+     "fit_text": true,
+     "need_bind": "ui.has.inv.sel.kind"
+    },
+    {
+     "type": "button",
+     "rect": [
+      512,
+      738,
+      108,
+      32
+     ],
+     "text": "",
+     "pill": true,
+     "border": 2,
+     "bg": "#00000000",
+     "color": "#FF6FF0C0",
+     "need_bind": "totk.inv.sel.equipped"
+    },
+    {
+     "type": "label",
+     "rect": [
+      566,
+      744,
+      0,
+      20
+     ],
+     "text": "Equipped",
+     "text_scale": 4,
+     "align": "center",
+     "color": "#FF6FF0C0",
+     "wrap_width": 100,
+     "max_lines": 1,
+     "fit_text": true,
+     "need_bind": "totk.inv.sel.equipped"
+    },
+    {
+     "type": "value",
+     "rect": [
+      164,
+      778,
+      280,
+      26
+     ],
+     "bind": "totk.inv.sel.value",
+     "text": "Durability ",
+     "text_scale": 5,
+     "color": "#FFE9C46A",
+     "hide_bind": "totk.inv.sel.kind",
+     "keep_min": 1,
+     "keep_max": 1
+    },
+    {
+     "type": "value",
+     "rect": [
+      164,
+      778,
+      280,
+      26
+     ],
+     "bind": "totk.inv.sel.value",
+     "text": "x",
+     "text_scale": 5,
+     "color": "#FFE9C46A",
+     "hide_bind": "totk.inv.sel.kind",
+     "keep_min": 2,
+     "keep_max": 2
+    },
+    {
+     "type": "value",
+     "rect": [
+      620,
+      780,
+      0,
+      24
+     ],
+     "bind": "totk.inv.sel.hearts",
+     "text": "Hearts ",
+     "text_scale": 4,
+     "align": "right",
+     "color": "#FFE9C46A",
+     "need_bind": "ui.has.inv.sel.hearts"
+    },
+    {
+     "type": "label",
+     "rect": [
+      164,
+      808,
+      220,
+      24
+     ],
+     "bind_text": "totk.inv.sel.fuse_name",
+     "text_scale": 4,
+     "color": "#FF8F907F",
+     "wrap_width": 220,
+     "max_lines": 1,
+     "fit_text": true,
+     "need_bind": "ui.has.inv.sel.kind"
+    },
+    {
+     "type": "label",
+     "rect": [
+      620,
+      808,
+      0,
+      24
+     ],
+     "bind_text": "totk.inv.sel.effect",
+     "text_scale": 4,
+     "align": "right",
+     "color": "#FF8F907F",
+     "need_bind": "ui.has.inv.sel.kind"
+    },
+    {
+     "type": "label",
+     "rect": [
+      164,
+      836,
+      456,
+      84
+     ],
+     "bind_text": "totk.inv.sel.caption",
+     "text_scale": 4,
+     "color": "#FFECE5C8",
+     "wrap_width": 456,
+     "max_lines": 3,
+     "need_bind": "ui.has.inv.sel.kind"
+    },
+    {
+     "type": "rect",
+     "rect": [
+      8,
+      722,
+      624,
+      206
+     ],
+     "bg": "#00000000",
+     "color": "#00000000",
+     "frame": 4,
+     "accept_group": "inv",
+     "drop_action": "inv_use",
+     "highlight_color": "#FF6FF0C0"
     },
     {
      "type": "rect",
@@ -1766,6 +2261,23 @@
      "hide_bind": "totk.ready",
      "hide_eq": 1
     }
+   ],
+   "scrolls": [
+    {
+     "id": "inv_grid",
+     "rect": [
+      8,
+      194,
+      624,
+      520
+     ],
+     "count_bind": "totk.inv.count",
+     "row_h": 124,
+     "cols": 5,
+     "reset_bind": "totk.inv.tab",
+     "bar": "#FF8F907F",
+     "bar_w": 4
+    }
    ]
   },
   {
@@ -2251,6 +2763,21 @@
    "action": "totk.inv.tab",
    "argument": 7
   },
+  "inv_select": {
+   "kind": "module",
+   "action": "totk.inv.select",
+   "argument": "$payload"
+  },
+  "inv_use": {
+   "kind": "module",
+   "action": "totk.inv.use",
+   "argument": 0
+  },
+  "inv_tab_next": {
+   "kind": "module",
+   "action": "totk.inv.tab_next",
+   "argument": 0
+  },
   "gear_swap_3": {
    "kind": "module",
    "action": "totk.gear.swap",
@@ -2309,6 +2836,12 @@
  },
  "derived": [
   {
+   "name": "ui.inv.empty",
+   "cmp": "eq",
+   "a": "totk.inv.count",
+   "b": 0
+  },
+  {
    "name": "ui.inv.tab0",
    "cmp": "eq",
    "a": "totk.inv.tab",
@@ -2357,10 +2890,12 @@
    "b": 7
   },
   {
-   "name": "ui.inv.empty",
-   "cmp": "eq",
-   "a": "totk.inv.count",
-   "b": 0
+   "name": "ui.has.inv.sel.kind",
+   "expr": "totk.inv.sel.kind * 0 + 1"
+  },
+  {
+   "name": "ui.has.inv.sel.hearts",
+   "expr": "totk.inv.sel.hearts * 0 + 1"
   },
   {
    "name": "ui.has.status.hearts",

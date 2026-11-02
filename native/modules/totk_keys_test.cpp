@@ -50,7 +50,8 @@ int main() {
     for (const char* a : pub::kAbilityNames)
         assert(pub::Listed(pub::Expand(pub::kAbilityOwned, a)));
     assert(pub::Listed("totk.inv.0.icon") && pub::Listed("totk.inv.399.fuse_icon"));
-    assert(pub::Listed("totk.names.valid") && pub::Listed("totk.inv.sel.equipped"));
+    assert(pub::Listed("totk.names.valid") && pub::Listed("totk.inv.sel.equipped") &&
+           pub::Listed("totk.inv.sel.caption"));
     assert(pub::Listed("totk.inv.tab0.count") && pub::Listed("totk.inv.tab7.count"));
     for (const char* bad :
          {"totk.gear.head.present", "totk.gear..present", "totk.gear.weapon.colour",

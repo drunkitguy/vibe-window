@@ -59,8 +59,8 @@ ABILITIES = [("ultrahand", "Ultrahand", "UltraHand"), ("fuse", "Fuse", "OneTouch
 # dump confirms it; None = the name is UNKNOWN (T8a): only the fallback is drawn, never a guessed
 # name. A set entry that does not load draws nothing, and the fallback under it still reads.
 TEX = {role: None for role in (
-    "header", "tab_on", "slot", "detail", "equip_panel", "plate", "bar_bg", "heart", "stamina",
-    "rupee", "battery")}
+    "header", "tab_on", "slot", "cursor", "detail", "badge", "equipped", "equip_panel", "plate",
+    "bar_bg", "heart", "stamina", "rupee", "battery", *(f"cat_{k}" for k in range(8)))}
 # R5's first candidate for the ability icons: the item icon of the save's Obj_<X> (UNVERIFIED).
 TEX.update({f"ability_{a}": {"src": f"romfs:/UI/Tex/Icon/Obj_{x}.bntx.zs"}
             for a, _, x in ABILITIES})
@@ -137,38 +137,142 @@ def notice():
     ]
 
 
-def inventory_side(derived, actions):
-    """Left side (x 0-632): category tabs, the grid's frame and empty states, the detail pane's
-    frame. T6 adds the grid cells and the detail pane's content."""
+SHADE = "#A0000000"  # under a cell's count, as BotW's badge backdrop
+TAB_OTHER = "#B3FFFFFF"  # tint of the category icons that are not the current tab [R5]
+# The grid [R5]: BotW's template pattern, one cell per element of the current tab.
+GRID = {"repeat": 400, "repeat_bind": "totk.inv.count", "repeat_cols": 5, "repeat_dx": 124,
+        "repeat_row_dy": 124, "scroll": "inv_grid"}
+GRID_REGION = {"id": "inv_grid", "rect": [8, 194, 624, 520], "count_bind": "totk.inv.count",
+               "row_h": 124, "cols": 5, "reset_bind": "totk.inv.tab", "bar": DIM, "bar_w": 4}
+
+
+def kind_is(key, kind, **extra):
+    """Shown only while the int `key` equals `kind` (absent reads 0: hidden for kinds 1 and 2)."""
+    return {"hide_bind": key, "keep_min": kind, "keep_max": kind, **extra}
+
+
+def category_tabs(derived, actions):
+    """Category tabs: icon (TEX.cat_<k>, full tint on the current tab, B3FFFFFF on the others)
+    over a short label (text / dim), the count and the current tab's underline."""
     widgets = []
     for k, (short, _) in enumerate(CATEGORIES):
         x = 8 + 78 * k
         current = f"ui.inv.tab{k}"
         derived.append({"name": current, "cmp": "eq", "a": "totk.inv.tab", "b": k})
         actions[f"inv_tab_{k}"] = {"kind": "module", "action": "totk.inv.tab", "argument": k}
+        widgets.append({"type": "button", "rect": [x, 84, 78, 72], "text": "", "border": 2,
+                        "bg": PANEL, "color": EDGE, "on_tap": f"inv_tab_{k}"})
+        for gate, colour, tint in ((current, TEXT, None), (f"!{current}", DIM, TAB_OTHER)):
+            label = {"type": "label", "rect": [x + 39, 126, 0, 20], "text": short,
+                     "text_scale": 4, "align": "center", "color": colour, "need_bind": gate}
+            widgets += textured(f"cat_{k}", [x + 11, 92, 56, 56], [label], need_bind=gate,
+                                **({"tint": tint} if tint else {}))
         widgets += [
-            {"type": "button", "rect": [x, 84, 78, 72], "text": "", "border": 2, "bg": PANEL,
-             "color": EDGE, "on_tap": f"inv_tab_{k}"},
-            {"type": "label", "rect": [x + 39, 126, 0, 20], "text": short, "text_scale": 4,
-             "align": "center", "color": TEXT},
             {"type": "value", "rect": [x + 70, 90, 0, 20], "bind": f"totk.inv.tab{k}.count",
              "text_scale": 4, "align": "right", "color": VALUE, "need_bind": "totk.inv.valid"},
             {"type": "rect", "rect": [x + 8, 152, 62, 4], "bg": SELECT, "color": CLEAR,
              "need_bind": current},
         ]
-    derived.append({"name": "ui.inv.empty", "cmp": "eq", "a": "totk.inv.count", "b": 0})
+    return widgets
+
+
+def grid(actions):
+    """The current tab's items, 5 per row in the inv_grid scroll region. Tap selects (the
+    module's totk.inv.sel, which the cursor follows), hold uses (refused); only the selected
+    cell drags (onto the detail pane: refused use), so the others scroll and swipe."""
+    actions["inv_select"] = {"kind": "module", "action": "totk.inv.select", "argument": "$payload"}
+    actions["inv_use"] = {"kind": "module", "action": "totk.inv.use", "argument": 0}
+    actions["inv_tab_next"] = {"kind": "module", "action": "totk.inv.tab_next", "argument": 0}
+    item, cell, icon = "totk.inv.{i}", [12, 198, 116, 116], [16, 202, 108, 108]
+    selected = {"hide_bind": "totk.inv.sel", "keep_min": "{i}", "keep_max": "{i}"}
+    widgets = panel([8, 194, 624, 520], on_swipe_left="inv_tab_next")
+    widgets += panel(cell, "slot", **GRID)
     widgets += [
+        {"type": "image", "rect": icon, "src_bind": f"{item}.icon", **GRID},
+        {"type": "image", "rect": icon, "src_bind": f"{item}.icon", "draggable": True,
+         "payload": "{i}", "select_group": "inv", **selected, **GRID},
+        {"type": "image", "rect": [16, 202, 40, 40], "src_bind": f"{item}.fuse_icon", **GRID},
+        {"type": "rect", "rect": [68, 286, 56, 24], "bg": SHADE, "color": CLEAR, "keep_min": 1,
+         "keep_max": 2, "hide_bind": f"{item}.kind", **GRID},
+        {"type": "value", "rect": [122, 288, 0, 20], "bind": f"{item}.value", "text_scale": 4,
+         "align": "right", "color": VALUE, **kind_is(f"{item}.kind", 1, **GRID)},
+        {"type": "value", "rect": [122, 288, 0, 20], "bind": f"{item}.value", "text": "x",
+         "text_scale": 4, "align": "right", "color": VALUE, **kind_is(f"{item}.kind", 2, **GRID)},
+    ]
+    mark = [{"type": "rect", "rect": [107, 205, 14, 14], "bg": SELECT, "color": CLEAR,
+             "need_bind": f"{item}.equipped", **GRID}]
+    widgets += textured("equipped", [104, 202, 20, 20], mark, need_bind=f"{item}.equipped",
+                        **GRID)
+    ring = [{"type": "rect", "rect": cell, "bg": CLEAR, "color": SELECT, "frame": 4, **selected,
+             **GRID}]
+    widgets += textured("cursor", cell, ring, **selected, **GRID)
+    widgets.append({"type": "rect", "rect": cell, "bg": CLEAR, "color": CLEAR,
+                    "on_tap": "inv_select", "on_hold": "inv_use", "payload": "{i}", **GRID})
+    return widgets
+
+
+def detail_pane(derived):
+    """The selected item: icon (hold: refused use), name, Equipped badge, value line (durability
+    or count; food's LifeRecover on the right), fuse and effect, caption. The whole pane takes a dragged item (refused
+    use). Every line is gated on a selection (.kind) or its own key, so an absent int never reads
+    as 0 and an absent text never draws the runtime's "-" (the module publishes the optional texts
+    empty while an item is selected)."""
+    sel = "totk.inv.sel"
+    picked = has(derived, f"{sel}.kind")
+    widgets = panel([8, 722, 624, 206], "detail")
+    widgets += panel([20, 736, 128, 128], "slot", on_hold="inv_use", need_bind=picked)
+    widgets += [
+        {"type": "image", "rect": [20, 736, 128, 128], "src_bind": f"{sel}.icon",
+         "need_bind": picked},
+        {"type": "label", "rect": [164, 738, 340, 34], "bind_text": f"{sel}.name",
+         "text_scale": 6, "color": TEXT, "wrap_width": 340, "max_lines": 1, "fit_text": True,
+         "need_bind": picked},
+    ]
+    badge = [{"type": "button", "rect": [512, 738, 108, 32], "text": "", "pill": True,
+              "border": 2, "bg": CLEAR, "color": SELECT, "need_bind": f"{sel}.equipped"}]
+    widgets += textured("badge", [512, 738, 108, 32], badge, need_bind=f"{sel}.equipped")
+    widgets += [
+        {"type": "label", "rect": [566, 744, 0, 20], "text": "Equipped", "text_scale": 4,
+         "align": "center", "color": SELECT, "wrap_width": 100, "max_lines": 1,
+         "fit_text": True, "need_bind": f"{sel}.equipped"},
+        {"type": "value", "rect": [164, 778, 280, 26], "bind": f"{sel}.value",
+         "text": "Durability ", "text_scale": 5, "color": VALUE, **kind_is(f"{sel}.kind", 1)},
+        {"type": "value", "rect": [164, 778, 280, 26], "bind": f"{sel}.value", "text": "x",
+         "text_scale": 5, "color": VALUE, **kind_is(f"{sel}.kind", 2)},
+        # LifeRecover as the save stores it (unit UNVERIFIED, T8 compares with the game).
+        {"type": "value", "rect": [620, 780, 0, 24], "bind": f"{sel}.hearts", "text": "Hearts ",
+         "text_scale": 4, "align": "right", "color": VALUE,
+         "need_bind": has(derived, f"{sel}.hearts")},
+        # Fuse left, effect right: 220 px each, so "Durability Up+" fits in the built-in font.
+        {"type": "label", "rect": [164, 808, 220, 24], "bind_text": f"{sel}.fuse_name",
+         "text_scale": 4, "color": DIM, "wrap_width": 220, "max_lines": 1, "fit_text": True,
+         "need_bind": picked},
+        {"type": "label", "rect": [620, 808, 0, 24], "bind_text": f"{sel}.effect",
+         "text_scale": 4, "align": "right", "color": DIM, "need_bind": picked},
+        {"type": "label", "rect": [164, 836, 456, 84], "bind_text": f"{sel}.caption",
+         "text_scale": 4, "color": TEXT, "wrap_width": 456, "max_lines": 3, "need_bind": picked},
+        {"type": "rect", "rect": [8, 722, 624, 206], "bg": CLEAR, "color": CLEAR, "frame": 4,
+         "accept_group": "inv", "drop_action": "inv_use", "highlight_color": SELECT},
+    ]
+    return widgets
+
+
+def inventory_side(derived, actions):
+    """Left side (x 0-632): category tabs, the category name, the grid with its empty states,
+    the detail pane."""
+    derived.append({"name": "ui.inv.empty", "cmp": "eq", "a": "totk.inv.count", "b": 0})
+    return [
+        *category_tabs(derived, actions),
         {"type": "label", "rect": [16, 162, 400, 28], "text_bind": "totk.inv.tab",
          "text_map": {str(k): name for k, (_, name) in enumerate(CATEGORIES)},
          "text_scale": 5, "color": TEXT, "need_bind": "totk.inv.valid"},
-        *panel([8, 194, 624, 520]),
+        *grid(actions),
         {"type": "label", "rect": [320, 430, 0, 40], "text": "No save data yet",
          "text_scale": 5, "align": "center", "color": DIM, "need_bind": "!totk.inv.valid"},
         {"type": "label", "rect": [320, 430, 0, 40], "text": "Nothing here", "text_scale": 5,
          "align": "center", "color": DIM, "need_bind": "ui.inv.empty"},
-        *panel([8, 722, 624, 206], "detail"),
+        *detail_pane(derived),
     ]
-    return widgets
 
 
 def slot_states(derived, slot, value_field):
@@ -342,7 +446,10 @@ def manifest():
     pages = []
     for k, (page_id, _, domain) in enumerate(PAGES):
         body = home_page(derived, actions) if page_id == "home" else later_page(domain)
-        pages.append({"id": page_id, "widgets": body + header(k, domain) + notice()})
+        page = {"id": page_id, "widgets": body + header(k, domain) + notice()}
+        if page_id == "home":
+            page["scrolls"] = [GRID_REGION]
+        pages.append(page)
     return {
         "format": 1,
         "title_id": "0100F2C0115B6000",

@@ -328,10 +328,67 @@ int main() {
         {"totk.inv.1.name", "Weapon_Spear_002"},
         {"totk.inv.1.fuse_icon", "romfs:/UI/Tex/Icon/Item_Ruby.bntx.zs"},
         {"totk.inv.sel.icon", "romfs:/UI/Tex/Icon/Weapon_Sword_001.bntx.zs"},
-        {"totk.inv.sel.name", "Weapon_Sword_001"}};
+        {"totk.inv.sel.name", "Weapon_Sword_001"},
+        // The detail pane's optional lines: published empty, not absent (an absent text draws
+        // "-"): no fuse, effect None, no names loaded.
+        {"totk.inv.sel.fuse_name", ""},
+        {"totk.inv.sel.effect", ""},
+        {"totk.inv.sel.caption", ""}};
     assert(h.texts == page0_text);
     assert((h.floats == Host::Floats{{"totk.map.x", 100.5}, {"totk.map.y", 300.25}}));
     assert(h.MemoryCalls() == 0);
+
+    // Every tab from the fixture's nine pouches: the counts, game order (arrows after bows, empty
+    // names skipped), equipped flags (absent where the pouch's EquipIndex is not known) and, with
+    // slot 0 selected, sel.equipped. Page 0 publishes only the current tab's {i} keys.
+    {
+        struct Tab {
+            std::vector<std::string> ids;
+            std::vector<int> equipped; // -1: not published
+        };
+        const Tab tabs[totk::kTabs] = {{{"Weapon_Sword_001", "Weapon_Spear_002"}, {0, 1}},
+                                       {{"Weapon_Bow_001", "NormalArrow", "FireArrow"}, {1, 0, 1}},
+                                       {{"Weapon_Shield_001"}, {0}},
+                                       {{"Armor_001_Head", "Armor_001_Upper"}, {-1, -1}},
+                                       {{"Item_Fruit_A"}, {-1}},
+                                       {{"Item_Cook_A"}, {-1}},
+                                       {{"SpecialParts_Fan"}, {-1}},
+                                       {{"Obj_KeyItem_X"}, {-1}}};
+        // The {i} of a totk.inv.{i}.* key, -1 for any other key.
+        const auto item_index = [](const std::string& key) {
+            constexpr std::string_view head = "totk.inv.";
+            if (!key.starts_with(head) || key.size() <= head.size() ||
+                key[head.size()] < '0' || key[head.size()] > '9')
+                return -1;
+            return std::atoi(key.c_str() + head.size());
+        };
+        in.page = kPageHome;
+        in.sel = 0;
+        for (int t = 0; t < totk::kTabs; ++t) {
+            in.tab = t;
+            SampleClean(m, instance, h);
+            const Tab& want = tabs[t];
+            for (int k = 0; k < totk::kTabs; ++k)
+                assert(h.ints.at(in.keys.tab_count[k]) == std::int64_t(tabs[k].ids.size()));
+            assert(h.ints.at("totk.inv.count") == std::int64_t(want.ids.size()));
+            for (std::size_t i = 0; i < want.ids.size(); ++i) {
+                const std::string at = "totk.inv." + std::to_string(i);
+                assert(h.texts.at(at + ".name") == want.ids[i]);
+                assert(h.texts.at(at + ".icon") == "romfs:/UI/Tex/Icon/" + want.ids[i] + ".bntx.zs");
+                const auto eq = h.ints.find(at + ".equipped");
+                assert(want.equipped[i] < 0 ? eq == h.ints.end()
+                                            : eq != h.ints.end() && eq->second == want.equipped[i]);
+            }
+            const auto sel = h.ints.find("totk.inv.sel.equipped");
+            assert(want.equipped[0] < 0 ? sel == h.ints.end()
+                                        : sel != h.ints.end() && sel->second == want.equipped[0]);
+            assert(h.texts.at("totk.inv.sel.name") == want.ids[0]);
+            for (const auto& [key, value] : h.ints)
+                assert(item_index(key) < int(want.ids.size()));
+            for (const auto& [key, value] : h.texts)
+                assert(item_index(key) < int(want.ids.size()));
+        }
+    }
 
     // The home page publishes the current tab's list and the selection.
     in.page = kPageHome;
@@ -347,7 +404,7 @@ int main() {
     assert(!h.ints.contains("totk.inv.3.kind") && !h.texts.contains("totk.inv.0.fuse_icon"));
     assert(h.texts.at("totk.inv.sel.name") == "FireArrow" && h.ints.at("totk.inv.sel.kind") == 2 &&
            h.ints.at("totk.inv.sel.value") == 7 && !h.ints.contains("totk.inv.sel.hearts") &&
-           !h.texts.contains("totk.inv.sel.effect") && !h.texts.contains("totk.inv.sel.fuse_name"));
+           h.texts.at("totk.inv.sel.effect").empty() && h.texts.at("totk.inv.sel.fuse_name").empty());
     assert(h.ints.at("totk.inv.sel.equipped") == 1); // FireArrow is Pouch.Arrow.EquipIndex[0]
     in.tab = 0;
     in.sel = 1;
@@ -510,8 +567,13 @@ int main() {
            h.texts.at("totk.inv.sel.name") == "../Pack/X");
     for (const char* key : {"totk.inv.0.icon", "totk.inv.0.fuse_icon", "totk.inv.sel.icon"})
         assert(!h.texts.contains(key));
-    for (const auto& [key, value] : h.texts)
-        assert(!value.empty());
+    // A present weapon with no effect publishes an empty effect (an absent one would draw "-");
+    // arrows have no effect line.
+    assert(h.texts.at("totk.gear.weapon.effect").empty() &&
+           !h.texts.contains("totk.gear.arrow.effect"));
+    for (const auto& [key, value] : h.texts) // no empty text but those optional lines
+        assert(!value.empty() || key == "totk.inv.sel.effect" || key == "totk.inv.sel.caption" ||
+               key == "totk.gear.weapon.effect");
     d.Put(Slot(1, "caption.sav"), Caption(2024, 3, 1, 8, 3, false)); // back to the fixture
     PollNow(instance);
     PollNow(instance);
@@ -726,6 +788,42 @@ int main() {
     m->destroy(instance);
     assert(g_nothrow_live == nullptr); // destroy freed the instance
 
+    // At most kMaxItems (400) per tab: a pouch of 450 publishes 400 items and their keys,
+    // selection stops at 399, and sample still allocates nothing.
+    {
+        Host hc;
+        SaveDir cd;
+        std::vector<std::string> names;
+        for (int i = 0; i < 450; ++i)
+            names.push_back("Item_" + std::to_string(i));
+        cd.Put(Slot(1, "caption.sav"), Caption(2024, 1, 2, 8, 0, false));
+        cd.Put(Slot(1, "progress.sav"),
+               SaveBuilder()
+                   .String64Array("Pouch.Material.Content.Name", names)
+                   .IntArray("Pouch.Material.Content.StockNum", std::vector<std::int32_t>(450, 2))
+                   .Build());
+        void* capped = m->create(&hc.api, "{}");
+        assert(capped);
+        Configure(se, capped, cd);
+        PollNow(capped);
+        const auto cact = [&](const char* name, std::int64_t arg) {
+            return ext->on_action(capped, name, arg) == EDEN_DSMOD_TRUE;
+        };
+        assert(cact("totk.ui.page", 0) && cact("totk.inv.tab", 4));
+        assert(cact("totk.inv.select", 399) && !cact("totk.inv.select", 400));
+        SampleClean(m, capped, hc);
+        assert(hc.ints.at("totk.inv.tab4.count") == 400 && hc.ints.at("totk.inv.count") == 400);
+        assert(hc.texts.at("totk.inv.399.name") == "Item_399" && hc.ints.at("totk.inv.399.value") == 2);
+        assert(!hc.texts.contains("totk.inv.400.name") && !hc.ints.contains("totk.inv.400.kind"));
+        assert(hc.ints.at("totk.inv.sel") == 399 && hc.texts.at("totk.inv.sel.name") == "Item_399");
+        const long before = t_news;
+        for (int i = 0; i < 1000; ++i)
+            m->sample(capped, &hc.api);
+        assert(t_news == before);
+        assert(hc.MemoryCalls() == 0);
+        m->destroy(capped);
+    }
+
     // Item names from a fake Mals/USen.Product.<n> PouchContent.msbt. They load after the save
     // here (the shown snapshot is renamed), then name every newer save; an id without a label
     // stays the id; .id keys keep the id.
@@ -770,11 +868,13 @@ int main() {
         assert(hn.texts.at("totk.inv.0.name") == "Weapon_Bow_001" &&
                hn.texts.at("totk.inv.1.name") == "Arrow" && hn.texts.at("totk.inv.2.name") == "FireArrow" &&
                hn.texts.at("totk.inv.sel.name") == "Arrow");
+        assert(hn.texts.at("totk.inv.sel.caption").empty()); // no Arrow caption
         ni.tab = 0;
         SampleClean(m, named, hn);
         assert(hn.texts.at("totk.inv.1.name") == "Traveler's Spear" &&
                hn.texts.at("totk.inv.sel.name") == "Traveler's Spear" &&
-               hn.texts.at("totk.inv.sel.fuse_name") == "Ruby");
+               hn.texts.at("totk.inv.sel.fuse_name") == "Ruby" &&
+               hn.texts.at("totk.inv.sel.caption") == "A spear.");
         // CA10 with names: no allocation in 1000 samples.
         m->sample(named, &hn.api);
         const long before = t_news;
@@ -790,7 +890,8 @@ int main() {
         SampleClean(m, named, hn);
         assert(hn.texts.at("totk.gear.weapon.id") == "Weapon_Sword_001" &&
                hn.texts.at("totk.gear.weapon.name") == "Traveler's Sword" &&
-               !hn.texts.contains("totk.gear.weapon.fuse_name"));
+               !hn.texts.contains("totk.gear.weapon.fuse_name") &&
+               hn.texts.at("totk.gear.weapon.effect").empty()); // Effect.Type None
         assert(hn.MemoryCalls() == 0);
         m->destroy(named);
     }
