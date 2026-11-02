@@ -875,6 +875,15 @@ int main() {
         SampleClean(m, i1, h1);
         live["totk.status.hearts"] = 44;
         assert(status(h1) == live && live_logs(h1) == lost);
+        { // Lost again: no second "lost" line, and misses stops at the grace.
+            const auto mem = h1.memory;
+            h1.memory.clear();
+            for (int i = 0; i < kLiveGrace + 2; ++i)
+                SampleClean(m, i1, h1);
+            assert(status(h1) == save && live_logs(h1) == lost);
+            assert(static_cast<Instance*>(i1)->misses == kLiveGrace);
+            h1.memory = mem;
+        }
         // Every read goes through ReadGuest<Reject>: without is_mapped nothing is read.
         const unsigned reads = h1.read_calls;
         h1.api.is_mapped = nullptr;

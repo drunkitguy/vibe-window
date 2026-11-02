@@ -259,6 +259,14 @@ int main() {
         assert(!Read(h).valid);
     }
 
+    { // Walk refuses base 0 and a chain longer than its hop array, before any memory call.
+        Host h;
+        PutLive(h);
+        assert(!totk::detail::Walk(h.api, 0, kOffsets121.name));
+        assert(!totk::detail::Walk(h.api, Host::kMainBase, totk::Chain{7, {}}));
+        assert(h.MemoryCalls() == 0);
+    }
+
     std::puts("totk_status_test: ok");
     return 0;
 }
