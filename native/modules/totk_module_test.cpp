@@ -172,8 +172,9 @@ int main() {
            fe->struct_size == sizeof(EdenDsmodFontExtensions) &&
            fe->abi_hash == EDEN_DSMOD_FONT_EXT_HASH && fe->decode_font);
 
-    // supports_build: only the exact target string.
-    assert(m->supports_build(totk::kTargetBuild));
+    // supports_build: only the exact 1.2.0 and 1.2.1 strings.
+    assert(m->supports_build(totk::kBuild120));
+    assert(m->supports_build(totk::kBuild121));
     assert(!m->supports_build(nullptr));
     assert(!m->supports_build(""));
     assert(!m->supports_build("6F32C68DD3BC7D77"));
@@ -194,6 +195,10 @@ int main() {
     assert(refused([](EdenDsmodHostApi& a) { a.title_id = 0x01007EF00011E000ULL; }));
     assert(refused([](EdenDsmodHostApi& a) { a.build_id[31] ^= 1; }));
     assert(refused([](EdenDsmodHostApi& a) { a.build_id[0] ^= 0x80; }));
+    assert(refused([](EdenDsmodHostApi& a) {
+        std::memcpy(a.build_id, totk::kBuild121Bytes.data(), 32);
+        a.build_id[31] ^= 1;
+    }));
 
     assert(g_nothrow_news == 0); // refused creates allocate nothing
     Host h;
@@ -789,6 +794,17 @@ int main() {
 
     m->destroy(instance);
     assert(g_nothrow_live == nullptr); // destroy freed the instance
+
+    { // 1.2.1 passes create too; kOffsets121 is empty until T3a, so still no memory calls.
+        Host h1;
+        std::memcpy(h1.api.build_id, totk::kBuild121Bytes.data(), 32);
+        void* i1 = m->create(&h1.api, "{}");
+        assert(i1);
+        m->sample(i1, &h1.api);
+        assert(h1.MemoryCalls() == 0 && h1.ints.at("totk.ready") == 1);
+        m->destroy(i1);
+        assert(g_nothrow_live == nullptr);
+    }
 
     // Owned flags for all seven: a save owning only ability `a` (both IsGet and IsGetAnyway)
     // publishes owned 1 for `a` and 0 for the other six.

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The Legend of Zelda: Tears of the Kingdom companion module.
-// Three build gates: the loader's build_ids prefix, supports_build and create (all 32 bytes).
+// Three build gates: the loader's build_ids prefix, supports_build and create (all 32 bytes);
+// 1.2.0 and 1.2.1 pass, and only 1.2.1 gets offsets (T2b).
 // Every callback catches all exceptions: nothing may unwind into the host.
 // Data: the last save through the save extension (a worker thread polls it every 2 s) and the
 // live status reader, whose offsets stay UNKNOWN (0) so it never touches guest memory yet. The
@@ -73,7 +74,7 @@ struct Keys {
 };
 
 struct Instance {
-    totk::Offsets offsets; // all 0 (UNKNOWN) until T3
+    totk::Offsets offsets; // set by Create: kOffsets121 on 1.2.1, all 0 on 1.2.0
     // The create host, for the worker's read_romfs and log (runtime 16: usable from create on
     // [S1 dsmod_module_abi.h:215-217]; the worker is joined before destroy returns).
     EdenDsmodHostApi host{};
@@ -271,7 +272,7 @@ void Worker(Instance& in) {
 
 EdenDsmodBool SupportsBuild(const char* build_id) {
     try {
-        return totk::IsTargetBuild(build_id);
+        return totk::IsSupportedBuild(build_id);
     } catch (...) {
         return false;
     }
@@ -280,12 +281,13 @@ EdenDsmodBool SupportsBuild(const char* build_id) {
 void* Create(const EdenDsmodHostApi* host, const char*) {
     try {
         if (!dsmod_sdk::HostAbiMatches(host) || host->title_id != totk::kTitleId ||
-            !totk::IsTargetBuild(host->build_id))
+            !totk::IsSupportedBuild(host->build_id))
             return nullptr;
         auto* in = new (std::nothrow) Instance;
         if (!in)
             return nullptr;
         in->host = *host;
+        in->offsets = totk::Is121(host->build_id) ? totk::kOffsets121 : totk::Offsets{};
         try {
             in->worker = std::thread(Worker, std::ref(*in));
         } catch (...) {

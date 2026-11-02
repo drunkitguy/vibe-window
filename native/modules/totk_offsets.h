@@ -32,4 +32,7 @@ struct Offsets {
     std::uint64_t rupees = 0;
 };
 
+// The 1.2.1 offsets Create picks on that build; empty until T3a fills them.
+inline constexpr Offsets kOffsets121{};
+
 } // namespace totk

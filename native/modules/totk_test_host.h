@@ -62,7 +62,7 @@ struct Host {
         api.abi_hash = EDEN_DSMOD_MODULE_ABI_HASH;
         api.userdata = this;
         api.title_id = kTitleId;
-        std::memcpy(api.build_id, kTargetBuildBytes.data(), 32);
+        std::memcpy(api.build_id, kBuild120Bytes.data(), 32);
         api.main_base = kMainBase;
         api.main_size = kMainSize;
         api.is_mapped = [](void* u, std::uint64_t at, std::uint64_t n) -> EdenDsmodBool {

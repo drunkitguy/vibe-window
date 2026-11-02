@@ -59,8 +59,8 @@ jobs:
       - name: Package
         working-directory: vibe-window
         run: |
-          B=$(sed -n 's/^ *"\([0-9A-F]\{64\}\)";$/\1/p' native/modules/totk_build.h)
-          test ${#B} -eq 64
+          B=$(sed -n 's/^ *"\([0-9A-F]\{64\}\)";$/--build-id \1/p' native/modules/totk_build.h)
+          test $(echo "$B" | wc -l) -eq 2
           D=../dist
           mkdir -p $D/mod/linux $D/mod/win
           llvm-strip --strip-all -o $D/mod/linux/0100F2C0115B6000.so ../build/gcc/0100F2C0115B6000.so
@@ -68,7 +68,7 @@ jobs:
           python3 -I ../companions/tools/build_dualscreen_package.py --package packages/TearsOfTheKingdom \
             --output $D --version 0.1.0 --min-runtime 22 \
             --module linux-x86_64=$D/mod/linux/0100F2C0115B6000.so \
-            --module windows-x86_64=$D/mod/win/0100F2C0115B6000.so --build-id $B
+            --module windows-x86_64=$D/mod/win/0100F2C0115B6000.so $B
           unzip -l $D/0100F2C0115B6000.dsmod.zip
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
