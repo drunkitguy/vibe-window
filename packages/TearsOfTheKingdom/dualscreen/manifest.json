@@ -1104,6 +1104,20 @@
      "need_bind": "ui.has.status.max_stamina"
     },
     {
+     "type": "bar",
+     "rect": [
+      712,
+      158,
+      320,
+      22
+     ],
+     "bg": "#FF0A0E0D",
+     "color": "#FF74D14C",
+     "bind": "totk.status.stamina",
+     "max_bind": "totk.status.max_stamina",
+     "need_bind": "ui.has.status.stamina"
+    },
+    {
      "type": "rect",
      "rect": [
       640,
@@ -1178,6 +1192,21 @@
      "bind": "totk.status.max_battery",
      "div": 100,
      "need_bind": "ui.has.status.max_battery"
+    },
+    {
+     "type": "bar",
+     "rect": [
+      888,
+      270,
+      136,
+      4
+     ],
+     "bg": "#FF0A0E0D",
+     "color": "#FFE9C46A",
+     "frame": 0,
+     "bind": "totk.status.battery",
+     "max_bind": "totk.status.max_battery",
+     "need_bind": "ui.has.status.battery"
     },
     {
      "type": "rect",
@@ -4932,6 +4961,10 @@
    "expr": "totk.status.max_stamina * 0 + 1"
   },
   {
+   "name": "ui.has.status.stamina",
+   "expr": "totk.status.stamina * 0 + totk.status.max_stamina * 0 + 1"
+  },
+  {
    "name": "ui.gear.arrow.known",
    "expr": "totk.gear.arrow.present * 0 + 1"
   },
@@ -4952,6 +4985,10 @@
   {
    "name": "ui.has.status.max_battery",
    "expr": "totk.status.max_battery * 0 + 1"
+  },
+  {
+   "name": "ui.has.status.battery",
+   "expr": "totk.status.battery * 0 + totk.status.max_battery * 0 + 1"
   },
   {
    "name": "ui.gear.weapon.known",

@@ -770,39 +770,128 @@ int main() {
     m->sample(instance, &h.api);
     h.throw_on_publish = false;
 
-    { // A valid live status beats the save (test-only synthetic offsets over fake memory).
-        Host v;
-        in.offsets = {0x1000, 0x10, 0x14, 0x18, 0x1C, 0x20};
-        constexpr std::uint64_t root = 0x90000000;
-        v.Put<std::uint64_t>(Host::kMainBase + 0x1000, root);
-        const std::int32_t values[] = {7, 40, 900, 1000, 4321};
-        for (int i = 0; i < 5; ++i)
-            v.Put<std::int32_t>(root + 0x10 + 4 * i, values[i]);
-        m->sample(instance, &v.api);
-        const Host::Ints live{
-            {"totk.status.valid", 1},     {"totk.status.source", 2},
-            {"totk.status.hearts", 7},    {"totk.status.max_hearts", 40},
-            {"totk.status.stamina", 900}, {"totk.status.max_stamina", 1000},
-            {"totk.status.rupees", 4321}, {"totk.status.max_battery", 150}};
-        for (const auto& [key, value] : live)
-            assert(v.ints.at(key) == value);
-        for (const auto& [key, value] : v.ints)
-            assert(totk::pub::Listed(key));
-        assert(v.write_calls == 0);
-        in.offsets = {};
-    }
-
     m->destroy(instance);
     assert(g_nothrow_live == nullptr); // destroy freed the instance
 
-    { // 1.2.1 passes create too; kOffsets121 is empty until T3a, so still no memory calls.
+    // 1.2.1: live status through kOffsets121 over a fake layout (totk_test_host.h PutLive), the
+    // fallback to the save, the grace after a torn sample, and never a write.
+    {
+        const auto live_logs = [](Host& x) {
+            std::vector<std::string> out;
+            std::scoped_lock lock{x.log_mutex};
+            for (const auto& l : x.logs)
+                if (l.starts_with("totk live"))
+                    out.push_back(l);
+            return out;
+        };
         Host h1;
         std::memcpy(h1.api.build_id, totk::kBuild121Bytes.data(), 32);
         void* i1 = m->create(&h1.api, "{}");
         assert(i1);
-        m->sample(i1, &h1.api);
-        assert(h1.MemoryCalls() == 0 && h1.ints.at("totk.ready") == 1);
+        Configure(se, i1, d);
+        PollNow(i1); // the second matching read: the fixture save is shown
+        const Host::Ints save{{"totk.status.valid", 1},         {"totk.status.source", 1},
+                              {"totk.status.hearts", 12},       {"totk.status.max_hearts", 40},
+                              {"totk.status.max_stamina", 1000}, {"totk.status.rupees", 4321},
+                              {"totk.status.max_battery", 150}};
+        const auto status = [](const Host& x) {
+            Host::Ints out;
+            for (const auto& [key, value] : x.ints)
+                if (key.starts_with("totk.status."))
+                    out.emplace(key, value);
+            return out;
+        };
+        // Empty memory: the save, source 1.
+        SampleClean(m, i1, h1);
+        assert(status(h1) == save && h1.is_mapped_calls > 0 && h1.write_calls == 0);
+        Host::Ints live{{"totk.status.valid", 1},          {"totk.status.source", 2},
+                        {"totk.status.hearts", 48},        {"totk.status.max_hearts", 80},
+                        {"totk.status.stamina", 1500},     {"totk.status.max_stamina", 2000},
+                        {"totk.status.rupees", 1234},      {"totk.status.battery", 90000},
+                        {"totk.status.max_battery", 300000}};
+        // The live layout: source 2 and the live values; one line beside the save's values.
+        totk::test::PutLive(h1);
+        SampleClean(m, i1, h1);
+        assert(status(h1) == live);
+        for (const auto& [key, value] : h1.ints)
+            assert(totk::pub::Listed(key));
+        const std::vector<std::string> first{
+            "totk live status: hearts=48/80 stamina=1500/2000 rupees=1234 battery=900/3000 | "
+            "save: hearts=12 max_hearts=40 max_stamina=1000 rupees=4321"};
+        assert(live_logs(h1) == first);
+        // CA10 with the live reader on: no allocation in 1000 samples, no second line.
+        {
+            const long before = t_news;
+            for (int i = 0; i < 1000; ++i)
+                m->sample(i1, &h1.api);
+            assert(t_news == before && live_logs(h1) == first);
+        }
+        // Without the battery chain: the live five and the save's max battery.
+        {
+            Host nb;
+            std::memcpy(nb.api.build_id, totk::kBuild121Bytes.data(), 32);
+            totk::test::PutLive(nb, {.battery = false});
+            m->sample(i1, &nb.api);
+            Host::Ints expect = live;
+            expect.erase("totk.status.battery");
+            expect["totk.status.max_battery"] = 150;
+            assert(status(nb) == expect && nb.write_calls == 0);
+        }
+        SampleClean(m, i1, h1); // the full layout again
+        assert(status(h1) == live);
+        // A torn sample (hearts changed meanwhile): source 2 with the previous values.
+        const std::uint64_t hearts_at = [&] {
+            const auto& o = totk::kOffsets121;
+            std::uint64_t at = h1.Get<std::uint64_t>(Host::kMainBase + o.actor.hop[0]);
+            at = h1.Get<std::uint64_t>(at + o.actor.hop[1]) + o.hearts.hop[0];
+            for (int i = 1; i < o.hearts.n; ++i)
+                at = h1.Get<std::uint64_t>(at) + o.hearts.hop[i];
+            return at;
+        }();
+        h1.Put<std::uint32_t>(hearts_at, 44);
+        h1.corrupt_read = h1.read_calls + 1;
+        SampleClean(m, i1, h1);
+        assert(status(h1) == live);
+        // Then failing samples: the last live status until kLiveGrace misses in a row, then the
+        // save (no stamina or battery key) and one line.
+        const auto memory = h1.memory;
+        h1.memory.clear();
+        for (int i = 1; i < kLiveGrace - 1; ++i) {
+            SampleClean(m, i1, h1);
+            assert(status(h1) == live);
+        }
+        assert(live_logs(h1) == first);
+        SampleClean(m, i1, h1);
+        assert(status(h1) == save);
+        const std::vector<std::string> lost{
+            first[0], "totk live status lost: hearts=48/80 stamina=1500/2000 rupees=1234 "
+                      "battery=900/3000 | save: hearts=12 max_hearts=40 max_stamina=1000 "
+                      "rupees=4321"};
+        assert(live_logs(h1) == lost);
+        // Live again: no third line.
+        h1.memory = memory;
+        SampleClean(m, i1, h1);
+        live["totk.status.hearts"] = 44;
+        assert(status(h1) == live && live_logs(h1) == lost);
+        // Every read goes through ReadGuest<Reject>: without is_mapped nothing is read.
+        const unsigned reads = h1.read_calls;
+        h1.api.is_mapped = nullptr;
+        for (int i = 0; i < kLiveGrace; ++i)
+            m->sample(i1, &h1.api);
+        assert(h1.read_calls == reads && h1.write_calls == 0);
         m->destroy(i1);
+        assert(g_nothrow_live == nullptr);
+    }
+    { // 1.2.0 with the same layout in memory: no memory call at all, the save stays the source.
+        Host h0;
+        totk::test::PutLive(h0);
+        void* i0 = m->create(&h0.api, "{}");
+        assert(i0);
+        Configure(se, i0, d);
+        PollNow(i0);
+        SampleClean(m, i0, h0);
+        assert(h0.ints.at("totk.status.source") == 1 && h0.MemoryCalls() == 0);
+        m->destroy(i0);
         assert(g_nothrow_live == nullptr);
     }
 

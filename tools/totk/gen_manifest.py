@@ -320,6 +320,10 @@ def status_column(derived, actions):
             {"type": "value", "rect": [1220, y + 2, 0, 32], "text_scale": 5, "align": "right",
              "color": VALUE, **value},
         ]
+    # Live stamina (1.2.1) over the full bar: same rect and an opaque bg, so it covers it.
+    widgets.append({"type": "bar", "rect": [712, 158, 320, 22], "bg": BG, "color": STAMINA,
+                    "bind": "totk.status.stamina", "max_bind": "totk.status.max_stamina",
+                    "need_bind": has(derived, "totk.status.stamina", "totk.status.max_stamina")})
     g, known, none, has_count = slot_states(derived, "arrow", "count")
     actions["gear_swap_3"] = {"kind": "module", "action": "totk.gear.swap", "argument": 3}
     chips = [
@@ -353,6 +357,12 @@ def status_column(derived, actions):
             {"type": "value", "rect": [x + 48, 244, 136, 26], "text_scale": 5, "color": VALUE,
              **value},
         ]
+        if role == "battery":  # live battery (1.2.1) over the max, under the max's value
+            widgets.append({"type": "bar", "rect": [x + 48, 270, 136, 4], "bg": BG,
+                            "color": VALUE, "frame": 0, "bind": "totk.status.battery",
+                            "max_bind": "totk.status.max_battery",
+                            "need_bind": has(derived, "totk.status.battery",
+                                             "totk.status.max_battery")})
     return widgets
 
 

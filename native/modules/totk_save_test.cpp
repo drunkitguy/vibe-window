@@ -243,6 +243,15 @@ int main() {
         for (const auto& t : e.tabs)
             assert(t.empty());
     }
+    // MaxStamina as Float (lotuskit's type): rounded; a non-finite one is absent.
+    {
+        SaveBuilder b;
+        b.Float("PlayerStatus.MaxStamina", 2000.f);
+        assert(Snap(b).max_stamina == 2000);
+        SaveBuilder n;
+        n.Float("PlayerStatus.MaxStamina", NAN);
+        assert(!Snap(n).max_stamina);
+    }
     // Non-finite battery or position: absent.
     {
         SaveBuilder b;

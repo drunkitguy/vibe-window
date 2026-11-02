@@ -694,6 +694,10 @@ class GenManifestTest(unittest.TestCase):
                       color=gen_manifest.STAMINA), stamina),
             (self.one(home, type="value", bind=st + "max_stamina", text="Max ", align="right",
                       rect=[1220, 152, 0, 32]), stamina),
+            (self.one(home, type="bar", bind=st + "stamina", max_bind=st + "max_stamina"),
+             [st + "stamina", st + "max_stamina"]),
+            (self.one(home, type="bar", bind=st + "battery", max_bind=st + "max_battery"),
+             [st + "battery", st + "max_battery"]),
             (self.one(home, type="value", bind=st + "rupees", group=True), [st + "rupees"]),
             (self.one(home, type="value", bind=st + "max_battery", div=100),
              [st + "max_battery"]),
@@ -703,6 +707,11 @@ class GenManifestTest(unittest.TestCase):
                         rect=[8 + 78 * k + 70, 90, 0, 20]), ["totk.inv.valid"])
               for k in range(8)),
         ]
+        # Live stamina covers the full bar: drawn after it, same rect, opaque bg.
+        full = self.one(home, type="bar", bind=st + "max_stamina")
+        live = self.one(home, type="bar", bind=st + "stamina")
+        self.assertGreater(home.index(live), home.index(full))
+        self.assertEqual((live["rect"], live["bg"][:3]), (full["rect"], "#FF"))
         names = self.one(home, text_bind="totk.inv.tab")
         self.assertEqual(names["text_map"], {str(k): n for k, n in enumerate([
             "Weapons", "Bows and Arrows", "Shields", "Armor", "Materials", "Food",

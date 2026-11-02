@@ -27,12 +27,13 @@
 #include "core/mods/dsmod_module_extensions.h"
 #include "totk_build.h"
 #include "totk_gamedata.h"
+#include "totk_offsets.h"
 
 namespace totk::test {
 
 struct Host {
     static constexpr std::uint64_t kMainBase = 0x80000000ULL;
-    static constexpr std::uint64_t kMainSize = 0x100000ULL;
+    static constexpr std::uint64_t kMainSize = 0x5000000ULL; // holds kOffsets121's main slots
 
     std::map<std::uint64_t, std::uint8_t> memory;
     unsigned is_mapped_calls = 0, read_calls = 0, write_calls = 0;
@@ -148,6 +149,16 @@ struct Host {
             memory[at + i] = bytes[i];
     }
 
+    template <class T>
+    T Get(std::uint64_t at) const {
+        std::uint8_t bytes[sizeof(T)];
+        for (std::size_t i = 0; i < sizeof bytes; ++i)
+            bytes[i] = memory.at(at + i);
+        T value;
+        std::memcpy(&value, bytes, sizeof value);
+        return value;
+    }
+
     unsigned MemoryCalls() const {
         return is_mapped_calls + read_calls + write_calls;
     }
@@ -157,6 +168,50 @@ struct Host {
         floats.clear();
     }
 };
+
+// Lays chain `c` out from `base` in h's memory and returns its final address: a slot already
+// written is followed (chains share their prefixes, as hearts and max hearts do), else it gets a
+// fresh 1 MiB heap block. Synthetic addresses; the hops are whatever `c` holds.
+inline std::uint64_t PutChain(Host& h, std::uint64_t base, const Chain& c) {
+    static constexpr std::uint64_t kBlock = 0x100000;
+    std::uint64_t at = base + c.hop[0];
+    for (std::size_t i = 1; i < c.n; ++i) {
+        if (!h.memory.contains(at)) {
+            std::uint64_t heap = 0x90000000;
+            while (h.memory.contains(heap))
+                heap += kBlock;
+            h.Put<std::uint64_t>(at, heap);
+            h.memory[heap] = 0; // claims the block
+        }
+        at = h.Get<std::uint64_t>(at) + c.hop[i];
+    }
+    return at;
+}
+
+// Live values for a fake 1.2.1 layout; battery false leaves both battery chains unmapped.
+struct Live {
+    std::uint32_t hearts = 48, max_hearts = 80, rupees = 1234;
+    float stamina = 1500.f, max_stamina = 2000.f;
+    bool battery = true;
+    float battery_now = 900.f, max_battery = 3000.f;
+};
+
+// The whole status layout of `o` (kOffsets121 by default) with "Player" as the actor's name.
+inline void PutLive(Host& h, const Live& v = {}, const Offsets& o = kOffsets121) {
+    const std::uint64_t main = h.api.main_base, actor = PutChain(h, main, o.actor);
+    const std::uint64_t name = PutChain(h, actor, o.name);
+    for (std::size_t i = 0; i < 7; ++i)
+        h.memory[name + i] = std::uint8_t("Player"[i]);
+    h.Put(PutChain(h, actor, o.hearts), v.hearts);
+    h.Put(PutChain(h, actor, o.max_hearts), v.max_hearts);
+    h.Put(PutChain(h, actor, o.stamina), v.stamina);
+    h.Put(PutChain(h, main, o.max_stamina), v.max_stamina);
+    h.Put(PutChain(h, main, o.rupees), v.rupees);
+    if (v.battery) {
+        h.Put(PutChain(h, main, o.battery), v.battery_now);
+        h.Put(PutChain(h, main, o.max_battery), v.max_battery);
+    }
+}
 
 // A save directory in memory with the runtime's read_save_file semantics [S1
 // mod_module_services.cpp:222-242]: output null -> size; offset past the end -> 0; else

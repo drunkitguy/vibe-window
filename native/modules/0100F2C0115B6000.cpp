@@ -3,17 +3,18 @@
 // Three build gates: the loader's build_ids prefix, supports_build and create (all 32 bytes);
 // 1.2.0 and 1.2.1 pass, and only 1.2.1 gets offsets (T2b).
 // Every callback catches all exceptions: nothing may unwind into the host.
-// Data: the last save through the save extension (a worker thread polls it every 2 s) and the
-// live status reader, whose offsets stay UNKNOWN (0) so it never touches guest memory yet. The
-// worker also loads the item names from the game's romfs (totk_msbt.h) and, once per session
-// when the player asks for it, logs T8a's texture dump (totk_dump.h), and finds the map's tile
-// files once (totk_map.h).
+// Data: the last save through the save extension (a worker thread polls it every 2 s) and, on
+// 1.2.1 only, the live status read in sample through kOffsets121's chains (read-only; on 1.2.0
+// every chain is empty and guest memory is never touched). The worker also loads the item names
+// from the game's romfs (totk_msbt.h) and, once per session when the player asks for it, logs
+// T8a's texture dump (totk_dump.h), and finds the map's tile files once (totk_map.h).
 // Base extensions: module actions drive the UI state (page, tab, selection, map layer); game
 // actions are refused; load_image serves only the font atlas (icons are romfs: paths the runtime
 // reads). Font extension: decode_font builds that atlas from the game's own font (totk_font.h).
 
 #include <array>
 #include <chrono>
+#include <cmath>
 #include <condition_variable>
 #include <cstdint>
 #include <cstdio>
@@ -46,6 +47,9 @@ static_assert(std::size(pub::kAbilityNames) == totk::kAbilities);
 static_assert(pub::kActionArgs[pub::kActInvTab] == totk::kTabs);
 constexpr int kPageHome = 0; // inventory, gear and status [docs/PLAN.md R5]
 constexpr int kPageMap = 2;
+// Consecutive failed live samples (0.5 s at 60 Hz) before the status falls back to the save.
+// shortcut: N samples grace, tune after T8c.
+constexpr int kLiveGrace = 30;
 static_assert(pub::kActionArgs[pub::kActMapLayer] == totk::map::kLayerCount);
 
 // Every key sample publishes with a computed name, built once in create so sample never allocates.
@@ -88,6 +92,11 @@ struct Instance {
     // host struct is borrowed per call, and on_action gets none). An unknown name is refused
     // without a line of ours: the runtime logs every decline by name [S1 mod_module.cpp:335].
     std::uint32_t refused = 0, logged = 0;
+    // Live status, tick thread only like the UI state: the last valid one and the failed samples
+    // since (kLiveGrace: none valid yet, or past the grace), and the two once-per-session lines.
+    totk::Status live;
+    int misses = kLiveGrace;
+    bool live_logged = false, lost_logged = false;
 
     std::mutex mutex; // guards everything below; sample holds it only to copy `snapshot`
     std::condition_variable wake;
@@ -370,18 +379,22 @@ const std::string& Shown(const std::string& name, const std::string& id) {
     return name.empty() ? id : name;
 }
 
-void PublishStatus(const Out& o, const totk::Status& live, const totk::Snapshot* s) {
-    // A valid live value beats the save; with every offset 0 the save is the only source.
-    if (live.valid) {
+void PublishStatus(const Out& o, const totk::Status* live, const totk::Snapshot* s) {
+    // A valid live status (or the last one, within the grace) beats the save.
+    if (live) {
         o.I(pub::kStatusValid, 1);
         o.I(pub::kStatusSource, 2);
-        o.I(pub::kStatusHearts, live.hearts);
-        o.I(pub::kStatusMaxHearts, live.max_hearts);
-        o.I(pub::kStatusStamina, live.stamina);
-        o.I(pub::kStatusMaxStamina, live.max_stamina);
-        o.I(pub::kStatusRupees, live.rupees);
-        if (s && s->max_battery)
+        o.I(pub::kStatusHearts, live->hearts);
+        o.I(pub::kStatusMaxHearts, live->max_hearts);
+        o.I(pub::kStatusStamina, std::lround(live->stamina));
+        o.I(pub::kStatusMaxStamina, std::lround(live->max_stamina));
+        o.I(pub::kStatusRupees, live->rupees);
+        if (live->has_battery) { // x100 rounded, as the save's .max_battery
+            o.I(pub::kStatusBattery, std::llround(double(live->battery) * 100.0));
+            o.I(pub::kStatusMaxBattery, std::llround(double(live->max_battery) * 100.0));
+        } else if (s && s->max_battery) {
             o.I(pub::kStatusMaxBattery, *s->max_battery);
+        }
         return;
     }
     o.I(pub::kStatusValid, s ? 1 : 0);
@@ -397,6 +410,50 @@ void PublishStatus(const Out& o, const totk::Status& live, const totk::Snapshot*
     for (const auto& [key, value] : fields)
         if (value)
             o.I(key, *value);
+}
+
+// T8c's line: the live values (raw floats) beside the save's, so the units can be compared.
+void LogStatus(const EdenDsmodHostApi& h, const char* what, const totk::Status& l,
+               const totk::Snapshot* s) {
+    if (!h.log)
+        return;
+    char save[4][24], battery[64] = "-", line[320];
+    const std::optional<std::int64_t>* fields[] = {s ? &s->hearts : nullptr,
+                                                   s ? &s->max_hearts : nullptr,
+                                                   s ? &s->max_stamina : nullptr,
+                                                   s ? &s->rupees : nullptr};
+    for (int i = 0; i < 4; ++i)
+        if (fields[i] && *fields[i])
+            std::snprintf(save[i], sizeof save[i], "%lld", static_cast<long long>(**fields[i]));
+        else
+            std::snprintf(save[i], sizeof save[i], "-");
+    if (l.has_battery)
+        std::snprintf(battery, sizeof battery, "%g/%g", double(l.battery), double(l.max_battery));
+    std::snprintf(line, sizeof line,
+                  "totk live status%s: hearts=%u/%u stamina=%g/%g rupees=%u battery=%s | save: "
+                  "hearts=%s max_hearts=%s max_stamina=%s rupees=%s",
+                  what, unsigned(l.hearts), unsigned(l.max_hearts), double(l.stamina),
+                  double(l.max_stamina), unsigned(l.rupees), battery, save[0], save[1], save[2],
+                  save[3]);
+    h.log(h.userdata, EDEN_DSMOD_LOG_INFO, line);
+}
+
+// One live sample: a valid one is kept and resets the misses; a torn or failed one keeps the last
+// valid status until kLiveGrace misses in a row. Null while the save is the source.
+const totk::Status* LiveStatus(Instance& in, const EdenDsmodHostApi& h, const totk::Snapshot* s) {
+    const totk::Status read = totk::ReadStatus(h, in.offsets);
+    if (read.valid) {
+        in.live = read;
+        in.misses = 0;
+        if (!in.live_logged) {
+            in.live_logged = true;
+            LogStatus(h, "", read, s);
+        }
+    } else if (in.misses < kLiveGrace && ++in.misses == kLiveGrace && !in.lost_logged) {
+        in.lost_logged = true;
+        LogStatus(h, " lost", in.live, s);
+    }
+    return in.misses < kLiveGrace ? &in.live : nullptr;
 }
 
 void PublishGear(const Out& o, const Keys& k, const totk::Snapshot& s) {
@@ -473,7 +530,6 @@ void Sample(void* instance, const EdenDsmodHostApi* host) {
         if (!instance || !host || !host->publish_i64)
             return;
         auto& in = *static_cast<Instance*>(instance);
-        const totk::Status live = totk::ReadStatus(*host, in.offsets);
         std::shared_ptr<const totk::Snapshot> snap;
         std::shared_ptr<const totk::map::Tiles> tiles;
         bool names;
@@ -490,7 +546,7 @@ void Sample(void* instance, const EdenDsmodHostApi* host) {
         o.I(pub::kInvTab, in.tab);
         o.I(pub::kInvSel, in.sel);
         o.I(pub::kMapLayer, in.layer);
-        PublishStatus(o, live, snap.get());
+        PublishStatus(o, LiveStatus(in, *host, snap.get()), snap.get());
         o.I(pub::kMapValid, snap && snap->position ? 1 : 0);
         if (!snap) { // no save read yet: every save domain is empty
             o.I(pub::kGearValid, 0);

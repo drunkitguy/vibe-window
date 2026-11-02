@@ -1,111 +1,245 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// ReadStatus over fake memory with test-only synthetic offsets (never real game offsets).
+// ReadStatus over a fake 1.2.1 layout (totk_test_host.h PutLive): kOffsets121's chains with
+// synthetic heap addresses, then each way it must fail closed.
 #include "totk_status.h"
 #include "totk_test_host.h"
 
+#include <cmath>
 #include <cstdio>
+#include <functional>
 #include <limits>
 
 namespace {
 
+using totk::kOffsets121;
 using totk::test::Host;
+using totk::test::Live;
+using totk::test::PutLive;
+constexpr auto kMax = std::numeric_limits<std::uint64_t>::max();
 
-constexpr std::uint64_t kSlot = 0x1000;     // synthetic main-relative slot
-constexpr std::uint64_t kRoot = 0x90000000; // synthetic heap object
-constexpr totk::Offsets kSynthetic{kSlot, 0x10, 0x14, 0x18, 0x1C, 0x20};
+totk::Status Read(Host& h, const totk::Offsets& o = kOffsets121) {
+    return totk::ReadStatus(h.api, o);
+}
 
-void Fill(Host& h, std::uint64_t root = kRoot) {
-    h.Put<std::uint64_t>(Host::kMainBase + kSlot, root);
-    h.Put<std::int32_t>(kRoot + 0x10, 12);
-    h.Put<std::int32_t>(kRoot + 0x14, 40);
-    h.Put<std::int32_t>(kRoot + 0x18, 900);
-    h.Put<std::int32_t>(kRoot + 0x1C, 1000);
-    h.Put<std::int32_t>(kRoot + 0x20, 4321);
+// Invalid on a fresh full layout after `change(host, offsets)` (the offsets start as kOffsets121
+// and the layout is laid out from them after the change, so only the change can reject it).
+void Invalid(const std::function<void(Host&, totk::Offsets&)>& change) {
+    Host h;
+    totk::Offsets o = kOffsets121;
+    change(h, o);
+    PutLive(h, {}, o);
+    assert(!Read(h, o).valid);
+}
+
+// The pointer slot at main + o.rupees.hop[0] is moved to an address that wraps:
+// slot = kMax - 7, so slot + 0xD8 wraps to 0xD0, which gets the old pointer. Every byte the walk
+// reads is mapped and holds what the real chain holds: only the overflow check rejects it.
+void WrapRupees(Host& h, const totk::Offsets& o) {
+    const std::uint64_t slot = h.api.main_base + o.rupees.hop[0];
+    const std::uint64_t old = h.Get<std::uint64_t>(slot);
+    h.Put<std::uint64_t>(slot, kMax - 7);
+    h.Put<std::uint64_t>(kMax - 7 + o.rupees.hop[1], h.Get<std::uint64_t>(old + o.rupees.hop[1]));
 }
 
 } // namespace
 
 int main() {
-    { // Default offsets are all 0: invalid without a single host call.
+    { // The full layout: every value exact, read twice, never a write.
         Host h;
-        Fill(h);
-        assert(!totk::ReadStatus(h.api, totk::Offsets{}).valid);
-        assert(h.MemoryCalls() == 0);
+        PutLive(h);
+        const auto s = Read(h);
+        assert(s.valid && s.hearts == 48 && s.max_hearts == 80 && s.rupees == 1234);
+        assert(s.stamina == 1500.f && s.max_stamina == 2000.f);
+        assert(s.has_battery && s.battery == 900.f && s.max_battery == 3000.f);
+        assert(h.write_calls == 0 && h.read_calls > 0);
     }
-    { // Any one unknown (0) offset is enough to read nothing.
-        for (int i = 0; i < 6; ++i) {
+    { // "Player\0" at an address with addr % 8 == 1 is still read (a char*, no alignment).
+        Host h;
+        PutLive(h);
+        const std::uint64_t actor = h.Get<std::uint64_t>(h.Get<std::uint64_t>(
+                                        Host::kMainBase + kOffsets121.actor.hop[0]) +
+                                    kOffsets121.actor.hop[1]);
+        const std::uint64_t odd = 0xA0000001;
+        static_assert(odd % 8 == 1);
+        h.Put<std::uint64_t>(actor + kOffsets121.name.hop[0], odd);
+        for (std::size_t i = 0; i < 7; ++i)
+            h.memory[odd + i] = std::uint8_t("Player"[i]);
+        assert(Read(h).valid);
+        // Another name: the actor's values are not trusted.
+        h.memory[odd] = 'Q';
+        assert(!Read(h).valid);
+        h.memory[odd] = 'P';
+        h.memory[odd + 6] = '!'; // "Player!" is not "Player"
+        assert(!Read(h).valid);
+    }
+    // Offsets{} (1.2.0, any other build) and any one empty required chain: no host call.
+    {
+        Host h;
+        PutLive(h);
+        assert(!Read(h, totk::Offsets{}).valid && h.MemoryCalls() == 0);
+        totk::Chain totk::Offsets::*required[] = {
+            &totk::Offsets::actor,      &totk::Offsets::name,    &totk::Offsets::hearts,
+            &totk::Offsets::max_hearts, &totk::Offsets::stamina, &totk::Offsets::max_stamina,
+            &totk::Offsets::rupees};
+        for (auto field : required) {
+            totk::Offsets o = kOffsets121;
+            o.*field = {};
+            assert(!Read(h, o).valid && h.MemoryCalls() == 0);
+        }
+        // An empty battery chain only drops the battery pair.
+        totk::Offsets o = kOffsets121;
+        o.max_battery = {};
+        const auto s = Read(h, o);
+        assert(s.valid && !s.has_battery);
+    }
+    // An unmapped hop (each slot of the hearts chain, one byte gone).
+    for (int hop = 0; hop < 3; ++hop) {
+        Host h;
+        PutLive(h);
+        std::uint64_t at = Host::kMainBase + kOffsets121.actor.hop[0];
+        at = h.Get<std::uint64_t>(at) + kOffsets121.actor.hop[1];
+        at = h.Get<std::uint64_t>(at) + kOffsets121.hearts.hop[0]; // actor + 0x228
+        for (int i = 0; i < hop; ++i)
+            at = h.Get<std::uint64_t>(at) + kOffsets121.hearts.hop[i + 1];
+        h.memory.erase(at + 7);
+        assert(!Read(h).valid);
+    }
+    // A u64 slot not 8-aligned (4-aligned, mapped): only the alignment check rejects it.
+    Invalid([](Host&, totk::Offsets& o) { o.rupees.hop[1] = 0xDC; });
+    Invalid([](Host&, totk::Offsets& o) { o.actor.hop[1] = 0x484; });
+    // A u32 or f32 not 4-aligned.
+    Invalid([](Host&, totk::Offsets& o) { o.rupees.hop[2] = 0x28EA6; });
+    Invalid([](Host&, totk::Offsets& o) { o.stamina.hop[2] = 0x13FE; });
+    Invalid([](Host&, totk::Offsets& o) { o.max_hearts.hop[3] = 0x9; });
+    // A null or low pointer, with the rest of the chain mapped behind it.
+    for (const std::uint64_t low : {0x0ULL, 0x8000ULL, 0xFFF8ULL}) {
+        Invalid([low](Host& h, totk::Offsets& o) {
+            h.Put<std::uint64_t>(h.api.main_base + o.rupees.hop[0], low);
+        });
+        Invalid([low](Host& h, totk::Offsets& o) {
+            PutLive(h, {}, o); // the actor first, then its name pointer
+            const std::uint64_t actor = h.Get<std::uint64_t>(
+                h.Get<std::uint64_t>(h.api.main_base + o.actor.hop[0]) + o.actor.hop[1]);
+            h.Put<std::uint64_t>(actor + o.name.hop[0], low);
+        });
+    }
+    { // The low pointer just at the floor is accepted.
+        Host h;
+        h.Put<std::uint64_t>(Host::kMainBase + kOffsets121.rupees.hop[0], 0x10000);
+        PutLive(h);
+        assert(Read(h).valid);
+    }
+    // A first slot outside main (all bytes mapped), and one straddling its end.
+    Invalid([](Host&, totk::Offsets& o) { o.rupees.hop[0] = Host::kMainSize; });
+    Invalid([](Host&, totk::Offsets& o) { o.max_stamina.hop[0] = Host::kMainSize - 4; });
+    { // The last whole slot inside main is fine.
+        Host h;
+        totk::Offsets o = kOffsets121;
+        o.rupees.hop[0] = Host::kMainSize - 8;
+        PutLive(h, {}, o);
+        assert(Read(h, o).valid);
+    }
+    { // main_base + hop[0] wraps past 2^64.
+        Host h;
+        PutLive(h);
+        h.api.main_base = kMax - 0x10;
+        assert(!Read(h).valid);
+    }
+    { // A loaded pointer + hop wraps to a mapped low address: only the overflow check rejects.
+        // Rupees get their own main slot so no other chain shares the wrapped pointer.
+        Host h;
+        totk::Offsets o = kOffsets121;
+        o.rupees.hop[0] = 0x100;
+        PutLive(h, {}, o);
+        assert(Read(h, o).valid);
+        WrapRupees(h, o);
+        assert(!Read(h, o).valid);
+    }
+    { // The actor pointer + a tail hop wraps: the actor is moved to kMax - 7 with its bytes
+        // (wrapping into low memory), so only the base overflow check rejects it.
+        Host h;
+        PutLive(h);
+        const std::uint64_t slot =
+            h.Get<std::uint64_t>(Host::kMainBase + kOffsets121.actor.hop[0]) +
+            kOffsets121.actor.hop[1];
+        const std::uint64_t actor = h.Get<std::uint64_t>(slot), moved = kMax - 7;
+        for (std::uint64_t off = 0; off < 0x1000; ++off)
+            if (h.memory.contains(actor + off))
+                h.memory[moved + off] = h.memory.at(actor + off);
+        h.Put<std::uint64_t>(slot, moved);
+        assert(!Read(h).valid);
+    }
+    { // A torn read anywhere in the second pass (or the first: then the passes differ).
+        Host count;
+        PutLive(count);
+        assert(Read(count).valid);
+        for (unsigned n = 1; n <= count.read_calls; ++n) {
             Host h;
-            Fill(h);
-            totk::Offsets o = kSynthetic;
-            std::uint64_t* fields[] = {&o.game_data_root, &o.hearts,      &o.max_hearts,
-                                       &o.stamina,        &o.max_stamina, &o.rupees};
-            *fields[i] = 0;
-            assert(!totk::ReadStatus(h.api, o).valid);
-            assert(h.MemoryCalls() == 0);
+            PutLive(h);
+            h.corrupt_read = n;
+            assert(!Read(h).valid);
         }
     }
-    { // Reads every value, twice, and never writes.
+    // Each bound broken (the five values all or nothing).
+    const std::function<void(Live&)> broken[] = {
+        [](Live& v) { v.max_hearts = 11, v.hearts = 0; },
+        [](Live& v) { v.max_hearts = 161; },
+        [](Live& v) { v.hearts = 2 * v.max_hearts + 1; },
+        [](Live& v) { v.rupees = 1000000; },
+        [](Live& v) { v.max_stamina = 0, v.stamina = 0; },
+        [](Live& v) { v.max_stamina = 3000.5f; },
+        [](Live& v) { v.max_stamina = NAN; },
+        [](Live& v) { v.max_stamina = INFINITY; },
+        [](Live& v) { v.stamina = -1; },
+        [](Live& v) { v.stamina = 2 * v.max_stamina + 1; },
+        [](Live& v) { v.stamina = NAN; },
+        [](Live& v) { v.stamina = INFINITY; },
+    };
+    for (const auto& change : broken) {
         Host h;
-        Fill(h);
-        const auto s = totk::ReadStatus(h.api, kSynthetic);
-        assert(s.valid && s.hearts == 12 && s.max_hearts == 40 && s.stamina == 900 &&
-               s.max_stamina == 1000 && s.rupees == 4321);
-        assert(h.read_calls == 12 && h.write_calls == 0);
+        Live v;
+        change(v);
+        PutLive(h, v);
+        assert(!Read(h).valid);
     }
-    { // Unmapped root slot, unmapped field.
+    { // The bounds themselves pass.
         Host h;
-        assert(!totk::ReadStatus(h.api, kSynthetic).valid);
-        Fill(h);
-        h.memory.erase(kRoot + 0x20);
-        assert(!totk::ReadStatus(h.api, kSynthetic).valid);
+        PutLive(h, {.hearts = 320, .max_hearts = 160, .rupees = 999999, .stamina = 6000.f,
+                    .max_stamina = 3000.f, .battery_now = 48000.f, .max_battery = 48000.f});
+        const auto s = Read(h);
+        assert(s.valid && s.has_battery);
+        Host l;
+        PutLive(l, {.hearts = 0, .max_hearts = 12, .rupees = 0, .stamina = 0.f,
+                    .max_stamina = 0.5f, .battery_now = 0.f, .max_battery = 0.5f});
+        assert(Read(l).valid && Read(l).has_battery);
     }
-    { // main_base + offset overflows.
+    // A battery out of bounds, or a missing battery chain: the five values without the battery.
+    const std::function<void(Live&)> no_battery[] = {
+        [](Live& v) { v.battery = false; },
+        [](Live& v) { v.max_battery = 0, v.battery_now = 0; },
+        [](Live& v) { v.max_battery = 48000.5f; },
+        [](Live& v) { v.max_battery = NAN; },
+        [](Live& v) { v.battery_now = -1; },
+        [](Live& v) { v.battery_now = v.max_battery + 1; },
+        [](Live& v) { v.battery_now = INFINITY; },
+        [](Live& v) { v.battery_now = NAN; },
+        [](Live& v) { v.max_battery = INFINITY; },
+    };
+    for (const auto& change : no_battery) {
         Host h;
-        Fill(h);
-        h.api.main_base = std::numeric_limits<std::uint64_t>::max() - 0x10;
-        assert(!totk::ReadStatus(h.api, kSynthetic).valid);
-    }
-    { // Slot outside main (mapped memory, but past main_size).
-        Host h;
-        Fill(h);
-        h.Put<std::uint64_t>(Host::kMainBase + Host::kMainSize, kRoot);
-        totk::Offsets o = kSynthetic;
-        o.game_data_root = Host::kMainSize;
-        assert(!totk::ReadStatus(h.api, o).valid);
-        // Straddles the end; all 8 bytes mapped and holding a good root, so only InMain rejects it.
-        o.game_data_root = Host::kMainSize - 4;
-        h.Put<std::uint64_t>(Host::kMainBase + Host::kMainSize - 4, kRoot);
-        assert(!totk::ReadStatus(h.api, o).valid);
-    }
-    { // Null and misaligned root pointer.
-        Host h;
-        Fill(h, 0);
-        for (std::uint64_t field = 0x10; field <= 0x20; field += 4) // only the null check rejects
-            h.Put<std::int32_t>(field, 1);
-        assert(!totk::ReadStatus(h.api, kSynthetic).valid);
-        Host m;
-        Fill(m, kRoot + 4);
-        m.Put<std::int32_t>(kRoot + 0x24, 1);
-        assert(!totk::ReadStatus(m.api, kSynthetic).valid);
-    }
-    { // root + field overflows (wraps to 0x8..0x18, which is mapped: only the overflow check rejects).
-        Host h;
-        Fill(h, std::numeric_limits<std::uint64_t>::max() - 7);
-        for (std::uint64_t at = 0x8; at < 0x1C; ++at)
-            h.memory[at] = 0;
-        assert(!totk::ReadStatus(h.api, kSynthetic).valid);
-    }
-    { // Second read differs (torn read): the last value of the second pass.
-        Host h;
-        Fill(h);
-        h.corrupt_read = 12;
-        assert(!totk::ReadStatus(h.api, kSynthetic).valid);
+        Live v;
+        change(v);
+        PutLive(h, v);
+        const auto s = Read(h);
+        assert(s.valid && !s.has_battery && s.battery == 0 && s.max_battery == 0);
+        assert(s.hearts == 48 && s.max_hearts == 80 && s.rupees == 1234 && s.stamina == 1500.f &&
+               s.max_stamina == 2000.f);
     }
     { // A host without is_mapped is rejected (MissingIsMapped::Reject).
         Host h;
-        Fill(h);
+        PutLive(h);
         h.api.is_mapped = nullptr;
-        assert(!totk::ReadStatus(h.api, kSynthetic).valid);
+        assert(!Read(h).valid);
     }
 
     std::puts("totk_status_test: ok");

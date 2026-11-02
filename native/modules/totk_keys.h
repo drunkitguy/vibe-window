@@ -32,6 +32,7 @@ inline constexpr char kStatusStamina[] = "totk.status.stamina";
 inline constexpr char kStatusMaxStamina[] = "totk.status.max_stamina";
 inline constexpr char kStatusRupees[] = "totk.status.rupees";
 inline constexpr char kStatusMaxBattery[] = "totk.status.max_battery";
+inline constexpr char kStatusBattery[] = "totk.status.battery";
 inline constexpr char kGearValid[] = "totk.gear.valid";
 inline constexpr char kGearSource[] = "totk.gear.source";
 inline constexpr char kAbilityValid[] = "totk.ability.valid";
@@ -61,7 +62,7 @@ inline constexpr const char* kFixed[] = {
     kAbilityValid,   kAbilitySource,  kInvValid,         kInvSource,       kInvCount,
     kInvSelIcon,     kInvSelName,     kInvSelKind,       kInvSelValue,     kInvSelFuseName,
     kInvSelEffect,   kInvSelHearts,   kInvSelEquipped,   kInvSelCaption,   kMapValid,
-    kMapSource,      kMapX,           kMapY,             kNamesValid};
+    kMapSource,      kMapX,           kMapY,             kNamesValid,      kStatusBattery};
 
 // ---- key families -------------------------------------------------------------------------------
 enum GearField { kPresent, kId, kName, kIcon, kLife, kCount, kFuse, kFuseName, kFuseIcon, kEffect,
