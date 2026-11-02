@@ -57,9 +57,9 @@ inline bool ReadWord(const EdenDsmodHostApi& h, std::uint64_t base, const Chain&
     return at && at % 4 == 0 && Read(h, at, out);
 }
 
-// One pass: hearts, max hearts, stamina, max stamina, rupees, then battery and max battery and a
-// battery flag; floats as their bits so two passes compare bitwise.
-using Raw = std::array<std::uint32_t, 8>;
+// One pass: hearts, max hearts, stamina, max stamina, rupees, then battery and max battery;
+// floats as their bits so two passes compare bitwise.
+using Raw = std::array<std::uint32_t, 7>;
 
 inline bool ReadStatusOnce(const EdenDsmodHostApi& h, const Offsets& o, Raw& r) {
     // One actor walk; its name guards the three actor-relative values read from it.
@@ -72,9 +72,7 @@ inline bool ReadStatusOnce(const EdenDsmodHostApi& h, const Offsets& o, Raw& r) 
         !ReadWord(h, actor, o.stamina, r[2]) || !ReadWord(h, h.main_base, o.max_stamina, r[3]) ||
         !ReadWord(h, h.main_base, o.rupees, r[4]))
         return false;
-    r[7] = ReadWord(h, h.main_base, o.battery, r[5]) &&
-           ReadWord(h, h.main_base, o.max_battery, r[6]);
-    if (!r[7])
+    if (!ReadWord(h, h.main_base, o.battery, r[5]) || !ReadWord(h, h.main_base, o.max_battery, r[6]))
         r[5] = r[6] = 0;
     return true;
 }
@@ -104,7 +102,7 @@ inline Status ReadStatus(const EdenDsmodHostApi& h, const Offsets& o) {
     // A battery out of bounds drops only the battery pair (it may read 0 before the game gives
     // one).
     const float battery = detail::Float(a[5]), max_battery = detail::Float(a[6]);
-    if (a[7] && max_battery > 0 && max_battery <= 48000 && battery >= 0 && battery <= max_battery) {
+    if (max_battery > 0 && max_battery <= 48000 && battery >= 0 && battery <= max_battery) {
         s.has_battery = true;
         s.battery = battery;
         s.max_battery = max_battery;
