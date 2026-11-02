@@ -1,0 +1,1 @@
+Render a companion page to PNG with the Eden Duo runtime's own parser and RenderPage: `ZSTD_DIR=<zstd/> render.sh <eden-duo tree> <build dir>`, then `<build dir>/render_page <manifest.json> <page id> states/<state>.json <out.png> [--assets DIR] [--allow-unknown-keys]` (details at the top of render_page.cpp; docs/PLAN.md T4r).

@@ -1,0 +1,26 @@
+{
+ "ints": {
+  "totk.ability.source": 1,
+  "totk.ability.valid": 1,
+  "totk.gear.arrow.present": 0,
+  "totk.gear.bow.present": 0,
+  "totk.gear.shield.present": 0,
+  "totk.gear.source": 1,
+  "totk.gear.valid": 1,
+  "totk.gear.weapon.present": 0,
+  "totk.inv.source": 1,
+  "totk.inv.valid": 1,
+  "totk.map.source": 1,
+  "totk.map.valid": 1,
+  "totk.ready": 1,
+  "totk.status.hearts": 40,
+  "totk.status.max_battery": 1500,
+  "totk.status.max_hearts": 40,
+  "totk.status.max_stamina": 3000,
+  "totk.status.rupees": 12345,
+  "totk.status.source": 1,
+  "totk.status.valid": 1,
+  "totk.ui.page": 0
+ },
+ "texts": {}
+}
