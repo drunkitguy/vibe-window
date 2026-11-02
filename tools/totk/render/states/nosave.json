@@ -1,6 +1,11 @@
 {
  "ints": {
+  "totk.ability.valid": 0,
   "totk.gear.valid": 0,
+  "totk.inv.sel": 0,
+  "totk.inv.tab": 0,
+  "totk.inv.valid": 0,
+  "totk.map.valid": 0,
   "totk.ready": 1,
   "totk.status.valid": 0,
   "totk.ui.page": 0

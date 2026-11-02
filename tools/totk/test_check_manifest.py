@@ -53,8 +53,8 @@ class CheckManifestTest(unittest.TestCase):
         errors = self.errors(m)
         self.assertTrue(any(expect in e for e in errors), f"{expect!r} not in {errors}")
 
-    def gear(self, m):
-        return next(p for p in m["pages"] if p["id"] == "gear")["widgets"]
+    def home(self, m):
+        return next(p for p in m["pages"] if p["id"] == "home")["widgets"]
 
     def test_committed_manifest_passes(self):
         self.assertEqual(self.errors(self.manifest, len(self.raw)), [])
@@ -67,7 +67,7 @@ class CheckManifestTest(unittest.TestCase):
 
     def test_header_parse(self):
         self.assertEqual(self.actions, {
-            "totk.ui.page": 4, "totk.inv.tab": 8, "totk.inv.tab_next": 0, "totk.inv.select": 0,
+            "totk.ui.page": 3, "totk.inv.tab": 8, "totk.inv.tab_next": 0, "totk.inv.select": 0,
             "totk.map.layer": 3, "totk.gear.swap": 4, "totk.inv.use": 0,
             "totk.ability.select": 7})
         self.assertNotIn("totk.", self.patterns)  # the header's comments are not keys
@@ -81,7 +81,7 @@ class CheckManifestTest(unittest.TestCase):
         self.assertTrue(listed("totk.names.valid"))
 
     def test_unknown_object_key(self):
-        self.fails(lambda m: self.gear(m)[0].update(bogus_key=1), "key 'bogus_key'")
+        self.fails(lambda m: self.home(m)[0].update(bogus_key=1), "key 'bogus_key'")
         self.fails(lambda m: m.update(bogus_top=1), "key 'bogus_top'")
 
     def test_names_are_not_runtime_keys(self):
@@ -98,39 +98,39 @@ class CheckManifestTest(unittest.TestCase):
                    "module action 'totk.gear.drop'")
 
     def test_undefined_references(self):
-        self.fails(lambda m: self.gear(m)[0].update(on_tap="nope"), "on_tap 'nope'")
-        self.fails(lambda m: self.gear(m)[0].update(on_swipe_left="nope"), "on_swipe_left")
-        self.fails(lambda m: self.gear(m)[0].update(drop_action="nope"), "drop_action")
+        self.fails(lambda m: self.home(m)[0].update(on_tap="nope"), "on_tap 'nope'")
+        self.fails(lambda m: self.home(m)[0].update(on_swipe_left="nope"), "on_swipe_left")
+        self.fails(lambda m: self.home(m)[0].update(drop_action="nope"), "drop_action")
         self.fails(lambda m: m["page_binds"][1]["when_equal"].update(page="nowhere"),
                    "page 'nowhere'")
         self.fails(lambda m: m["actions"].update(go={"kind": "page", "page": "nowhere"}),
                    "page 'nowhere'")
-        self.fails(lambda m: self.gear(m)[0].update(scroll="nope"), "scroll 'nope'")
+        self.fails(lambda m: self.home(m)[0].update(scroll="nope"), "scroll 'nope'")
         self.fails(lambda m: m.update(enforce=[{"action": "nope", "every_ms": 1}]), "enforce")
 
     def test_rect(self):
-        self.fails(lambda m: self.gear(m)[0].update(rect=[1200, 0, 100, 10]), "leaves")
-        self.fails(lambda m: self.gear(m)[0].update(rect=[0, 1000, 10, 100]), "leaves")
-        self.fails(lambda m: self.gear(m)[0].update(rect=[-1, 0, 10, 10]), "leaves")
-        self.fails(lambda m: self.gear(m)[0].update(rect=[0, 0, 10]), "4 numbers")
-        self.fails(lambda m: self.gear(m)[0].update(rect=[0, 0, "10", 10]), "4 numbers")
+        self.fails(lambda m: self.home(m)[0].update(rect=[1200, 0, 100, 10]), "leaves")
+        self.fails(lambda m: self.home(m)[0].update(rect=[0, 1000, 10, 100]), "leaves")
+        self.fails(lambda m: self.home(m)[0].update(rect=[-1, 0, 10, 10]), "leaves")
+        self.fails(lambda m: self.home(m)[0].update(rect=[0, 0, 10]), "4 numbers")
+        self.fails(lambda m: self.home(m)[0].update(rect=[0, 0, "10", 10]), "4 numbers")
 
     def test_string_hide_eq(self):
         def mutate(m):
-            notice = next(w for w in self.gear(m) if "hide_eq" in w)
+            notice = next(w for w in self.home(m) if "hide_eq" in w)
             notice["hide_eq"] = "1"
         self.fails(mutate, "hide_eq")
 
     def test_bind_not_in_keys_header(self):
-        self.fails(lambda m: self.gear(m)[0].update(need_bind="totk.gear.helmet.present"),
+        self.fails(lambda m: self.home(m)[0].update(need_bind="totk.gear.helmet.present"),
                    "'totk.gear.helmet.present'")
-        self.fails(lambda m: self.gear(m)[0].update(need_bind="!totk.inv.sel.caption"),
+        self.fails(lambda m: self.home(m)[0].update(need_bind="!totk.inv.sel.caption"),
                    "'totk.inv.sel.caption'")
         self.fails(lambda m: m["derived"].append({"name": "x", "expr": "totk.bogus * 2"}),
                    "'totk.bogus'")
 
     def label(self, m, text):
-        return next(w for w in self.gear(m) if w.get("text") == text)
+        return next(w for w in self.home(m) if w.get("text") == text)
 
     def test_aligned_text_extent(self):
         # "No save data yet" at scale 5 is 320 px wide: anchored at x 24 it starts at x -136.
@@ -146,10 +146,10 @@ class CheckManifestTest(unittest.TestCase):
         self.assertEqual(self.errors(ok), [])
 
     def test_gates_resolve(self):
-        self.fails(lambda m: self.gear(m)[2].update(need_bind="ui.gear.weapon.knwn"),
+        self.fails(lambda m: self.home(m)[2].update(need_bind="ui.gear.weapon.knwn"),
                    "'ui.gear.weapon.knwn' is not a totk_keys.h key, a derived name")
-        self.fails(lambda m: self.gear(m)[2].update(need_bind="!ui.nothing"), "'ui.nothing'")
-        self.fails(lambda m: self.gear(m)[2].update(bind_text="module_error_mesage"),
+        self.fails(lambda m: self.home(m)[2].update(need_bind="!ui.nothing"), "'ui.nothing'")
+        self.fails(lambda m: self.home(m)[2].update(bind_text="module_error_mesage"),
                    "'module_error_mesage'")
         self.fails(lambda m: m["page_binds"][0].update(point="totk.ui.pag"), "'totk.ui.pag'")
         self.fails(lambda m: m["derived"].append({"name": "x", "cmp": "eq", "a": "ui.no", "b": 0}),
@@ -170,11 +170,11 @@ class CheckManifestTest(unittest.TestCase):
                    "does not parse")
 
     def test_duplicates(self):
-        self.fails(lambda m: m["pages"][1].update(id="gear"), "page id 'gear' is defined twice")
+        self.fails(lambda m: m["pages"][1].update(id="home"), "page id 'home' is defined twice")
         self.fails(lambda m: m["derived"].append(dict(m["derived"][0])), "is defined twice")
 
     def test_module_argument(self):
-        for arg in ("zero", "1", 4, -1, True, 1.0):
+        for arg in ("zero", "1", 3, -1, True, 1.0):
             self.fails(lambda m: m["actions"]["ui_page_0"].update(argument=arg), "argument")
         ok = copy.deepcopy(self.manifest)
         ok["actions"]["ui_page_0"]["argument"] = "$payload"
@@ -182,15 +182,15 @@ class CheckManifestTest(unittest.TestCase):
         self.assertEqual(self.errors(ok), [])
 
     def test_widget_type(self):
-        self.fails(lambda m: self.gear(m)[1].update(type="lable"), "type 'lable'")
-        self.fails(lambda m: self.gear(m)[1].pop("type"), "type None")
+        self.fails(lambda m: self.home(m)[1].update(type="lable"), "type 'lable'")
+        self.fails(lambda m: self.home(m)[1].pop("type"), "type None")
 
     def test_value_types(self):
-        self.fails(lambda m: self.gear(m)[1].update(text_scale="4"), "text_scale '4'")
-        self.fails(lambda m: self.gear(m)[1].update(wrap_width=True), "wrap_width True")
+        self.fails(lambda m: self.home(m)[1].update(text_scale="4"), "text_scale '4'")
+        self.fails(lambda m: self.home(m)[1].update(wrap_width=True), "wrap_width True")
         self.fails(lambda m: m.update(canvas_w="1240"), "canvas_w")
-        self.fails(lambda m: self.gear(m)[1].update(color="#GG0000"), "is not a colour")
-        self.fails(lambda m: self.gear(m)[1].update(bg="#FF1A2028AA"), "is not a colour")
+        self.fails(lambda m: self.home(m)[1].update(color="#GG0000"), "is not a colour")
+        self.fails(lambda m: self.home(m)[1].update(bg="#FF1A2028AA"), "is not a colour")
 
     def test_text_map_key(self):
         def mutate(m):
@@ -200,7 +200,7 @@ class CheckManifestTest(unittest.TestCase):
 
     def test_enums(self):
         self.fails(lambda m: m["haptics"].update(tap="clik"), "haptics.tap")
-        self.fails(lambda m: self.gear(m)[1].update(haptic="loud"), "haptic 'loud'")
+        self.fails(lambda m: self.home(m)[1].update(haptic="loud"), "haptic 'loud'")
         self.fails(lambda m: m["page_binds"][0]["when_equal"].update(transition="fdae"),
                    "transition 'fdae'")
         self.fails(lambda m: m["page_binds"][0]["when_equal"].update(easing="ease"),
@@ -221,7 +221,6 @@ class GenManifestTest(unittest.TestCase):
     def setUp(self):
         self.m = gen_manifest.manifest()
         self.derived = {d["name"]: d for d in self.m["derived"]}
-        self.gear = self.page("gear")
 
     def page(self, page_id):
         return next(p for p in self.m["pages"] if p["id"] == page_id)["widgets"]
@@ -260,17 +259,35 @@ class GenManifestTest(unittest.TestCase):
         for name, data in gen_manifest.outputs().items():
             self.assertEqual((gen_manifest.OUT / name).read_bytes(), data, name)
 
+    def action(self, name):
+        return self.m["actions"][name]
+
+    def page_action(self, k):
+        return {"kind": "module", "action": "totk.ui.page", "argument": k}
+
     def test_tabs_and_page_binds(self):
-        """Tab k sends totk.ui.page k on every page, and totk.ui.page == k shows PAGES[k]."""
-        actions = self.m["actions"]
-        for page_id, _, _ in gen_manifest.PAGES:
-            tabs = [w for w in self.page(page_id) if w["type"] == "button"]
-            self.assertEqual(len(tabs), len(gen_manifest.PAGES), page_id)
-            for k, (_, caption, _) in enumerate(gen_manifest.PAGES):
-                tab = next(w for w in tabs if w["text"] == caption)
-                self.assertEqual(tab["rect"], [310 * k, 968, 310, 112])
-                self.assertEqual(actions[tab["on_tap"]], {
-                    "kind": "module", "action": "totk.ui.page", "argument": k}, (page_id, k))
+        """Every page's header: Map | Inventory | Abilities send totk.ui.page 2, 0, 1; the current
+        tab has the select capsule; L/R and header swipes go to the screen neighbours, wrapping;
+        totk.ui.page == k shows PAGES[k]."""
+        captions = [c for _, c, _ in gen_manifest.PAGES]
+        for k, (page_id, _, _) in enumerate(gen_manifest.PAGES):
+            widgets = self.page(page_id)
+            tabs = [w for w in widgets if w["type"] == "button" and w.get("text") in captions]
+            self.assertEqual([w["text"] for w in tabs], ["Inventory", "Abilities", "Map"])
+            for tab in tabs:
+                j = captions.index(tab["text"])
+                self.assertEqual(tab["rect"], [{2: 140, 0: 470, 1: 800}[j], 8, 300, 60])
+                self.assertEqual(self.action(tab["on_tap"]), self.page_action(j), (page_id, j))
+                self.assertEqual(tab["color"], gen_manifest.TEXT if j == k else gen_manifest.DIM)
+            rings = [w for w in widgets if w.get("pill") and w.get("color") == gen_manifest.SELECT]
+            self.assertEqual([r["rect"][0] for r in rings], [gen_manifest.TAB_X[k]], page_id)
+            left, right = {0: (2, 1), 1: (0, 2), 2: (1, 0)}[k]
+            for glyph, target in (("", left), ("", right)):
+                hint = next(w for w in widgets if w.get("text") == glyph)
+                self.assertEqual(self.action(hint["on_tap"]), self.page_action(target))
+            bar = next(w for w in widgets if w["rect"] == [0, 0, 1240, 76])
+            self.assertEqual(self.action(bar["on_swipe_left"]), self.page_action(right))
+            self.assertEqual(self.action(bar["on_swipe_right"]), self.page_action(left))
         binds = self.m["page_binds"]
         self.assertEqual(len(binds), len(gen_manifest.PAGES))
         for k, (page_id, _, _) in enumerate(gen_manifest.PAGES):
@@ -280,22 +297,100 @@ class GenManifestTest(unittest.TestCase):
             self.assertEqual(matching[0]["when_equal"]["page"], page_id, k)
 
     def test_card_hold_sends_its_slot(self):
-        """Card k (weapon, bow, shield, arrows) holds to totk.gear.swap k."""
-        cards = sorted((w for w in self.gear if w["type"] == "rect" and "on_hold" in w),
-                       key=lambda w: w["rect"][0])
-        self.assertEqual(len(cards), len(gen_manifest.SLOTS))
-        for k, card in enumerate(cards):
-            self.assertEqual(card["rect"], [24 + 300 * k, 140, 284, 430])
-            self.assertEqual(self.m["actions"][card["on_hold"]], {
+        """Holding the weapon, bow or shield card or the arrows chip sends totk.gear.swap with
+        that slot (0-3)."""
+        holds = {tuple(w["rect"]): w["on_hold"] for w in self.page("home") if "on_hold" in w}
+        expect = {(1100, 324, 112, 112): 0, (1100, 494, 112, 112): 1, (1100, 664, 112, 112): 2,
+                  (1040, 212, 192, 64): 3}
+        self.assertEqual(set(holds), set(expect))
+        for rect, k in expect.items():
+            self.assertEqual(self.action(holds[rect]), {
                 "kind": "module", "action": "totk.gear.swap", "argument": k}, k)
 
+    def test_category_tabs(self):
+        """Category tab k sends totk.inv.tab k; its underline shows only while totk.inv.tab == k."""
+        tabs = [w for w in self.page("home") if w.get("on_tap", "").startswith("inv_tab_")]
+        self.assertEqual([w["rect"][0] for w in tabs], [8 + 78 * k for k in range(8)])
+        for k, tab in enumerate(tabs):
+            self.assertEqual(self.action(tab["on_tap"]), {
+                "kind": "module", "action": "totk.inv.tab", "argument": k})
+            line = next(w for w in self.page("home") if w["rect"] == [8 + 78 * k + 8, 152, 62, 4])
+            for current in range(8):
+                snap = {"totk.ready": 1, "totk.inv.tab": current}
+                self.assertEqual(self.visible(line, snap), current == k, (k, current))
+
+    def test_ability_bar(self):
+        """Ability k taps totk.ability.select k; its icon and name show owned or locked."""
+        home = self.page("home")
+        for k, (a, name, x) in enumerate(gen_manifest.ABILITIES):
+            rect = [18 + 172 * k + 54, 946, 64, 64]
+            frame = next(w for w in home if w["rect"] == rect and w["type"] == "rect")
+            self.assertEqual(self.action(frame["on_tap"]), {
+                "kind": "module", "action": "totk.ability.select", "argument": k})
+            parts = [w for w in home if w["rect"] in (rect, [18 + 172 * k + 86, 1014, 0, 22])
+                     and w is not frame]
+            self.assertEqual(len(parts), 4, a)
+            self.assertTrue(all(w.get("src", "").endswith(f"/Obj_{x}.bntx.zs")
+                                for w in parts if w["type"] == "image"))
+            owned_key = f"totk.ability.{a}.owned"
+            for owned in (None, 0, 1):
+                snap = {"totk.ready": 1} if owned is None else {"totk.ready": 1, owned_key: owned}
+                shown = [w for w in parts if self.visible(w, snap)]
+                self.assertEqual(len(shown), 2, (a, owned))
+                full = owned == 1
+                self.assertEqual({w.get("color", w.get("tint")) for w in shown},
+                                 {gen_manifest.TEXT if full else gen_manifest.DIM,
+                                  None if full else gen_manifest.LOCKED}, (a, owned))
+
+    def test_textures_over_fallbacks(self):
+        """Every picture sits over a widget drawn before it that covers its rect, so a texture or
+        icon that does not load leaves the page readable; with every TEX role named (as after
+        T8a), each role is drawn and still over its fallback. None = UNKNOWN emits no picture."""
+        def check(m):
+            for page in m["pages"]:
+                ws = page["widgets"]
+                for i, w in enumerate(ws):
+                    if w["type"] != "image":
+                        continue
+                    x, y, wd, ht = w["rect"]
+                    self.assertTrue(any(
+                        u["type"] != "image" and u["rect"][0] <= x and u["rect"][1] <= y and
+                        x + wd <= u["rect"][0] + u["rect"][2] and
+                        y + ht <= u["rect"][1] + u["rect"][3] for u in ws[:i]),
+                        (page["id"], w))
+        check(self.m)
+        unknown = {r for r, t in gen_manifest.TEX.items() if t is None}
+        self.assertTrue(unknown)
+        srcs = {w.get("src") for p in self.m["pages"] for w in p["widgets"]}
+        self.assertFalse({f"romfs:/T8A/{r}" for r in unknown} & srcs)
+        saved = dict(gen_manifest.TEX)
+        try:
+            gen_manifest.TEX.update({r: {"src": f"romfs:/T8A/{r}"} for r in unknown})
+            named = gen_manifest.manifest()
+        finally:
+            gen_manifest.TEX.clear()
+            gen_manifest.TEX.update(saved)
+        check(named)
+        used = {w["src"] for p in named["pages"] for w in p["widgets"] if "src" in w}
+        self.assertEqual({gen_manifest.TEX[r]["src"] if gen_manifest.TEX[r] else
+                          f"romfs:/T8A/{r}" for r in gen_manifest.TEX}, used)
+
     def test_empty_state(self):
-        """"No save data yet" shows while totk.gear.valid is 0 or absent, never at 1."""
-        label = next(w for w in self.gear if w.get("text") == "No save data yet")
-        for valid, shown in ((None, True), (0, True), (1, False)):
-            snap = {"totk.ready": 1} if valid is None else {"totk.ready": 1,
-                                                            "totk.gear.valid": valid}
-            self.assertEqual(self.visible(label, snap), shown, valid)
+        """"No save data yet" shows in the grid while totk.inv.valid is 0 or absent and on the
+        weapon plate while totk.gear.valid is, never at 1; "Nothing here" only for an empty tab."""
+        home = self.page("home")
+        for domain in ("inv", "gear"):
+            label = next(w for w in home if w.get("text") == "No save data yet" and
+                         w["need_bind"] == f"!totk.{domain}.valid")
+            for valid, shown in ((None, True), (0, True), (1, False)):
+                snap = {"totk.ready": 1} if valid is None else {
+                    "totk.ready": 1, f"totk.{domain}.valid": valid}
+                self.assertEqual(self.visible(label, snap), shown, (domain, valid))
+        nothing = next(w for w in home if w.get("text") == "Nothing here")
+        for count, shown in ((None, False), (0, True), (3, False)):
+            snap = {"totk.ready": 1} if count is None else {"totk.ready": 1,
+                                                            "totk.inv.count": count}
+            self.assertEqual(self.visible(nothing, snap), shown, count)
 
     def test_notice(self):
         """The notice covers every page while totk.ready is absent or 0, and goes at 1."""
@@ -310,7 +405,10 @@ class GenManifestTest(unittest.TestCase):
                     self.assertEqual(self.visible(w, snap), shown, (page_id, ready))
 
     def test_gear_card_states(self):
-        """Each card's exact visible widgets per state of .present (and .fuse, the value)."""
+        """Each slot's exact visible widgets (its card, the weapon's plate, the arrows chip) per
+        state of .present (and .fuse, the value): 1 the item, 0 "None", absent nothing."""
+        captions = {"weapon": "WEAPON", "bow": "BOW", "shield": "SHIELD", "arrow": "Arrows"}
+
         def role(w, caption):
             src = w.get("src_bind", "") + w.get("bind_text", "")
             for suffix, name in ((".fuse_icon", "fuse_icon"), (".icon", "image"),
@@ -322,31 +420,38 @@ class GenManifestTest(unittest.TestCase):
                 "caption" if w.get("text") == caption else
                 "none" if w.get("text") == "None" else f"unknown {w}")
 
-        for k, (slot, caption, field, _) in enumerate(gen_manifest.SLOTS):
-            x0, g = 24 + 300 * k, f"totk.gear.{slot}"
-            card = [w for w in self.gear if x0 <= w["rect"][0] <= x0 + 284 and
-                    120 <= w["rect"][1] < 570]
-            fuses = slot in ("weapon", "shield")
-            item = {"caption", "card", "image", "name", "value"}
+        home = self.page("home")
+        for slot, caption in captions.items():
+            gated = re.compile(rf"!?(?:totk|ui)\.gear\.{slot}\.")
+            mine = [w for w in home if gated.match(w.get("need_bind", ""))]
+            field = "count" if slot == "arrow" else "life"
+            fuses = slot in gen_manifest.FUSES
+            item = ["image", "value"] + (["caption", "card"] if slot != "arrow" else ["caption"])
+            if slot == "weapon":  # the plate: icon, name, effect, fuse badge and fuse name
+                item += ["image", "name", "effect", "fuse_icon", "fuse_name"]
+            if slot in ("bow", "shield"):
+                item.append("effect")
             if fuses:
-                item |= {"fuse_icon", "fuse_name"}
-            if slot != "arrow":
-                item.add("effect")
-            full = {f"{g}.present": 1, f"{g}.{field}": 42}  # only numbers gate (SnapshotNumber)
+                item.append("fuse_icon")
+            full = {f"totk.gear.{slot}.present": 1, f"totk.gear.{slot}.{field}": 42}
             if fuses:
-                full[f"{g}.fuse"] = 1
+                full[f"totk.gear.{slot}.fuse"] = 1
             no_value = {k: v for k, v in full.items() if not k.endswith(field)}
+            unfused = [r for r in item if r not in ("fuse_icon", "fuse_name")]
             states = [("present 1", full, item),
-                      ("present 1, value unknown", no_value, item - {"value"}),
-                      ("present 0", {f"{g}.present": 0}, {"caption", "card", "none"}),
-                      ("absent", {}, set())]
+                      ("present 1, value unknown", no_value, [r for r in item if r != "value"]),
+                      ("present 0", {f"totk.gear.{slot}.present": 0},
+                       [r for r in ("caption", "card", "none")
+                        if slot != "arrow" or r != "card"]),
+                      ("absent", {}, [])]
             if fuses:  # the module publishes .fuse 0 for an unfused weapon or shield
-                states.append(("present 1, fuse 0", {**full, f"{g}.fuse": 0},
-                               item - {"fuse_icon", "fuse_name"}))
+                states.append(("present 1, fuse 0", {**full, f"totk.gear.{slot}.fuse": 0},
+                               unfused))
             for state, snap, expect in states:
                 snap = {"totk.ready": 1, "totk.gear.valid": 1, **snap}
-                shown = sorted(role(w, caption) for w in card if self.visible(w, snap))
+                shown = sorted(role(w, caption) for w in mine if self.visible(w, snap))
                 self.assertEqual(shown, sorted(expect), f"{slot}, {state}")
+
 
 if __name__ == "__main__":
     unittest.main()

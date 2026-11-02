@@ -41,7 +41,7 @@ namespace pub = totk::pub;
 static_assert(std::size(pub::kGearSlotNames) == totk::kGearSlots);
 static_assert(std::size(pub::kAbilityNames) == totk::kAbilities);
 static_assert(pub::kActionArgs[pub::kActInvTab] == totk::kTabs);
-constexpr int kPageInventory = 2;
+constexpr int kPageHome = 0; // inventory, gear and status [docs/PLAN.md R5]
 
 // Every key sample publishes with a computed name, built once in create so sample never allocates.
 struct Keys {
@@ -409,7 +409,7 @@ void PublishInventory(const Out& o, const Instance& in, const totk::Snapshot& s)
         return;
     const auto& items = s.tabs[in.tab];
     o.I(pub::kInvCount, std::int64_t(items.size()));
-    if (in.page != kPageInventory)
+    if (in.page != kPageHome)
         return; // the list is heavy: only while its page is open
     for (std::size_t i = 0; i < items.size() && i < in.keys.items.size(); ++i) {
         const auto& key = in.keys.items[i];
@@ -432,6 +432,8 @@ void PublishInventory(const Out& o, const Instance& in, const totk::Snapshot& s)
     o.I(pub::kInvSelKind, it.kind);
     if (it.kind)
         o.I(pub::kInvSelValue, it.value);
+    if (it.equipped)
+        o.I(pub::kInvSelEquipped, *it.equipped ? 1 : 0);
     if (!it.fuse_id.empty())
         o.T(pub::kInvSelFuseName, Shown(it.fuse_name, it.fuse_id).c_str());
     o.T(pub::kInvSelEffect, it.effect);

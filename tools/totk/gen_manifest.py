@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Generate the Tears of the Kingdom companion package files (docs/PLAN.md T4).
+"""Generate the Tears of the Kingdom companion package files (docs/PLAN.md T4, T4v, R5).
 
 Writes packages/TearsOfTheKingdom/dualscreen/manifest.json, assets/map-blank.png,
 ASSETS.provenance.json and totk_font.txt. With --check, compares them with what is committed
@@ -19,29 +19,63 @@ ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "packages/TearsOfTheKingdom/dualscreen"
 CANVAS_W, CANVAS_H = 1240, 1080
 
-BG = "#FF101418"
-PANEL = "#FF1A2028"
-FRAME = "#FF2E3842"
-TEXT = "#FFE6ECF2"
-DIM = "#FFA8B2BC"
-ACCENT = "#FFE8C46A"
+# Tokens [docs/PLAN.md R5]: fallback colours under or instead of the game's textures. UNVERIFIED
+# until T8a gives the BFLYT material colours.
+BG = "#FF0A0E0D"
+PANEL = "#E6121815"
+EDGE = "#FF3E4A36"
+TEXT = "#FFECE5C8"
+DIM = "#FF8F907F"
+VALUE = "#FFE9C46A"
+SELECT = "#FF6FF0C0"
+HEART = "#FFE0464B"
+STAMINA = "#FF74D14C"
+LOCKED = "#66FFFFFF"
+CLEAR = "#00000000"
 # The game font (PLAN.md T3a' B4): the module decodes this spec (totk_font.h) and serves the atlas.
 FONT_SPEC = "body:48"
 
-# Pages in totk.ui.page order: (id, tab caption, the domain whose .source/.valid the page shows).
-PAGES = [("gear", "Gear", "gear"), ("abilities", "Abilities", "ability"),
-         ("inventory", "Inventory", "inv"), ("map", "Map", "map")]
-# Gear cards: (slot <s>, caption, the value key and its prefix). No armor row (no armor equip key).
-SLOTS = [("weapon", "WEAPON", "life", "Durability "), ("bow", "BOW", "life", "Durability "),
-         ("shield", "SHIELD", "life", "Durability "), ("arrow", "ARROWS", "count", "x")]
-FUSES = ("weapon", "shield")      # only these fuse
-EFFECTS = ("weapon", "bow", "shield")  # the module publishes .effect for these only
-# Status strip: (caption, key, extra value keys).
-STATUS = [("Hearts", "totk.status.hearts",
-           {"max_bind": "totk.status.max_hearts", "max_sep": " / "}),
-          ("Max stamina", "totk.status.max_stamina", {}),
-          ("Rupees", "totk.status.rupees", {"group": True}),
-          ("Max battery", "totk.status.max_battery", {})]
+# Pages in totk.ui.page order: (id, tab caption, the domain whose .source the page shows).
+PAGES = [("home", "Inventory", "gear"), ("abilities", "Abilities", "ability"),
+         ("map", "Map", "map")]
+# Header tabs left to right (page indices) and their x; L/R go to the screen neighbours, wrapping.
+TAB_ORDER = [2, 0, 1]
+TAB_X = {2: 140, 0: 470, 1: 800}
+# Gear cards in the equipment panel, top to bottom: (slot <s>, caption, card y).
+CARDS = [("weapon", "WEAPON", 300), ("bow", "BOW", 470), ("shield", "SHIELD", 640)]
+FUSES = ("weapon", "shield")  # only these fuse
+# Inventory tabs in game order (PLAN.md "Data model"): (fallback label, name).
+CATEGORIES = [("WPN", "Weapons"), ("BOW", "Bows and Arrows"), ("SHD", "Shields"),
+              ("ARM", "Armor"), ("MAT", "Materials"), ("FOOD", "Food"),
+              ("ZON", "Zonai Devices"), ("KEY", "Key Items")]
+# Abilities in totk.ability.select order: (<a>, short name, the save's Obj_<X>).
+ABILITIES = [("ultrahand", "Ultrahand", "UltraHand"), ("fuse", "Fuse", "OneTouchBond"),
+             ("ascend", "Ascend", "Tooreroof"), ("recall", "Recall", "ReverseRecorder"),
+             ("autobuild", "Autobuild", "AutoBuilder"), ("camera", "Camera", "Camera"),
+             ("travel", "Travel", "Warp")]
+
+# The game's UI textures by role [PLAN.md R2, R5 "Asset list"]: extra image keys (src, fill,
+# slice, tint), drawn over the role's widget fallback. Every entry is UNVERIFIED until the T8a
+# dump confirms it; None = the name is UNKNOWN (T8a): only the fallback is drawn, never a guessed
+# name. A set entry that does not load draws nothing, and the fallback under it still reads.
+TEX = {role: None for role in (
+    "header", "tab_on", "slot", "detail", "equip_panel", "plate", "bar_bg", "heart", "stamina",
+    "rupee", "battery", *(f"cat_{k}" for k in range(len(CATEGORIES))))}
+# R5's first candidate for the ability icons: the item icon of the save's Obj_<X> (UNVERIFIED).
+TEX.update({f"ability_{a}": {"src": f"romfs:/UI/Tex/Icon/Obj_{x}.bntx.zs"}
+            for a, _, x in ABILITIES})
+
+
+def textured(role, rect, fallback, **extra):
+    """The fallback widgets, then TEX[role] over them at `rect` with `extra` (gates, tint)."""
+    tex = TEX[role]
+    return fallback + ([{"type": "image", "rect": rect, **tex, **extra}] if tex else [])
+
+
+def panel(rect, role=None, **extra):
+    """A `panel` rect with a 2 px `edge` frame, under TEX[role] stretched or 9-sliced over it."""
+    box = [{"type": "rect", "rect": rect, "bg": PANEL, "color": EDGE, **extra}]
+    return textured(role, rect, box, **extra) if role else box
 
 
 def exists(*keys):
@@ -50,20 +84,40 @@ def exists(*keys):
     return " + ".join(f"{k} * 0" for k in keys) + " + 1"
 
 
-def chrome(page_index, domain):
-    """Widgets every page has: source line, tab bar; the notice goes last (on top)."""
-    widgets = [
-        {"type": "label", "rect": [24, 920, 1192, 40], "text_bind": f"totk.{domain}.source",
-         "text_map": {"1": "From last save", "2": "Live"}, "color": DIM,
-         "need_bind": f"totk.{domain}.valid"},
-        {"type": "rect", "rect": [0, 968, 1240, 112], "bg": "#FF0C1014", "color": "#00000000"},
-    ]
+def has(derived, key, *more):
+    """need_bind name that is 1 while `key` (and `more`) are published."""
+    name = f"ui.has.{key[5:]}"
+    if all(d["name"] != name for d in derived):
+        derived.append({"name": name, "expr": exists(key, *more)})
+    return name
+
+
+def header(page_index, domain):
+    """Widgets every page has: header with the three tabs and L/R, the source line."""
+    pos = TAB_ORDER.index(page_index)
+    left = TAB_ORDER[(pos - 1) % len(TAB_ORDER)]
+    right = TAB_ORDER[(pos + 1) % len(TAB_ORDER)]
+    # Swiping the header left (finger moving left) turns to the right neighbour, as R does.
+    widgets = panel([0, 0, 1240, 76], "header", on_swipe_left=f"ui_page_{right}",
+                    on_swipe_right=f"ui_page_{left}")
     for k, (_, caption, _) in enumerate(PAGES):
-        current = k == page_index
-        widgets.append({"type": "button", "rect": [310 * k, 968, 310, 112], "text": caption,
-                        "text_scale": 4, "align": "center", "on_tap": f"ui_page_{k}",
-                        "bg": FRAME if current else "#FF161B21",
-                        "color": TEXT if current else "#FF8A96A3"})
+        rect = [TAB_X[k], 8, 300, 60]
+        if k == page_index:
+            ring = [{"type": "button", "rect": rect, "text": "", "pill": True, "border": 3,
+                     "bg": CLEAR, "color": SELECT}]
+            widgets += textured("tab_on", rect, ring)
+        widgets.append({"type": "button", "rect": rect, "text": caption, "text_scale": 6,
+                        "align": "center", "border": 0, "bg": CLEAR,
+                        "color": TEXT if k == page_index else DIM, "on_tap": f"ui_page_{k}"})
+    # L and R: the game font's button pictograms (External.bfotf U+E044 / U+E045).
+    for x, glyph, target in ((40, "", left), (1152, "", right)):
+        widgets.append({"type": "button", "rect": [x, 14, 48, 48], "text": glyph,
+                        "text_scale": 8, "align": "center", "border": 0, "bg": CLEAR,
+                        "color": TEXT, "on_tap": f"ui_page_{target}"})
+    widgets.append({"type": "label", "rect": [8, 1052, 600, 24],
+                    "text_bind": f"totk.{domain}.source", "text_scale": 4,
+                    "text_map": {"1": "From last save", "2": "Live"}, "color": DIM,
+                    "need_bind": f"totk.{domain}.valid"})
     return widgets
 
 
@@ -72,7 +126,7 @@ def notice():
     error, checksum or platform); absent totk.ready reads as 0, so it shows."""
     gate = {"hide_bind": "totk.ready", "hide_eq": 1}
     return [
-        {"type": "rect", "rect": [0, 0, 1240, 1080], "bg": BG, "color": "#00000000",
+        {"type": "rect", "rect": [0, 0, 1240, 1080], "bg": BG, "color": CLEAR,
          "input_block": True, **gate},
         {"type": "label", "rect": [100, 350, 1040, 150], "text": "Companion unavailable",
          "text_scale": 5, "color": TEXT, "wrap_width": 1040, **gate},
@@ -81,65 +135,198 @@ def notice():
     ]
 
 
-def gear_page(derived, actions):
-    widgets = [{"type": "rect", "rect": [0, 0, 1240, 120], "bg": PANEL, "color": "#00000000",
-                "need_bind": "totk.status.valid"}]
-    for k, (caption, key, extra) in enumerate(STATUS):
-        x = 310 * k
-        has = f"ui.has.{key[5:]}"
-        derived.append({"name": has, "expr": exists(key, *([extra["max_bind"]]
-                                                           if "max_bind" in extra else []))})
-        widgets.append({"type": "label", "rect": [x + 24, 16, 270, 30], "text": caption,
-                        "color": DIM, "need_bind": "totk.status.valid"})
-        widgets.append({"type": "value", "rect": [x + 24, 56, 270, 50], "bind": key,
-                        "text_scale": 5, "color": TEXT, "need_bind": has, **extra})
-    for k, (slot, caption, value_field, prefix) in enumerate(SLOTS):
-        x = 24 + 300 * k
-        g = f"totk.gear.{slot}"
-        known, none, has_value = f"ui.gear.{slot}.known", f"ui.gear.{slot}.none", \
-            f"ui.gear.{slot}.has_value"
-        # .present: 1 the item, 0 "None", absent nothing (need_bind on a missing value hides).
-        derived.append({"name": known, "expr": exists(f"{g}.present")})
-        derived.append({"name": none, "cmp": "eq", "a": f"{g}.present", "b": 0})
-        derived.append({"name": has_value, "expr": exists(f"{g}.{value_field}")})
-        actions[f"gear_swap_{k}"] = {"kind": "module", "action": "totk.gear.swap", "argument": k}
+def inventory_side(derived, actions):
+    """Left side (x 0-632): category tabs, the grid's frame and empty states, the detail pane's
+    frame. T6 adds the grid cells and the detail pane's content."""
+    widgets = []
+    for k, (short, _) in enumerate(CATEGORIES):
+        x = 8 + 78 * k
+        current = f"ui.inv.tab{k}"
+        derived.append({"name": current, "cmp": "eq", "a": "totk.inv.tab", "b": k})
+        actions[f"inv_tab_{k}"] = {"kind": "module", "action": "totk.inv.tab", "argument": k}
+        tab = [{"type": "button", "rect": [x, 84, 78, 72], "text": "", "border": 2,
+                "bg": PANEL, "color": EDGE, "on_tap": f"inv_tab_{k}"},
+               {"type": "label", "rect": [x + 39, 126, 0, 20], "text": short, "text_scale": 4,
+                "align": "center", "color": TEXT}]
+        widgets += textured(f"cat_{k}", [x + 11, 92, 56, 56], tab)
         widgets += [
-            # Slot caption, 10 px text 5 px clear of the strip (ends at 120) and the card (140).
-            {"type": "label", "rect": [x + 4, 125, 276, 10], "text": caption, "text_scale": 2,
-             "color": DIM, "need_bind": known},
-            {"type": "rect", "rect": [x, 140, 284, 430], "bg": PANEL, "color": FRAME,
-             "on_hold": f"gear_swap_{k}", "need_bind": known},
-            {"type": "image", "rect": [x + 62, 160, 160, 160], "src_bind": f"{g}.icon",
-             "need_bind": f"{g}.present"},
-            {"type": "label", "rect": [x + 12, 330, 260, 90], "bind_text": f"{g}.name",
-             "color": TEXT, "wrap_width": 260, "max_lines": 2, "need_bind": f"{g}.present"},
-            {"type": "value", "rect": [x + 12, 430, 260, 40], "bind": f"{g}.{value_field}",
-             "text": prefix, "color": TEXT, "need_bind": has_value},
-            # Centre-aligned text is centred on rect x (the runtime's anchor), here the card's.
-            {"type": "label", "rect": [x + 142, 300, 0, 40], "text": "None", "text_scale": 4,
-             "align": "center", "color": DIM, "need_bind": none},
+            {"type": "value", "rect": [x + 70, 90, 0, 20], "bind": f"totk.inv.tab{k}.count",
+             "text_scale": 4, "align": "right", "color": VALUE, "need_bind": "totk.inv.valid"},
+            {"type": "rect", "rect": [x + 8, 152, 62, 4], "bg": SELECT, "color": CLEAR,
+             "need_bind": current},
         ]
-        if slot in FUSES:
-            widgets += [
-                {"type": "image", "rect": [x + 190, 160, 64, 64], "src_bind": f"{g}.fuse_icon",
-                 "need_bind": f"{g}.fuse"},
-                {"type": "label", "rect": [x + 12, 476, 260, 36], "bind_text": f"{g}.fuse_name",
-                 "color": DIM, "wrap_width": 260, "max_lines": 1, "need_bind": f"{g}.fuse"},
-            ]
-        if slot in EFFECTS:
-            widgets.append({"type": "label", "rect": [x + 12, 520, 260, 36],
-                            "bind_text": f"{g}.effect", "color": ACCENT, "wrap_width": 260,
-                            "max_lines": 1, "need_bind": f"{g}.present"})
-    widgets.append({"type": "label", "rect": [620, 400, 0, 60], "text": "No save data yet",
-                    "text_scale": 5, "align": "center", "color": DIM,
-                    "need_bind": "!totk.gear.valid"})
+    derived.append({"name": "ui.inv.empty", "cmp": "eq", "a": "totk.inv.count", "b": 0})
+    widgets += [
+        {"type": "label", "rect": [16, 162, 400, 28], "text_bind": "totk.inv.tab",
+         "text_map": {str(k): name for k, (_, name) in enumerate(CATEGORIES)},
+         "text_scale": 5, "color": TEXT, "need_bind": "totk.inv.valid"},
+        *panel([8, 194, 624, 520]),
+        {"type": "label", "rect": [320, 430, 0, 40], "text": "No save data yet",
+         "text_scale": 5, "align": "center", "color": DIM, "need_bind": "!totk.inv.valid"},
+        {"type": "label", "rect": [320, 430, 0, 40], "text": "Nothing here", "text_scale": 5,
+         "align": "center", "color": DIM, "need_bind": "ui.inv.empty"},
+        *panel([8, 722, 624, 206], "detail"),
+    ]
     return widgets
 
 
-def placeholder_page():
-    """Abilities, Inventory and Map are built in T5-T7; until then their tab shows this."""
-    return [{"type": "label", "rect": [620, 400, 0, 60], "text": "Coming in a later update",
-             "text_scale": 5, "align": "center", "color": DIM}]
+def slot_states(derived, slot, value_field):
+    """The gates of a gear slot's three states from .present: 1 the item, 0 "None", absent
+    nothing (need_bind on a missing value hides)."""
+    g = f"totk.gear.{slot}"
+    known, none, has_value = f"ui.gear.{slot}.known", f"ui.gear.{slot}.none", \
+        f"ui.gear.{slot}.has_value"
+    derived.append({"name": known, "expr": exists(f"{g}.present")})
+    derived.append({"name": none, "cmp": "eq", "a": f"{g}.present", "b": 0})
+    derived.append({"name": has_value, "expr": exists(f"{g}.{value_field}")})
+    return g, known, none, has_value
+
+
+def status_column(derived, actions):
+    """Right column, top: hearts and stamina, then the rupee, battery and arrow chips."""
+    hearts = has(derived, "totk.status.hearts", "totk.status.max_hearts")
+    stamina = has(derived, "totk.status.max_stamina")
+    widgets = panel([640, 84, 592, 120])
+    # Bars end at x 1052 (R5: 1072) so a right-aligned "Max 3000" at scale 5 fits beside them
+    # in the built-in font as well.
+    for y, role, colour, bar, value in (
+            (96, "heart", HEART, {"bind": "totk.status.hearts",
+                                  "max_bind": "totk.status.max_hearts", "need_bind": hearts},
+             {"bind": "totk.status.hearts", "max_bind": "totk.status.max_hearts",
+              "max_sep": "/", "need_bind": hearts}),
+            (150, "stamina", STAMINA, {"bind": "totk.status.max_stamina",
+                                       "max_bind": "totk.status.max_stamina",
+                                       "need_bind": stamina},
+             {"bind": "totk.status.max_stamina", "text": "Max ", "need_bind": stamina})):
+        widgets += textured(role, [656, y, 44, 44], [
+            {"type": "rect", "rect": [664, y + 8, 28, 28], "bg": colour, "color": CLEAR}])
+        widgets += [
+            {"type": "bar", "rect": [712, y + 8, 340, 22], "bg": BG, "color": colour, **bar},
+            {"type": "value", "rect": [1220, y + 2, 0, 32], "text_scale": 5, "align": "right",
+             "color": VALUE, **value},
+        ]
+    g, known, none, has_count = slot_states(derived, "arrow", "count")
+    actions["gear_swap_3"] = {"kind": "module", "action": "totk.gear.swap", "argument": 3}
+    chips = [
+        (640, "rupee", "Rupees", "totk.status.valid",
+         {"bind": "totk.status.rupees", "group": True,
+          "need_bind": has(derived, "totk.status.rupees")}),
+        (840, "battery", "Battery", "totk.status.valid",
+         {"bind": "totk.status.max_battery", "div": 100,
+          "need_bind": has(derived, "totk.status.max_battery")}),
+        (1040, None, "Arrows", known,
+         {"bind": f"{g}.count", "text": "x", "need_bind": has_count}),
+    ]
+    for x, role, caption, gate, value in chips:
+        chip = {"type": "rect", "rect": [x, 212, 192, 64], "bg": PANEL, "color": EDGE}
+        if role is None:
+            chip["on_hold"] = "gear_swap_3"
+        icon = [x + 12, 224, 40, 40]
+        frame = [{"type": "rect", "rect": icon, "bg": CLEAR, "color": EDGE}]
+        widgets += [chip, *(textured(role, icon, frame) if role else frame)]
+        if role is None:
+            widgets.append({"type": "image", "rect": icon, "src_bind": f"{g}.icon",
+                            "need_bind": f"{g}.present"})
+            widgets.append({"type": "label", "rect": [x + 64, 246, 120, 20], "text": "None",
+                            "text_scale": 4, "color": DIM, "need_bind": none})
+        widgets += [
+            {"type": "label", "rect": [x + 64, 220, 120, 20], "text": caption, "text_scale": 4,
+             "color": DIM, "need_bind": gate},
+            {"type": "value", "rect": [x + 64, 244, 120, 26], "text_scale": 5, "color": VALUE,
+             **value},
+        ]
+    return widgets
+
+
+def equipment(derived, actions):
+    """Right column, below: the equipment panel with the weapon's plate (no 3D Link, R3), the
+    weapon, bow and shield cards, and the bow's and shield's effects."""
+    widgets = panel([640, 284, 592, 644], "equip_panel")
+    w = "totk.gear.weapon"
+    plate = [{"type": "rect", "rect": [800, 300, 272, 612], "bg": BG, "color": EDGE}]
+    widgets += textured("plate", [800, 300, 272, 612], plate)
+    widgets += [
+        {"type": "image", "rect": [808, 420, 256, 256], "src_bind": f"{w}.icon",
+         "need_bind": f"{w}.present"},
+        {"type": "image", "rect": [1000, 420, 72, 72], "src_bind": f"{w}.fuse_icon",
+         "need_bind": f"{w}.fuse"},
+        {"type": "label", "rect": [936, 700, 0, 60], "bind_text": f"{w}.name", "text_scale": 5,
+         "align": "center", "color": TEXT, "wrap_width": 256, "max_lines": 2, "line_gap": 8,
+         "need_bind": f"{w}.present"},
+        {"type": "label", "rect": [936, 768, 0, 26], "bind_text": f"{w}.effect",
+         "text_scale": 4, "align": "center", "color": VALUE, "need_bind": f"{w}.present"},
+        {"type": "label", "rect": [936, 800, 0, 24], "bind_text": f"{w}.fuse_name",
+         "text_scale": 4, "align": "center", "color": DIM, "wrap_width": 256, "max_lines": 1,
+         "need_bind": f"{w}.fuse"},
+        {"type": "label", "rect": [936, 540, 0, 40], "text": "No save data yet",
+         "text_scale": 4, "align": "center", "color": DIM, "need_bind": "!totk.gear.valid"},
+    ]
+    for k, (slot, caption, y) in enumerate(CARDS):
+        g, known, none, has_life = slot_states(derived, slot, "life")
+        actions[f"gear_swap_{k}"] = {"kind": "module", "action": "totk.gear.swap", "argument": k}
+        card = [{"type": "rect", "rect": [1100, y + 24, 112, 112], "bg": BG, "color": EDGE,
+                 "on_hold": f"gear_swap_{k}", "need_bind": known}]
+        widgets.append({"type": "label", "rect": [1156, y, 0, 22], "text": caption,
+                        "text_scale": 4, "align": "center", "color": DIM, "need_bind": known})
+        widgets += textured("slot", [1100, y + 24, 112, 112], card, need_bind=known)
+        widgets += [
+            {"type": "image", "rect": [1104, y + 28, 104, 104], "src_bind": f"{g}.icon",
+             "need_bind": f"{g}.present"},
+            # Centre-aligned text is centred on rect x (the runtime's anchor), here the card's.
+            {"type": "label", "rect": [1156, y + 70, 0, 20], "text": "None", "text_scale": 4,
+             "align": "center", "color": DIM, "need_bind": none},
+            {"type": "value", "rect": [1156, y + 140, 0, 24], "bind": f"{g}.life",
+             "text_scale": 4, "align": "center", "color": VALUE, "need_bind": has_life},
+        ]
+        if slot in FUSES:
+            widgets.append({"type": "image", "rect": [1172, y + 24, 40, 40],
+                            "src_bind": f"{g}.fuse_icon", "need_bind": f"{g}.fuse"})
+        if slot != "weapon":  # the weapon's effect is on the plate
+            widgets.append({"type": "label", "rect": [652, y + 70, 140, 52],
+                            "bind_text": f"{g}.effect", "text_scale": 4, "color": VALUE,
+                            "wrap_width": 140, "max_lines": 2, "need_bind": f"{g}.present"})
+    return widgets
+
+
+def ability_bar(actions):
+    """Bottom: the seven abilities, owned at full colour, others dimmed; taps are refused."""
+    widgets = panel([0, 940, 1240, 108], "bar_bg")
+    for k, (a, name, _) in enumerate(ABILITIES):
+        x, owned = 18 + 172 * k, f"totk.ability.{a}.owned"
+        locked = {"hide_bind": owned, "hide_eq": 1}
+        actions[f"ability_select_{k}"] = {"kind": "module", "action": "totk.ability.select",
+                                          "argument": k}
+        icon = [x + 54, 946, 64, 64]
+        widgets.append({"type": "rect", "rect": icon, "bg": CLEAR, "color": EDGE,
+                        "on_tap": f"ability_select_{k}"})
+        if TEX[f"ability_{a}"]:
+            widgets += [{"type": "image", "rect": icon, **TEX[f"ability_{a}"],
+                         "need_bind": owned},
+                        {"type": "image", "rect": icon, **TEX[f"ability_{a}"],
+                         "tint": LOCKED, **locked}]
+        widgets += [
+            {"type": "label", "rect": [x + 86, 1014, 0, 22], "text": name, "text_scale": 4,
+             "align": "center", "color": TEXT, "need_bind": owned},
+            {"type": "label", "rect": [x + 86, 1014, 0, 22], "text": name, "text_scale": 4,
+             "align": "center", "color": DIM, **locked},
+        ]
+    return widgets
+
+
+def home_page(derived, actions):
+    return (inventory_side(derived, actions) + status_column(derived, actions) +
+            equipment(derived, actions) + ability_bar(actions))
+
+
+def later_page(domain):
+    """Abilities (T5) and Map (T7): the frame and the empty state until their packet."""
+    return [*panel([16, 92, 1208, 944]),
+            {"type": "label", "rect": [620, 480, 0, 60], "text": "No save data yet",
+             "text_scale": 5, "align": "center", "color": DIM,
+             "need_bind": f"!totk.{domain}.valid"},
+            {"type": "label", "rect": [620, 480, 0, 60], "text": "Coming in a later update",
+             "text_scale": 5, "align": "center", "color": DIM,
+             "need_bind": f"totk.{domain}.valid"}]
 
 
 def manifest():
@@ -148,8 +335,8 @@ def manifest():
         actions[f"ui_page_{k}"] = {"kind": "module", "action": "totk.ui.page", "argument": k}
     pages = []
     for k, (page_id, _, domain) in enumerate(PAGES):
-        body = gear_page(derived, actions) if page_id == "gear" else placeholder_page()
-        pages.append({"id": page_id, "widgets": body + chrome(k, domain) + notice()})
+        body = home_page(derived, actions) if page_id == "home" else later_page(domain)
+        pages.append({"id": page_id, "widgets": body + header(k, domain) + notice()})
     return {
         "format": 1,
         "title_id": "0100F2C0115B6000",

@@ -46,6 +46,7 @@ inline constexpr char kInvSelValue[] = "totk.inv.sel.value";
 inline constexpr char kInvSelFuseName[] = "totk.inv.sel.fuse_name";
 inline constexpr char kInvSelEffect[] = "totk.inv.sel.effect";
 inline constexpr char kInvSelHearts[] = "totk.inv.sel.hearts";
+inline constexpr char kInvSelEquipped[] = "totk.inv.sel.equipped";
 inline constexpr char kMapValid[] = "totk.map.valid";
 inline constexpr char kMapSource[] = "totk.map.source";
 inline constexpr char kMapX[] = "totk.map.x";
@@ -58,8 +59,8 @@ inline constexpr const char* kFixed[] = {
     kStatusMaxStamina, kStatusRupees, kStatusMaxBattery, kGearValid,       kGearSource,
     kAbilityValid,   kAbilitySource,  kInvValid,         kInvSource,       kInvCount,
     kInvSelIcon,     kInvSelName,     kInvSelKind,       kInvSelValue,     kInvSelFuseName,
-    kInvSelEffect,   kInvSelHearts,   kMapValid,         kMapSource,       kMapX,
-    kMapY,           kNamesValid};
+    kInvSelEffect,   kInvSelHearts,   kInvSelEquipped,   kMapValid,        kMapSource,
+    kMapX,           kMapY,           kNamesValid};
 
 // ---- key families -------------------------------------------------------------------------------
 enum GearField { kPresent, kId, kName, kIcon, kLife, kCount, kFuse, kFuseName, kFuseIcon, kEffect,
@@ -85,9 +86,9 @@ inline constexpr const char* kActionNames[kActions] = {
     "totk.ui.page",  "totk.inv.tab",  "totk.inv.tab_next",  "totk.inv.select",
     "totk.map.layer", "totk.gear.swap", "totk.inv.use", "totk.ability.select"};
 // Argument range [0, n) per action; 0: any argument (tab_next ignores it, select and use take
-// the slot index from "$payload"). ui.page: 0 gear, 1 abilities, 2 inventory, 3 map; inv.tab:
+// the slot index from "$payload"). ui.page: 0 home, 1 abilities, 2 map; inv.tab:
 // the 8 tabs; map.layer: 0 surface, 1 sky, 2 depths; gear.swap: <s>; ability.select: <a>.
-inline constexpr int kActionArgs[kActions] = {4, 8, 0, 0, 3, 4, 0, 7};
+inline constexpr int kActionArgs[kActions] = {3, 8, 0, 0, 3, 4, 0, 7};
 static_assert(kActionArgs[kActGearSwap] == std::size(kGearSlotNames) &&
               kActionArgs[kActAbilitySelect] == std::size(kAbilityNames));
 

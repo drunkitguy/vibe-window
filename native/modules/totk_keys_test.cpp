@@ -28,8 +28,8 @@ int main() {
     assert(pub::ActionIndex("TOTK.UI.PAGE") == pub::kActions);
     assert(pub::ActionIndex("totk.ui.page ") == pub::kActions);
 
-    // Argument ranges: page 0-3, tab 0-7, layer 0-2, gear.swap <s>, ability.select <a>; 0 = any.
-    assert(pub::kActionArgs[pub::kActPage] == 4 && pub::kActionArgs[pub::kActInvTab] == 8 &&
+    // Argument ranges: page 0-2 (home, abilities, map), tab 0-7, layer 0-2, gear.swap <s>, ability.select <a>; 0 = any.
+    assert(pub::kActionArgs[pub::kActPage] == 3 && pub::kActionArgs[pub::kActInvTab] == 8 &&
            pub::kActionArgs[pub::kActMapLayer] == 3 && pub::kActionArgs[pub::kActGearSwap] == 4 &&
            pub::kActionArgs[pub::kActAbilitySelect] == 7 &&
            pub::kActionArgs[pub::kActInvTabNext] == 0 && pub::kActionArgs[pub::kActInvSelect] == 0 &&
@@ -48,7 +48,7 @@ int main() {
     for (const char* a : pub::kAbilityNames)
         assert(pub::Listed(pub::Expand(pub::kAbilityOwned, a)));
     assert(pub::Listed("totk.inv.0.icon") && pub::Listed("totk.inv.399.fuse_icon"));
-    assert(pub::Listed("totk.names.valid"));
+    assert(pub::Listed("totk.names.valid") && pub::Listed("totk.inv.sel.equipped"));
     assert(pub::Listed("totk.inv.tab0.count") && pub::Listed("totk.inv.tab7.count"));
     for (const char* bad :
          {"totk.gear.head.present", "totk.gear..present", "totk.gear.weapon.colour",

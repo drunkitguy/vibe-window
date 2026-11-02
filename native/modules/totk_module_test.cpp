@@ -296,7 +296,17 @@ int main() {
         {"totk.inv.tab5.count", 1},
         {"totk.inv.tab6.count", 1},
         {"totk.inv.tab7.count", 1},
-        {"totk.inv.count", 2}};
+        {"totk.inv.count", 2},
+        // Page 0 is home: the current tab's list (weapons) and the selection (slot 0).
+        {"totk.inv.0.kind", 1},
+        {"totk.inv.0.value", 30},
+        {"totk.inv.0.equipped", 0},
+        {"totk.inv.1.kind", 1},
+        {"totk.inv.1.value", 12},
+        {"totk.inv.1.equipped", 1},
+        {"totk.inv.sel.kind", 1},
+        {"totk.inv.sel.value", 30},
+        {"totk.inv.sel.equipped", 0}};
     assert(h.ints == page0);
     const Host::Texts page0_text{
         {"totk.gear.weapon.id", "Weapon_Spear_002"},
@@ -311,13 +321,20 @@ int main() {
         {"totk.gear.bow.effect", "Rapid Fire"},
         {"totk.gear.arrow.id", "FireArrow"},
         {"totk.gear.arrow.name", "FireArrow"},
-        {"totk.gear.arrow.icon", "romfs:/UI/Tex/Icon/FireArrow.bntx.zs"}};
+        {"totk.gear.arrow.icon", "romfs:/UI/Tex/Icon/FireArrow.bntx.zs"},
+        {"totk.inv.0.icon", "romfs:/UI/Tex/Icon/Weapon_Sword_001.bntx.zs"},
+        {"totk.inv.0.name", "Weapon_Sword_001"},
+        {"totk.inv.1.icon", "romfs:/UI/Tex/Icon/Weapon_Spear_002.bntx.zs"},
+        {"totk.inv.1.name", "Weapon_Spear_002"},
+        {"totk.inv.1.fuse_icon", "romfs:/UI/Tex/Icon/Item_Ruby.bntx.zs"},
+        {"totk.inv.sel.icon", "romfs:/UI/Tex/Icon/Weapon_Sword_001.bntx.zs"},
+        {"totk.inv.sel.name", "Weapon_Sword_001"}};
     assert(h.texts == page0_text);
     assert((h.floats == Host::Floats{{"totk.map.x", 100.5}, {"totk.map.y", 300.25}}));
     assert(h.MemoryCalls() == 0);
 
-    // The inventory page publishes the current tab's list and the selection.
-    in.page = kPageInventory;
+    // The home page publishes the current tab's list and the selection.
+    in.page = kPageHome;
     in.tab = 1;
     in.sel = 2;
     SampleClean(m, instance, h);
@@ -331,10 +348,12 @@ int main() {
     assert(h.texts.at("totk.inv.sel.name") == "FireArrow" && h.ints.at("totk.inv.sel.kind") == 2 &&
            h.ints.at("totk.inv.sel.value") == 7 && !h.ints.contains("totk.inv.sel.hearts") &&
            !h.texts.contains("totk.inv.sel.effect") && !h.texts.contains("totk.inv.sel.fuse_name"));
+    assert(h.ints.at("totk.inv.sel.equipped") == 1); // FireArrow is Pouch.Arrow.EquipIndex[0]
     in.tab = 0;
     in.sel = 1;
     SampleClean(m, instance, h);
     assert(h.texts.at("totk.inv.1.fuse_icon") == "romfs:/UI/Tex/Icon/Item_Ruby.bntx.zs");
+    assert(h.ints.at("totk.inv.sel.equipped") == 1);
     assert(h.texts.at("totk.inv.sel.fuse_name") == "Item_Ruby" &&
            h.texts.at("totk.inv.sel.effect") == "Attack Up+");
     in.tab = 5;
@@ -344,7 +363,7 @@ int main() {
     in.tab = 3; // armor: kind 0, no value, equipped not known
     SampleClean(m, instance, h);
     assert(h.ints.at("totk.inv.0.kind") == 0 && !h.ints.contains("totk.inv.0.value") &&
-           !h.ints.contains("totk.inv.0.equipped"));
+           !h.ints.contains("totk.inv.0.equipped") && !h.ints.contains("totk.inv.sel.equipped"));
     in.tab = 4; // materials: no EquipIndex, so equipped not known
     SampleClean(m, instance, h);
     assert(h.ints.at("totk.inv.0.value") == 5 && !h.ints.contains("totk.inv.0.equipped"));
@@ -355,9 +374,13 @@ int main() {
            h.ints.at("totk.inv.tab7.count") == 1 && !h.texts.contains("totk.inv.0.name"));
     in.tab = 0;
     in.sel = 0;
-    in.page = 0; // other pages: no list
-    SampleClean(m, instance, h);
-    assert(!h.texts.contains("totk.inv.0.name") && h.ints.at("totk.inv.count") == 2);
+    for (int other : {1, 2}) { // abilities and map: no list, no selection
+        in.page = other;
+        SampleClean(m, instance, h);
+        assert(!h.texts.contains("totk.inv.0.name") && !h.ints.contains("totk.inv.sel.equipped") &&
+               h.ints.at("totk.inv.count") == 2 && h.ints.at("totk.gear.weapon.present") == 1);
+    }
+    in.page = kPageHome;
 
     // Unchanged captions: no re-read.
     PollNow(instance);
@@ -481,7 +504,7 @@ int main() {
     for (const char* key : {"totk.gear.weapon.icon", "totk.gear.weapon.fuse_icon",
                             "totk.gear.arrow.icon"})
         assert(!h.texts.contains(key));
-    in.page = kPageInventory;
+    in.page = kPageHome;
     SampleClean(m, instance, h);
     assert(h.texts.at("totk.inv.0.name") == "../Pack/X" &&
            h.texts.at("totk.inv.sel.name") == "../Pack/X");
@@ -489,7 +512,6 @@ int main() {
         assert(!h.texts.contains(key));
     for (const auto& [key, value] : h.texts)
         assert(!value.empty());
-    in.page = 0;
     d.Put(Slot(1, "caption.sav"), Caption(2024, 3, 1, 8, 3, false)); // back to the fixture
     PollNow(instance);
     PollNow(instance);
@@ -555,18 +577,19 @@ int main() {
         return ext->on_action(instance, name, arg) == EDEN_DSMOD_TRUE;
     };
     constexpr std::int64_t kMin = INT64_MIN, kMax = INT64_MAX;
-    // totk.ui.page: 0-3 accepted and published; anything else refused, the page unchanged.
-    for (int p = 0; p < 4; ++p) {
+    // totk.ui.page: 0-2 (home, abilities, map) accepted and published; anything else refused, the
+    // page unchanged.
+    for (int p = 0; p < 3; ++p) {
         assert(act("totk.ui.page", p));
         SampleClean(m, instance, h);
         assert(h.ints.at("totk.ui.page") == p);
     }
-    for (std::int64_t bad : {std::int64_t(-1), std::int64_t(4), kMin, kMax, std::int64_t(1) << 32})
+    for (std::int64_t bad : {std::int64_t(-1), std::int64_t(3), kMin, kMax, std::int64_t(1) << 32})
         assert(!act("totk.ui.page", bad));
     SampleClean(m, instance, h);
-    assert(h.ints.at("totk.ui.page") == 3);
+    assert(h.ints.at("totk.ui.page") == 2);
     // totk.inv.tab 0-7 resets the selection; totk.inv.select accepted only below totk.inv.count.
-    assert(act("totk.ui.page", kPageInventory));
+    assert(act("totk.ui.page", kPageHome));
     assert(act("totk.inv.tab", 1));
     assert(act("totk.inv.select", 2));
     SampleClean(m, instance, h);
@@ -610,7 +633,7 @@ int main() {
     assert(!ext->on_action(instance, nullptr, 0) && !ext->on_action(nullptr, "totk.ui.page", 0));
     // Refusals changed nothing.
     SampleClean(m, instance, h);
-    assert(h.ints.at("totk.ui.page") == kPageInventory && h.ints.at("totk.inv.tab") == 0 &&
+    assert(h.ints.at("totk.ui.page") == kPageHome && h.ints.at("totk.inv.tab") == 0 &&
            h.ints.at("totk.inv.sel") == 0 && h.ints.at("totk.map.layer") == 2);
     // One log line per refused action name, written by the next tick; never again.
     h.logs.clear();
@@ -631,7 +654,7 @@ int main() {
 
     // Every key published on the full fixture, each page and tab selected, is listed in
     // totk_keys.h (the checker holds the manifest to the same list).
-    for (int p = 0; p < 4; ++p) {
+    for (int p = 0; p < 3; ++p) {
         assert(act("totk.ui.page", p));
         for (int t = 0; t < totk::kTabs; ++t) {
             assert(act("totk.inv.tab", t));
@@ -650,7 +673,7 @@ int main() {
     assert(h.ints == page0 && h.texts == page0_text);
 
     // CA10: no allocation in 1000 samples on each page with the full fixture snapshot.
-    for (int page = 0; page < 4; ++page) {
+    for (int page = 0; page < 3; ++page) {
         assert(act("totk.ui.page", page));
         in.tab = 1;
         in.sel = 1;
@@ -732,13 +755,15 @@ int main() {
         auto expected = page0_text;
         expected["totk.gear.weapon.name"] = "Traveler's Spear";
         expected["totk.gear.weapon.fuse_name"] = "Ruby";
+        expected["totk.inv.0.name"] = expected["totk.inv.sel.name"] = "Traveler's Sword";
+        expected["totk.inv.1.name"] = "Traveler's Spear";
         assert(hn.texts == expected);
         {
             std::scoped_lock lock{hn.log_mutex};
             assert((hn.logs ==
                     std::vector<std::string>{"totk: item names from Mals/USen.Product.121 (6 labels)"}));
         }
-        ni.page = kPageInventory;
+        ni.page = kPageHome;
         ni.tab = 1;
         ni.sel = 1;
         SampleClean(m, named, hn);
