@@ -330,7 +330,8 @@ int main() {
         [](Live& v) { v.y = -1500.5f; }, [](Live& v) { v.y = 3500.5f; },
         [](Live& v) { v.z = -5000.5f; }, [](Live& v) { v.z = 5000.5f; },
         [](Live& v) { v.x = NAN; },      [](Live& v) { v.y = NAN; },
-        [](Live& v) { v.z = INFINITY; },
+        [](Live& v) { v.z = NAN; },      [](Live& v) { v.x = INFINITY; },
+        [](Live& v) { v.y = INFINITY; }, [](Live& v) { v.z = INFINITY; },
     };
     for (const auto& change : out_of_bounds) {
         Host h;

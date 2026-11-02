@@ -124,7 +124,7 @@ def header(page_index, domain):
         widgets.append({"type": "button", "rect": [x, 14, 48, 48], "text": glyph,
                         "text_scale": 8, "align": "center", "border": 0, "bg": CLEAR,
                         "color": TEXT, "on_tap": f"ui_page_{target}"})
-    if domain != "map":  # the map page shows the save's position there instead
+    if domain != "map":  # the map page shows its position line (source, x, z) there instead
         widgets.append({"type": "label", "rect": [8, 1052, 600, 24],
                         "text_bind": f"totk.{domain}.source", "text_scale": 4,
                         "text_map": {"1": "From last save", "2": "Live"}, "color": DIM,

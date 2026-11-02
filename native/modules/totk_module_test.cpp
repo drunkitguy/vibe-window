@@ -935,6 +935,13 @@ int main() {
         // status (out of bounds) and every save domain stay empty.
         PollNow(i); // the worker probes the tiles
         assert(act("totk.ui.page", kPageMap));
+        // A pill pressed before the first valid position: that first one still moves the map to
+        // Link's layer (the Surface).
+        h.Put<float>(at, NAN);
+        assert(act("totk.map.layer", 2));
+        SampleClean(m, i, h);
+        assert(h.ints.at("totk.map.layer") == 2);
+        h.Put<float>(at, -1234.5f);
         SampleClean(m, i, h);
         assert(map() == live && h.floats == live_xy);
         assert(h.texts.at("totk.map.tile.0") == dir + "G_00-00_02.bntx.zs");
