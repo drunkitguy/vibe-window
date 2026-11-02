@@ -286,17 +286,17 @@ int main() {
     const Host::Texts page0_text{
         {"totk.gear.weapon.id", "Weapon_Spear_002"},
         {"totk.gear.weapon.name", "Weapon_Spear_002"},
-        {"totk.gear.weapon.icon", "module:totk:icon/Weapon_Spear_002"},
+        {"totk.gear.weapon.icon", "romfs:/UI/Tex/Icon/Weapon_Spear_002.bntx.zs"},
         {"totk.gear.weapon.fuse_name", "Item_Ruby"},
-        {"totk.gear.weapon.fuse_icon", "module:totk:icon/Item_Ruby"},
+        {"totk.gear.weapon.fuse_icon", "romfs:/UI/Tex/Icon/Item_Ruby.bntx.zs"},
         {"totk.gear.weapon.effect", "Attack Up+"},
         {"totk.gear.bow.id", "Weapon_Bow_001"},
         {"totk.gear.bow.name", "Weapon_Bow_001"},
-        {"totk.gear.bow.icon", "module:totk:icon/Weapon_Bow_001"},
+        {"totk.gear.bow.icon", "romfs:/UI/Tex/Icon/Weapon_Bow_001.bntx.zs"},
         {"totk.gear.bow.effect", "Rapid Fire"},
         {"totk.gear.arrow.id", "FireArrow"},
         {"totk.gear.arrow.name", "FireArrow"},
-        {"totk.gear.arrow.icon", "module:totk:icon/FireArrow"}};
+        {"totk.gear.arrow.icon", "romfs:/UI/Tex/Icon/FireArrow.bntx.zs"}};
     assert(h.texts == page0_text);
     assert((h.floats == Host::Floats{{"totk.map.x", 100.5}, {"totk.map.y", 300.25}}));
     assert(h.MemoryCalls() == 0);
@@ -309,7 +309,7 @@ int main() {
     assert(h.ints.at("totk.inv.count") == 3);
     assert(h.texts.at("totk.inv.0.name") == "Weapon_Bow_001" && h.ints.at("totk.inv.0.kind") == 1 &&
            h.ints.at("totk.inv.0.value") == 40 && h.ints.at("totk.inv.0.equipped") == 1);
-    assert(h.texts.at("totk.inv.1.icon") == "module:totk:icon/NormalArrow" &&
+    assert(h.texts.at("totk.inv.1.icon") == "romfs:/UI/Tex/Icon/NormalArrow.bntx.zs" &&
            h.ints.at("totk.inv.1.value") == 50 && h.ints.at("totk.inv.1.equipped") == 0);
     assert(h.texts.at("totk.inv.2.name") == "FireArrow" && h.ints.at("totk.inv.2.equipped") == 1);
     assert(!h.ints.contains("totk.inv.3.kind") && !h.texts.contains("totk.inv.0.fuse_icon"));
@@ -319,7 +319,7 @@ int main() {
     in.tab = 0;
     in.sel = 1;
     SampleClean(m, instance, h);
-    assert(h.texts.at("totk.inv.1.fuse_icon") == "module:totk:icon/Item_Ruby");
+    assert(h.texts.at("totk.inv.1.fuse_icon") == "romfs:/UI/Tex/Icon/Item_Ruby.bntx.zs");
     assert(h.texts.at("totk.inv.sel.fuse_name") == "Item_Ruby" &&
            h.texts.at("totk.inv.sel.effect") == "Attack Up+");
     in.tab = 5;
@@ -444,6 +444,43 @@ int main() {
     SampleClean(m, instance, h);
     assert(h.ints == page0 && h.texts == page0_text);
 
+    // Ids outside [A-Za-z0-9_]{1,63}: the ids are published, no icon key is (gear, fuse,
+    // inventory and selection).
+    d.Put(Slot(3, "progress.sav"), SaveBuilder()
+                                       .IntArray("Pouch.Weapon.EquipIndex", {0})
+                                       .String64Array("Pouch.Weapon.Content.Name", {"../Pack/X"})
+                                       .IntArray("Pouch.Weapon.Content.Life", {5})
+                                       .String64Array("Pouch.Weapon.Content.Combined.Name", {"a-b"})
+                                       .String64Array("Pouch.Arrow.Content.Name", {"Arrow.zs"})
+                                       .IntArray("Pouch.Arrow.Content.StockNum", {3})
+                                       .IntArray("Pouch.Arrow.EquipIndex", {0})
+                                       .Build());
+    d.Put(Slot(3, "caption.sav"), Caption(2024, 3, 1, 8, 2, false));
+    PollNow(instance);
+    PollNow(instance);
+    SampleClean(m, instance, h);
+    assert(h.texts.at("totk.gear.weapon.id") == "../Pack/X" &&
+           h.texts.at("totk.gear.weapon.fuse_name") == "a-b" &&
+           h.texts.at("totk.gear.arrow.id") == "Arrow.zs" &&
+           h.ints.at("totk.gear.weapon.fuse") == 1);
+    for (const char* key : {"totk.gear.weapon.icon", "totk.gear.weapon.fuse_icon",
+                            "totk.gear.arrow.icon"})
+        assert(!h.texts.contains(key));
+    in.page = kPageInventory;
+    SampleClean(m, instance, h);
+    assert(h.texts.at("totk.inv.0.name") == "../Pack/X" &&
+           h.texts.at("totk.inv.sel.name") == "../Pack/X");
+    for (const char* key : {"totk.inv.0.icon", "totk.inv.0.fuse_icon", "totk.inv.sel.icon"})
+        assert(!h.texts.contains(key));
+    for (const auto& [key, value] : h.texts)
+        assert(!value.empty());
+    in.page = 0;
+    d.Put(Slot(1, "caption.sav"), Caption(2024, 3, 1, 8, 3, false)); // back to the fixture
+    PollNow(instance);
+    PollNow(instance);
+    SampleClean(m, instance, h);
+    assert(h.ints == page0 && h.texts == page0_text);
+
     // Base extensions: configure keeps only a matching host table.
     {
         EdenDsmodHostExtensions hx{};
@@ -467,14 +504,15 @@ int main() {
         assert(in.extensions && in.extensions->abi_hash == EDEN_DSMOD_EXT_HASH);
     }
 
-    // load_image: false for every key until T3a, without a host call or a sink call.
+    // load_image: false for every key (icons are romfs: paths), without a host or sink call.
     {
         bool sunk = false;
         const EdenDsmodImageSink sink = [](void* r, std::uint32_t, std::uint32_t,
                                            const std::uint8_t*, std::size_t) {
             *static_cast<bool*>(r) = true;
         };
-        for (const char* key : {"module:totk:icon/Weapon_Sword_001", "module:totk:map/G/00-00/2",
+        for (const char* key : {"romfs:/UI/Tex/Icon/Weapon_Sword_001.bntx.zs",
+                                "module:totk:icon/Weapon_Sword_001", "module:totk:map/G/00-00/2",
                                 "", static_cast<const char*>(nullptr)})
             assert(!ext->load_image(instance, &h.api, key, &sunk, sink));
         assert(!ext->load_image(nullptr, nullptr, nullptr, nullptr, nullptr));

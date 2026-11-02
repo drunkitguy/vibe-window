@@ -1,0 +1,359 @@
+From fbb5f272d540eea4cfa6cf0a202da6e1ecc92dc1 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Mon, 2 Nov 2026 02:34:19 +0000
+Subject: [PATCH] DSMod: read zstd romfs files with ZsDic
+
+TotK keeps almost every romfs file as a zstd frame whose header names a
+dictionary from Pack/ZsDic.pack.zs, so romfs:/...zs sources and module
+read_romfs paths into them could not be read.
+
+New pure helper src/core/mods/mod_zstd.{h,cpp} (Core::Mods::Zstd::Dicts,
+no runtime, no logging): Add() keys a ZSTD_DDict by its dictionary id
+and refuses id 0 and duplicates; Decode() wants the zstd magic, a known
+content size at or below the cap, a known dictionary when the frame
+names one ("unknown zstd dictionary <id>"), and output equal to the
+content size.
+
+NxAssetState::Locate gets a zstd branch shaped like the Yaz0 one
+(ReadAll, decode capped at MaxWholeRead, VectorVfsFile,
+RememberExpanded). A frame naming a dictionary loads the dictionaries
+once per source prefix: <prefix>:Pack/ZsDic.pack.zs (plain zstd, never
+loads dictionaries itself) -> NX::ParseSarc -> Dicts::Add for every
+member ending .zsdic. They are kept in NxAssetState under io_mutex and
+cleared by ResetNxAssets; a failed load is remembered with one warning
+until then. IsNxAssetSource tests the file name without a trailing .zs,
+so X.bntx.zs is an NX source.
+
+core already links zstd::zstd. The ledger lists mod_zstd.{h,cpp} and
+the two upstream files 0005 and 0007 edit (sparse_large_vector.cpp,
+launch_params.cpp), which duo-touched-ledger.sh --check reported.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01XgyuSR8o8AbzxuWHYqLwsv
+---
+ .upstream/duo-touched.tsv        |  4 ++
+ src/core/mods/duo_core.cmake     |  2 +
+ src/core/mods/mod_nx_runtime.cpp | 77 ++++++++++++++++++++++++++++++-
+ src/core/mods/mod_zstd.cpp       | 79 ++++++++++++++++++++++++++++++++
+ src/core/mods/mod_zstd.h         | 40 ++++++++++++++++
+ 5 files changed, 201 insertions(+), 1 deletion(-)
+ create mode 100644 src/core/mods/mod_zstd.cpp
+ create mode 100644 src/core/mods/mod_zstd.h
+
+diff --git a/.upstream/duo-touched.tsv b/.upstream/duo-touched.tsv
+index 29b6343..303de36 100644
+--- a/.upstream/duo-touched.tsv
++++ b/.upstream/duo-touched.tsv
+@@ -174,6 +174,7 @@ duo-only	A	-	385	0	src/tests/core/mods/ui_render.cpp
+ duo-only	A	-	393	0	dist/frontends/es-de/es_systems.xml
+ duo-only	A	-	397	0	src/android/app/src/main/java/org/yuzu/yuzu_emu/duo/DualScreenEmulationController.kt
+ duo-only	A	-	40	0	src/core/mods/mod_types_nav.h
++duo-only	A	-	40	0	src/core/mods/mod_zstd.h
+ duo-only	A	-	4	0	src/android/app/src/main/res/color/dual_screen_filter_background.xml
+ duo-only	A	-	4	0	src/android/app/src/main/res/color/dual_screen_filter_tint.xml
+ duo-only	A	-	4	0	src/android/app/src/main/res/drawable/dual_screen_badge_background_available.xml
+@@ -245,6 +246,7 @@ duo-only	A	-	77	0	src/core/file_sys/duo_external_content_index.h
+ duo-only	A	-	77	0	src/tests/core/mods/asset_sources.cpp
+ duo-only	A	-	78	0	src/core/mods/mod_types_text.h
+ duo-only	A	-	79	0	src/android/app/src/main/java/org/yuzu/yuzu_emu/utils/DualScreenModStatus.kt
++duo-only	A	-	79	0	src/core/mods/mod_zstd.cpp
+ duo-only	A	-	79	0	tools/duo/duo-upstream-sync.sh
+ duo-only	A	-	794	0	src/core/mods/mod_ui.h
+ duo-only	A	-	801	0	src/core/mods/mod_ui_text.cpp
+@@ -458,10 +460,12 @@ upstream-hook	M	1	11	0	cpmfile.json
+ upstream-hook	M	1	11	0	src/android/app/src/main/java/org/yuzu/yuzu_emu/features/input/NativeInput.kt
+ upstream-hook	M	1	11	0	src/core/hle/service/acc/profile_manager.cpp
+ upstream-hook	M	1	11	0	src/video_core/texture_cache/texture_cache_base.h
++upstream-hook	M	1	1	1	src/common/sparse_large_vector.cpp
+ upstream-hook	M	1	1	1	src/common/stb.h
+ upstream-hook	M	1	1	1	src/core/hle/kernel/k_page_table_base.h
+ upstream-hook	M	1	1	1	src/core/hle/service/nvnflinger/surface_flinger.h
+ upstream-hook	M	1	1	1	src/core/hle/service/vi/container.cpp
++upstream-hook	M	1	1	1	src/core/launch_params.cpp
+ upstream-hook	M	1	13	0	src/android/app/src/main/jni/android_settings.h
+ upstream-hook	M	1	17	1	src/core/file_sys/fsmitm_romfsbuild.cpp
+ upstream-hook	M	1	18	2	src/yuzu_cmd/emu_window/emu_window_sdl3.cpp
+diff --git a/src/core/mods/duo_core.cmake b/src/core/mods/duo_core.cmake
+index 3287d62..1910cbd 100644
+--- a/src/core/mods/duo_core.cmake
++++ b/src/core/mods/duo_core.cmake
+@@ -55,6 +55,8 @@ target_sources(core PRIVATE
+     mods/mod_nx_assets.cpp
+     mods/mod_nx_assets.h
+     mods/mod_nx_runtime.cpp
++    mods/mod_zstd.cpp
++    mods/mod_zstd.h
+     mods/mod_font_pages.cpp
+     mods/mod_font_pages.h
+     mods/mod_font_epoch.h
+diff --git a/src/core/mods/mod_nx_runtime.cpp b/src/core/mods/mod_nx_runtime.cpp
+index cd6aa29..34700c3 100644
+--- a/src/core/mods/mod_nx_runtime.cpp
++++ b/src/core/mods/mod_nx_runtime.cpp
+@@ -24,6 +24,7 @@
+ #include <unordered_set>
+ 
+ #include <nlohmann/json.hpp>
++#include <zstd.h>
+ 
+ #include "common/dsmod_dev_tools.h"
+ #include "common/logging.h"
+@@ -41,6 +42,7 @@
+ #include "core/mods/mod_msbt.h"
+ #include "core/mods/mod_nx_assets.h"
+ #include "core/mods/mod_runtime.h"
++#include "core/mods/mod_zstd.h"
+ 
+ namespace Core::Mods {
+ namespace NX = NxAssets;
+@@ -506,6 +508,8 @@ struct NxAssetState {
+     std::unordered_map<std::string, NX::SarcIndex> sarcs;
+     std::unordered_map<std::string, std::shared_ptr<const NX::BntxIndex>> bntxs;
+     std::unordered_map<std::string, std::shared_ptr<const FontBuild>> fonts;
++    /// zstd dictionaries by ZsDic chain, loaded once per source prefix (null: the load failed).
++    std::unordered_map<std::string, std::shared_ptr<const Zstd::Dicts>> zstd_dicts;
+     /// Containers already unpacked in memory, by chain: a Yaz0-compressed archive (a game's
+     /// Common.sblarc) decoded once instead of on every job that reads a member of it (which was
+     /// the ~70 ms fixed cost of every small texture decode), and a BFRES's embedded BNTX. Bounded
+@@ -608,6 +612,8 @@ struct NxAssetState {
+     LocateStatus Locate(const std::string& src, const Roots& roots, Located& out,
+                         std::string& error);
+     bool ReadAll(const Located& at, std::vector<u8>& bytes, std::string& error) const;
++    /// The dictionaries of `<prefix>:Pack/ZsDic.pack.zs` (null when that file is missing or bad).
++    std::shared_ptr<const Zstd::Dicts> ZstdDicts(const std::string& chain, const Roots& roots);
+     std::shared_ptr<const FontBuild> Font(const Located& at, std::string& error);
+     /// Decodes any picture reference the worker understands.
+     LocateStatus LoadImage(const std::string& src, const Roots& roots, Image& out,
+@@ -725,6 +731,30 @@ LocateStatus NxAssetState::Locate(const std::string& src, const Roots& roots, Lo
+             }
+             RememberExpanded(out.chain, out.file);
+         }
++        if (std::memcmp(out.magic.data(), "\x28\xB5\x2F\xFD", 4) == 0) {
++            std::vector<u8> packed, decoded;
++            if (!ReadAll(out, packed, error)) {
++                return LocateStatus::Error;
++            }
++            // ZsDic.pack.zs itself is plain zstd: it never loads dictionaries (no recursion).
++            static const Zstd::Dicts no_dicts;
++            const std::string dict_chain = std::string{prefix} + ":Pack/ZsDic.pack.zs";
++            const auto dicts = ZSTD_getDictID_fromFrame(packed.data(), packed.size()) != 0 &&
++                                       out.chain != dict_chain
++                                   ? ZstdDicts(dict_chain, roots)
++                                   : nullptr;
++            if (!(dicts ? *dicts : no_dicts).Decode(packed, MaxWholeRead, decoded, error)) {
++                return LocateStatus::Error;
++            }
++            out.file = std::make_shared<FileSys::VectorVfsFile>(std::move(decoded));
++            out.base = 0;
++            out.size = out.file->GetSize();
++            if (out.file->Read(out.magic.data(), 4, 0) != 4) {
++                error = "decoded zstd asset too short";
++                return LocateStatus::Error;
++            }
++            RememberExpanded(out.chain, out.file);
++        }
+         if (std::memcmp(out.magic.data(), "FRES", 4) == 0) {
+             std::vector<u8> container;
+             if (!ReadAll(out, container, error)) {
+@@ -789,6 +819,47 @@ bool NxAssetState::ReadAll(const Located& at, std::vector<u8>& bytes, std::strin
+     return true;
+ }
+ 
++std::shared_ptr<const Zstd::Dicts> NxAssetState::ZstdDicts(const std::string& chain,
++                                                           const Roots& roots) {
++    {
++        std::scoped_lock lock{io_mutex};
++        if (const auto it = zstd_dicts.find(chain); it != zstd_dicts.end()) {
++            return it->second;
++        }
++    }
++    // shortcut: two threads may load the same file at once (the first stored wins), fine while
++    // ZsDic is small; add a load lock if it ever shows up in a profile.
++    auto dicts = std::make_shared<Zstd::Dicts>();
++    Located at;
++    std::string error;
++    std::vector<u8> bytes;
++    NX::SarcIndex index;
++    bool ok = Locate(chain, roots, at, error) == LocateStatus::Ok && ReadAll(at, bytes, error) &&
++              NX::ParseSarc(NX::SpanReader(bytes), bytes.size(), index, error);
++    size_t added = 0;
++    for (auto it = index.by_name.begin(); ok && it != index.by_name.end(); ++it) {
++        if (!it->first.ends_with(".zsdic")) {
++            continue;
++        }
++        // ParseSarc keeps every member inside the archive's size.
++        if (!dicts->Add(std::span(bytes).subspan(it->second.offset, it->second.size))) {
++            ok = false;
++            error = "bad zstd dictionary '" + it->first + "'";
++        }
++        ++added;
++    }
++    if (ok && added == 0) {
++        ok = false;
++        error = "no .zsdic member";
++    }
++    std::scoped_lock lock{io_mutex};
++    const auto [it, inserted] = zstd_dicts.try_emplace(chain, ok ? std::move(dicts) : nullptr);
++    if (!ok && inserted) {
++        LOG_WARNING(Core, "DSMod: zstd dictionaries '{}': {}", chain, error);
++    }
++    return it->second;
++}
++
+ std::shared_ptr<const FontBuild> NxAssetState::Font(const Located& at, std::string& error) {
+     {
+         std::scoped_lock lock{io_mutex};
+@@ -1682,7 +1753,10 @@ bool ModRuntime::IsNxAssetSource(const std::string& src) const {
+         return false;
+     }
+     const size_t hash = src.find('#');
+-    const std::string_view file = std::string_view{src}.substr(0, hash);
++    std::string_view file = std::string_view{src}.substr(0, hash);
++    if (EndsWithNoCase(file, ".zs")) {
++        file.remove_suffix(3); // a zstd-wrapped romfs file counts as what it wraps
++    }
+     if (EndsWithNoCase(file, ".lzs")) {
+         return false; // Story of Seasons archives keep their synchronous path
+     }
+@@ -1823,6 +1897,7 @@ void ModRuntime::ResetNxAssets() {
+     s.sarcs.clear();
+     s.bntxs.clear();
+     s.fonts.clear();
++    s.zstd_dicts.clear();
+ }
+ 
+ void ModRuntime::PumpNxAssets(const StateSnapshot& snapshot) {
+diff --git a/src/core/mods/mod_zstd.cpp b/src/core/mods/mod_zstd.cpp
+new file mode 100644
+index 0000000..5132c53
+--- /dev/null
++++ b/src/core/mods/mod_zstd.cpp
+@@ -0,0 +1,79 @@
++// SPDX-FileCopyrightText: Copyright 2026 Eden DSMod fork
++// SPDX-License-Identifier: GPL-3.0-or-later
++
++#include <memory>
++
++#include <zstd.h>
++
++#include "core/mods/mod_zstd.h"
++
++namespace Core::Mods::Zstd {
++
++Dicts::~Dicts() {
++    for (const auto& [id, ddict] : by_id) {
++        ZSTD_freeDDict(ddict);
++    }
++}
++
++bool Dicts::Add(std::span<const u8> zsdic) {
++    ZSTD_DDict* const ddict = ZSTD_createDDict(zsdic.data(), zsdic.size());
++    if (ddict == nullptr) {
++        return false;
++    }
++    const u32 id = ZSTD_getDictID_fromDDict(ddict);
++    if (id == 0 || !by_id.emplace(id, ddict).second) {
++        ZSTD_freeDDict(ddict);
++        return false;
++    }
++    return true;
++}
++
++bool Dicts::Decode(std::span<const u8> frame, u64 cap, std::vector<u8>& out,
++                   std::string& error) const {
++    out.clear();
++    if (frame.size() < 4 || frame[0] != 0x28 || frame[1] != 0xB5 || frame[2] != 0x2F ||
++        frame[3] != 0xFD) {
++        error = "not a zstd frame";
++        return false;
++    }
++    const unsigned long long size = ZSTD_getFrameContentSize(frame.data(), frame.size());
++    if (size == ZSTD_CONTENTSIZE_ERROR || size == ZSTD_CONTENTSIZE_UNKNOWN) {
++        error = "zstd frame without a content size";
++        return false;
++    }
++    if (size > cap) {
++        error = "zstd content too large";
++        return false;
++    }
++    const u32 id = ZSTD_getDictID_fromFrame(frame.data(), frame.size());
++    const ZSTD_DDict* ddict = nullptr;
++    if (id != 0) {
++        const auto it = by_id.find(id);
++        if (it == by_id.end()) {
++            error = "unknown zstd dictionary " + std::to_string(id);
++            return false;
++        }
++        ddict = it->second;
++    }
++    const std::unique_ptr<ZSTD_DCtx, decltype(&ZSTD_freeDCtx)> dctx{ZSTD_createDCtx(),
++                                                                    &ZSTD_freeDCtx};
++    if (!dctx) {
++        error = "out of memory";
++        return false;
++    }
++    out.resize(static_cast<size_t>(size));
++    const size_t n =
++        ddict != nullptr
++            ? ZSTD_decompress_usingDDict(dctx.get(), out.data(), out.size(), frame.data(),
++                                         frame.size(), ddict)
++            : ZSTD_decompressDCtx(dctx.get(), out.data(), out.size(), frame.data(), frame.size());
++    if (ZSTD_isError(n) || n != size) {
++        error = ZSTD_isError(n) ? std::string{"zstd: "} + ZSTD_getErrorName(n)
++                                : std::string{"zstd output shorter than its content size"};
++        out.clear();
++        return false;
++    }
++    return true;
++}
++
++} // namespace Core::Mods::Zstd
+diff --git a/src/core/mods/mod_zstd.h b/src/core/mods/mod_zstd.h
+new file mode 100644
+index 0000000..31ae332
+--- /dev/null
++++ b/src/core/mods/mod_zstd.h
+@@ -0,0 +1,40 @@
++// SPDX-FileCopyrightText: Copyright 2026 Eden DSMod fork
++// SPDX-License-Identifier: GPL-3.0-or-later
++
++// Bounded zstd frame decoder for romfs files, with the dictionaries a game ships (TotK's
++// Pack/ZsDic.pack.zs members) picked by the id the frame header names. Pure format code: no
++// runtime, no logging, no filesystem.
++
++#pragma once
++
++#include <span>
++#include <string>
++#include <unordered_map>
++#include <vector>
++
++#include "common/common_types.h"
++
++struct ZSTD_DDict_s;
++
++namespace Core::Mods::Zstd {
++
++class Dicts {
++public:
++    Dicts() = default;
++    Dicts(const Dicts&) = delete;
++    Dicts& operator=(const Dicts&) = delete;
++    ~Dicts();
++
++    /// Adds one zstd-format dictionary; false for id 0 (raw content), an id already held, or
++    /// bytes zstd refuses.
++    bool Add(std::span<const u8> zsdic);
++
++    /// Decodes one frame whose header states its content size (at most `cap`) into `out`; a frame
++    /// naming a dictionary needs that id added. False with `error` set otherwise.
++    bool Decode(std::span<const u8> frame, u64 cap, std::vector<u8>& out, std::string& error) const;
++
++private:
++    std::unordered_map<u32, ZSTD_DDict_s*> by_id;
++};
++
++} // namespace Core::Mods::Zstd
+-- 
+2.43.0
+

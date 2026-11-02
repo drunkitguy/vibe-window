@@ -5,7 +5,7 @@
 // Data: the last save through the save extension (a worker thread polls it every 2 s) and the
 // live status reader, whose offsets stay UNKNOWN (0) so it never touches guest memory yet.
 // Base extensions: module actions drive the UI state (page, tab, selection, map layer); game
-// actions are refused; load_image fails until T3a.
+// actions are refused; load_image refuses every key (icons are romfs: paths the runtime reads).
 
 #include <array>
 #include <chrono>
@@ -220,14 +220,15 @@ void ConfigureSave(void* instance, const EdenDsmodHostSaveApi* api) {
     }
 }
 
-// Publishing with borrowed strings only: no allocation.
+// Publishing with borrowed strings only: no allocation. Empty text is never published (an icon
+// whose id failed IconKey's check is empty).
 struct Out {
     const EdenDsmodHostApi& h;
     void I(const char* k, std::int64_t v) const {
         h.publish_i64(h.userdata, k, v);
     }
     void T(const char* k, const char* v) const {
-        if (h.publish_text && v)
+        if (h.publish_text && v && *v)
             h.publish_text(h.userdata, k, v);
     }
     void T(const std::string& k, const std::string& v) const {
@@ -465,8 +466,8 @@ EdenDsmodBool OnAction(void* instance, const char* action, std::int64_t arg) {
     }
 }
 
-// T3a reads icons and map tiles from the player's romfs; until then every picture fails and the
-// host gives up after its retries [S3 MODULE_GUIDE §1.4].
+// Icons are romfs: paths the runtime decodes itself (T3a'); map tiles are T7. Every key fails
+// and the host gives up after its retries [S3 MODULE_GUIDE §1.4].
 EdenDsmodBool LoadImage(void*, const EdenDsmodHostApi*, const char*, void*, EdenDsmodImageSink) {
     return false;
 }

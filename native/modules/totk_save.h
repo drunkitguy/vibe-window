@@ -190,7 +190,7 @@ inline const char* EffectLabel(std::uint32_t hash) {
 // ---- snapshot -----------------------------------------------------------------------------------
 
 struct Item {
-    std::string id, icon;           // icon = module:totk:icon/<id>
+    std::string id, icon;           // icon = IconKey(id): a romfs path, empty for a bad id
     std::string fuse_id, fuse_icon; // empty when nothing is fused
     const char* effect = nullptr;   // EffectLabel; null when unknown or not a gear pouch
     int kind = 0;                   // 1 durability (Life), 2 count (StockNum), 0 none
@@ -227,8 +227,16 @@ const T* At(const std::optional<std::vector<T>>& v, std::size_t i) {
     return v && i < v->size() ? &(*v)[i] : nullptr;
 }
 
+// The item's icon as the runtime reads it (zstd via Eden Duo patch 0009), or empty (not
+// published) unless the id is [A-Za-z0-9_]{1,63}: a save's string never shapes another path.
 inline std::string IconKey(const std::string& id) {
-    return "module:totk:icon/" + id;
+    if (id.empty() || id.size() > 63)
+        return {};
+    for (const char c : id)
+        if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
+              c == '_'))
+            return {};
+    return "romfs:/UI/Tex/Icon/" + id + ".bntx.zs";
 }
 
 // Pouch.<P>.EquipIndex[0] (-1: nothing equipped), or nullopt when not known. Armor's equip key is

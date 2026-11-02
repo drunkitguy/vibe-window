@@ -144,8 +144,21 @@ int main() {
     const auto& weapon = s.gear[0];
     assert(weapon && weapon->id == "Weapon_Spear_002");
     assert(weapon->kind == 1 && weapon->value == 12);
-    assert(weapon->icon == "module:totk:icon/Weapon_Spear_002");
-    assert(weapon->fuse_id == "Item_Ruby" && weapon->fuse_icon == "module:totk:icon/Item_Ruby");
+    assert(weapon->icon == "romfs:/UI/Tex/Icon/Weapon_Spear_002.bntx.zs");
+    assert(weapon->fuse_id == "Item_Ruby" &&
+           weapon->fuse_icon == "romfs:/UI/Tex/Icon/Item_Ruby.bntx.zs");
+    // Icon paths only for [A-Za-z0-9_]{1,63}; anything else is empty (not published).
+    {
+        using totk::detail::IconKey;
+        const std::string longest(63, 'a');
+        assert(IconKey("Obj_KeyItem_X") == "romfs:/UI/Tex/Icon/Obj_KeyItem_X.bntx.zs");
+        assert(IconKey(longest) == "romfs:/UI/Tex/Icon/" + longest + ".bntx.zs");
+        for (const std::string& bad : {std::string(), std::string(64, 'a'), std::string("../Pack"),
+                                      std::string("a/b"), std::string("a.b"), std::string("a-b"),
+                                      std::string("a b"), std::string("a#b"), std::string("a:b"),
+                                      std::string("\xC3\xA9"), std::string("a\0b", 3)})
+            assert(IconKey(bad).empty());
+    }
     assert(std::string(weapon->effect) == "Attack Up+");
     const auto& bow = s.gear[1];
     assert(bow && bow->id == "Weapon_Bow_001" && bow->value == 40 && bow->fuse_id.empty() &&
