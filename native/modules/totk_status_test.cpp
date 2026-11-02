@@ -267,6 +267,82 @@ int main() {
         assert(h.MemoryCalls() == 0);
     }
 
+    // ReadPosition: the same actor walk and name check, its own two passes and bounds.
+    { // The full layout: x, y, z exact; a broken status bound leaves the position valid.
+        Host h;
+        PutLive(h, {.rupees = 1000000});
+        const auto p = totk::ReadPosition(h.api, kOffsets121);
+        assert(p.valid && p.x == -1234.5f && p.y == 150.f && p.z == 2345.25f);
+        assert(!Read(h).valid && h.write_calls == 0);
+        // And no position leaves the status valid.
+        Host n;
+        PutLive(n, {.position = false});
+        assert(!totk::ReadPosition(n.api, kOffsets121).valid && Read(n).valid);
+    }
+    { // Another name, a torn read in either pass, a position not 4-aligned: invalid.
+        Host h;
+        PutLive(h);
+        const std::uint64_t actor = h.Get<std::uint64_t>(h.Get<std::uint64_t>(
+                                        Host::kMainBase + kOffsets121.actor.hop[0]) +
+                                    kOffsets121.actor.hop[1]);
+        const std::uint64_t name = h.Get<std::uint64_t>(actor + kOffsets121.name.hop[0]);
+        h.memory[name] = 'Q';
+        assert(!totk::ReadPosition(h.api, kOffsets121).valid);
+        h.memory[name] = 'P';
+        const unsigned before = h.read_calls;
+        assert(totk::ReadPosition(h.api, kOffsets121).valid);
+        const unsigned per_read = h.read_calls - before;
+        for (unsigned n = 1; n <= per_read; ++n) {
+            h.corrupt_read = h.read_calls + n;
+            assert(!totk::ReadPosition(h.api, kOffsets121).valid);
+        }
+        totk::Offsets o = kOffsets121;
+        o.position.hop[0] = 0x2B6;
+        h.Put(actor + 0x2B6, std::array<float, 3>{1.f, 2.f, 3.f});
+        assert(!totk::ReadPosition(h.api, o).valid);
+    }
+    { // Offsets{} or an empty actor, name or position chain: no host call.
+        Host h;
+        PutLive(h);
+        assert(!totk::ReadPosition(h.api, totk::Offsets{}).valid);
+        for (auto field : {&totk::Offsets::actor, &totk::Offsets::name, &totk::Offsets::position}) {
+            totk::Offsets o = kOffsets121;
+            o.*field = {};
+            assert(!totk::ReadPosition(h.api, o).valid);
+        }
+        assert(h.MemoryCalls() == 0);
+    }
+    // Each bound: on it valid, past it (or not finite) invalid.
+    const std::function<void(Live&)> on_bound[] = {
+        [](Live& v) { v.x = -6000; }, [](Live& v) { v.x = 6000; },
+        [](Live& v) { v.y = -1500; }, [](Live& v) { v.y = 3500; },
+        [](Live& v) { v.z = -5000; }, [](Live& v) { v.z = 5000; },
+    };
+    for (const auto& change : on_bound) {
+        Host h;
+        Live v;
+        change(v);
+        PutLive(h, v);
+        assert(totk::ReadPosition(h.api, kOffsets121).valid);
+    }
+    const std::function<void(Live&)> out_of_bounds[] = {
+        [](Live& v) { v.x = -6000.5f; }, [](Live& v) { v.x = 6000.5f; },
+        [](Live& v) { v.y = -1500.5f; }, [](Live& v) { v.y = 3500.5f; },
+        [](Live& v) { v.z = -5000.5f; }, [](Live& v) { v.z = 5000.5f; },
+        [](Live& v) { v.x = NAN; },      [](Live& v) { v.y = NAN; },
+        [](Live& v) { v.z = INFINITY; },
+    };
+    for (const auto& change : out_of_bounds) {
+        Host h;
+        Live v;
+        change(v);
+        PutLive(h, v);
+        assert(!totk::ReadPosition(h.api, kOffsets121).valid);
+    }
+    // Layer: below -100 Depths, above 1000 Sky, else Surface (each side of both thresholds).
+    assert(totk::Layer(-100.01f) == 2 && totk::Layer(-100.f) == 0 && totk::Layer(1000.f) == 0 &&
+           totk::Layer(1000.01f) == 1 && totk::Layer(-1500.f) == 2 && totk::Layer(3500.f) == 1);
+
     std::puts("totk_status_test: ok");
     return 0;
 }

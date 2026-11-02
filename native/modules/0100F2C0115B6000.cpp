@@ -4,10 +4,11 @@
 // 1.2.0 and 1.2.1 pass, and only 1.2.1 gets offsets (T2b).
 // Every callback catches all exceptions: nothing may unwind into the host.
 // Data: the last save through the save extension (a worker thread polls it every 2 s) and, on
-// 1.2.1 only, the live status read in sample through kOffsets121's chains (read-only; on 1.2.0
-// every chain is empty and guest memory is never touched). The worker also loads the item names
-// from the game's romfs (totk_msbt.h) and, once per session when the player asks for it, logs
-// T8a's texture dump (totk_dump.h), and finds the map's tile files once (totk_map.h).
+// 1.2.1 only, the live status and position read in sample through kOffsets121's chains
+// (read-only; on 1.2.0 every chain is empty and guest memory is never touched). The worker also
+// loads the item names from the game's romfs (totk_msbt.h) and, once per session when the player
+// asks for it, logs T8a's texture dump (totk_dump.h), and finds the map's tile files once
+// (totk_map.h).
 // Base extensions: module actions drive the UI state (page, tab, selection, map layer); game
 // actions are refused; load_image serves only the font atlas (icons are romfs: paths the runtime
 // reads). Font extension: decode_font builds that atlas from the game's own font (totk_font.h).
@@ -47,7 +48,8 @@ static_assert(std::size(pub::kAbilityNames) == totk::kAbilities);
 static_assert(pub::kActionArgs[pub::kActInvTab] == totk::kTabs);
 constexpr int kPageHome = 0; // inventory, gear and status [docs/PLAN.md R5]
 constexpr int kPageMap = 2;
-// Consecutive failed live samples (0.5 s at 60 Hz) before the status falls back to the save.
+// Consecutive failed live samples (0.5 s at 60 Hz) before the status or the position falls back
+// to the save.
 // shortcut: N samples grace, tune after T8c.
 constexpr int kLiveGrace = 30;
 static_assert(pub::kActionArgs[pub::kActMapLayer] == totk::map::kLayerCount);
@@ -97,6 +99,10 @@ struct Instance {
     totk::Status live;
     int misses = kLiveGrace;
     bool live_logged = false, lost_logged = false;
+    // Live position, the same way with its own misses; pos_layer is Link's layer at the last valid
+    // one (-1: none yet), so totk.map.layer follows him only when it changes.
+    totk::Position pos;
+    int pos_misses = kLiveGrace, pos_layer = -1;
 
     std::mutex mutex; // guards everything below; sample holds it only to copy `snapshot`
     std::condition_variable wake;
@@ -456,6 +462,39 @@ const totk::Status* LiveStatus(Instance& in, const EdenDsmodHostApi& h, const to
     return in.misses < kLiveGrace ? &in.live : nullptr;
 }
 
+// One live position sample, with the status's grace. A valid one whose layer differs from the last
+// moves the map to it (the pills still switch it by hand). Null while the save is the source.
+// shortcut: tick-thread reads, move to the worker if T8c's profile line shows the cost.
+const totk::Position* LivePosition(Instance& in, const EdenDsmodHostApi& h) {
+    const totk::Position read = totk::ReadPosition(h, in.offsets);
+    if (read.valid) {
+        in.pos = read;
+        in.pos_misses = 0;
+        if (const int layer = totk::Layer(read.y); layer != in.pos_layer)
+            in.layer = in.pos_layer = layer;
+    } else if (in.pos_misses < kLiveGrace) {
+        ++in.pos_misses;
+    }
+    return in.pos_misses < kLiveGrace ? &in.pos : nullptr;
+}
+
+// The live position (source 2) or the save's (1); without either, totk.map.valid 0 and nothing
+// else. The selected layer's tiles are heavy: only while the map page is open.
+void PublishMap(const Out& o, const Instance& in, const totk::Position* live,
+                const totk::Snapshot* s, const totk::map::Tiles* tiles) {
+    const bool save = s && s->position;
+    o.I(pub::kMapValid, live || save ? 1 : 0);
+    if (!live && !save)
+        return;
+    o.I(pub::kMapSource, live ? 2 : 1);
+    o.F(pub::kMapX, live ? live->x : (*s->position)[0]);
+    o.F(pub::kMapY, live ? -double(live->z) : (*s->position)[1]);
+    if (tiles && in.page == kPageMap && in.layer >= 0 && in.layer < totk::map::kLayerCount)
+        for (int n = 0; n < totk::map::kTiles; ++n)
+            for (int l = 0; l < totk::map::kLevelCount; ++l)
+                o.T(in.keys.tiles[n][l], (*tiles)[in.layer][n][l]);
+}
+
 void PublishGear(const Out& o, const Keys& k, const totk::Snapshot& s) {
     o.I(pub::kGearValid, 1);
     o.I(pub::kGearSource, 1);
@@ -539,6 +578,9 @@ void Sample(void* instance, const EdenDsmodHostApi* host) {
             tiles = in.tiles;
             names = in.names;
         }
+        // Status first, then the position (which may move the layer before it is published).
+        const totk::Status* status = LiveStatus(in, *host, snap.get());
+        const totk::Position* pos = LivePosition(in, *host);
         const Out o{*host};
         o.I(pub::kReady, 1);
         o.I(pub::kNamesValid, names ? 1 : 0);
@@ -546,9 +588,9 @@ void Sample(void* instance, const EdenDsmodHostApi* host) {
         o.I(pub::kInvTab, in.tab);
         o.I(pub::kInvSel, in.sel);
         o.I(pub::kMapLayer, in.layer);
-        PublishStatus(o, LiveStatus(in, *host, snap.get()), snap.get());
-        o.I(pub::kMapValid, snap && snap->position ? 1 : 0);
-        if (!snap) { // no save read yet: every save domain is empty
+        PublishStatus(o, status, snap.get());
+        PublishMap(o, in, pos, snap.get(), tiles.get());
+        if (!snap) { // no save read yet: every other save domain is empty
             o.I(pub::kGearValid, 0);
             o.I(pub::kAbilityValid, 0);
             o.I(pub::kInvValid, 0);
@@ -560,17 +602,6 @@ void Sample(void* instance, const EdenDsmodHostApi* host) {
         for (int a = 0; a < totk::kAbilities; ++a)
             o.I(in.keys.owned[a].c_str(), snap->owned[a] ? 1 : 0);
         PublishInventory(o, in, *snap);
-        if (snap->position) {
-            o.I(pub::kMapSource, 1);
-            o.F(pub::kMapX, (*snap->position)[0]);
-            o.F(pub::kMapY, (*snap->position)[1]);
-            // The selected layer's tiles: heavy, so only while the map page is open, and only
-            // with a position (totk.map.valid), so no save shows no map.
-            if (tiles && in.page == kPageMap && in.layer >= 0 && in.layer < totk::map::kLayerCount)
-                for (int n = 0; n < totk::map::kTiles; ++n)
-                    for (int l = 0; l < totk::map::kLevelCount; ++l)
-                        o.T(in.keys.tiles[n][l], (*tiles)[in.layer][n][l]);
-        }
     } catch (...) {
     }
 }

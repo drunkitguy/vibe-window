@@ -598,10 +598,11 @@ class GenManifestTest(unittest.TestCase):
                              expect, snap)
 
     def test_map_page(self):
-        """The map widget: MainField with pan/zoom, the save's position as the marker, 120 tile
+        """The map widget: MainField with pan/zoom, Link's position as the marker, 120 tile
         overlays (tile n = r * 12 + c covers x -6000 + 1000c.., map y 5000 - 1000r down 1000;
         detail past 360 px). Per state: no position (totk.map.valid absent or 0) only "No save
-        data yet"; with one, the map, pills, Centre and the position line (x, and z = -y)."""
+        data yet"; with one, the map, pills, Centre and the position line (its source, x, and
+        z = -y)."""
         ws = self.page("map")
         self.assertEqual(self.m["map"], {"areas": {"MainField": {
             "min": [-6000, -5000], "max": [6000, 5000], "image": "file:assets/map-blank.png",
@@ -624,13 +625,14 @@ class GenManifestTest(unittest.TestCase):
         centre = self.one(ws, text="Centre", rect=[1100, 968, 124, 64])
         self.assertEqual(self.action(centre["on_tap"]), {"kind": "view_reset", "view": "totk_map"})
         nosave = self.one(ws, text="No save data yet")
-        line = [self.one(ws, text="Last save", rect=[16, 1052, 150, 24]),
+        line = [self.one(ws, text_bind="totk.map.source", rect=[16, 1052, 150, 24],
+                         text_map={"1": "Last save", "2": "Live"}),
                 self.one(ws, type="value", bind="ui.map.x", text="x "),
                 self.one(ws, type="value", bind="ui.map.z", text="z ")]
         self.assertEqual([d for d in self.m["derived"] if d["name"] in ("ui.map.x", "ui.map.z")],
                          [{"name": "ui.map.x", "expr": "round(totk.map.x)"},
                           {"name": "ui.map.z", "expr": "round(-totk.map.y)"}])
-        self.assertEqual([w for w in ws if w.get("text_bind", "").endswith(".source")], [])
+        self.assertEqual([w for w in ws if w.get("text_bind", "").endswith(".source")], line[:1])
         pills = [w for w in ws if w.get("on_tap", "").startswith("map_layer_")]
         for valid, expect in ((None, [nosave]), (0, [nosave]),
                               (1, [widget, centre, *line, *pills])):

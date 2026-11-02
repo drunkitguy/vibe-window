@@ -4555,7 +4555,11 @@
       150,
       24
      ],
-     "text": "Last save",
+     "text_bind": "totk.map.source",
+     "text_map": {
+      "1": "Last save",
+      "2": "Live"
+     },
      "text_scale": 4,
      "color": "#FF8F907F",
      "need_bind": "totk.map.valid"

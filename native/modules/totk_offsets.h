@@ -36,6 +36,8 @@ struct Offsets {
     Chain battery;
     // UNKNOWN: main-relative chain to the f32 max battery.
     Chain max_battery;
+    // UNKNOWN: actor-relative chain to the f32[3] world position (x, y, z).
+    Chain position;
 };
 
 // 1.2.1 (decoded from Eiffel2018's set [S40], same codes in [S9] key 9B4E43650501A4D4).
@@ -62,6 +64,9 @@ inline constexpr Offsets kOffsets121{
     .battery = {5, {0x4728538, 0x1E8, 0x58, 0xF8, 0x5C}},
     // [S9] cheat 29: main+0x4721B98 +0x198 +0x594. UNVERIFIED until T8c.
     .max_battery = {3, {0x4721B98, 0x198, 0x594}},
+    // [S7 Totk121Offsets.hpp][S28 game_version.h:83][S38 engineActor.hpp:210] mPosition at
+    // actor+0x2B4 (the cheat actor with this layout is UNVERIFIED). UNVERIFIED until T8c.
+    .position = {1, {0x2B4}},
 };
 
 } // namespace totk

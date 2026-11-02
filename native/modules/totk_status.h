@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Live status reader: hearts, stamina, rupees and battery through the Offsets chains
-// (docs/PLAN.md §T3a). Fails closed: an empty chain reads nothing; an unmapped or misaligned slot,
-// a null or low pointer, an overflowing address, an actor not named "Player", a torn read or an
-// implausible value gives an invalid Status. Reads only through ReadGuest<Reject>; never writes.
+// (docs/PLAN.md §T3a), and Link's position (§T3b). Fails closed: an empty chain reads nothing;
+// an unmapped or misaligned slot, a null or low pointer, an overflowing address, an actor not
+// named "Player", a torn read or an implausible value gives an invalid Status or Position.
+// Reads only through ReadGuest<Reject>; never writes.
 #pragma once
 
 #include <array>
@@ -21,6 +22,11 @@ struct Status {
     float stamina = 0, max_stamina = 0;
     bool has_battery = false; // the pair is optional: absent before the game gives a battery
     float battery = 0, max_battery = 0;
+};
+
+struct Position {
+    bool valid = false;
+    float x = 0, y = 0, z = 0; // world units; the map shows (x, -z)
 };
 
 namespace detail {
@@ -61,20 +67,33 @@ inline bool ReadWord(const EdenDsmodHostApi& h, std::uint64_t base, const Chain&
 // floats as their bits so two passes compare bitwise.
 using Raw = std::array<std::uint32_t, 7>;
 
-inline bool ReadStatusOnce(const EdenDsmodHostApi& h, const Offsets& o, Raw& r) {
-    // One actor walk; its name guards the three actor-relative values read from it.
+// One actor walk, or 0 unless that actor is named "Player": the name guards every value read
+// from it.
+inline std::uint64_t PlayerActor(const EdenDsmodHostApi& h, const Offsets& o) {
     const std::uint64_t actor = Walk(h, h.main_base, o.actor);
     const std::uint64_t name = actor ? Walk(h, actor, o.name) : 0;
     char text[7];
-    if (!name || !Read(h, name, text) || std::memcmp(text, "Player", 7) != 0)
-        return false;
-    if (!ReadWord(h, actor, o.hearts, r[0]) || !ReadWord(h, actor, o.max_hearts, r[1]) ||
+    return name && Read(h, name, text) && std::memcmp(text, "Player", 7) == 0 ? actor : 0;
+}
+
+inline bool ReadStatusOnce(const EdenDsmodHostApi& h, const Offsets& o, Raw& r) {
+    const std::uint64_t actor = PlayerActor(h, o);
+    if (!actor || !ReadWord(h, actor, o.hearts, r[0]) || !ReadWord(h, actor, o.max_hearts, r[1]) ||
         !ReadWord(h, actor, o.stamina, r[2]) || !ReadWord(h, h.main_base, o.max_stamina, r[3]) ||
         !ReadWord(h, h.main_base, o.rupees, r[4]))
         return false;
     if (!ReadWord(h, h.main_base, o.battery, r[5]) || !ReadWord(h, h.main_base, o.max_battery, r[6]))
         r[5] = r[6] = 0;
     return true;
+}
+
+// x, y, z as their bits, one 12-byte read, 4-aligned.
+using RawPosition = std::array<std::uint32_t, 3>;
+
+inline bool ReadPositionOnce(const EdenDsmodHostApi& h, const Offsets& o, RawPosition& r) {
+    const std::uint64_t actor = PlayerActor(h, o);
+    const std::uint64_t at = actor ? Walk(h, actor, o.position) : 0;
+    return at && at % 4 == 0 && Read(h, at, r);
 }
 
 inline float Float(std::uint32_t bits) {
@@ -108,6 +127,28 @@ inline Status ReadStatus(const EdenDsmodHostApi& h, const Offsets& o) {
         s.max_battery = max_battery;
     }
     return s;
+}
+
+// Two passes compared bitwise, then the bounds: x and z inside T7's map area [S28 §2], y in
+// [-1500, 3500] [S28 runtime/world_survey.c:53-56]; NaN and infinity fail them.
+inline Position ReadPosition(const EdenDsmodHostApi& h, const Offsets& o) {
+    if (!o.actor.n || !o.name.n || !o.position.n)
+        return {};
+    detail::RawPosition a{}, b{};
+    if (!detail::ReadPositionOnce(h, o, a) || !detail::ReadPositionOnce(h, o, b) || a != b)
+        return {};
+    const Position p{true, detail::Float(a[0]), detail::Float(a[1]), detail::Float(a[2])};
+    if (!(p.x >= -6000 && p.x <= 6000 && p.y >= -1500 && p.y <= 3500 && p.z >= -5000 &&
+          p.z <= 5000))
+        return {};
+    return p;
+}
+
+// Link's map layer (totk.map.layer: 0 surface, 1 sky, 2 depths) from his height [S28
+// runtime/bottom_map.c:109]. shortcut: height threshold, upgrade if MapData.CurrentLayer (Enum
+// 0x1294b632 [S38]) proves to follow Link.
+inline int Layer(float y) {
+    return y < -100 ? 2 : y > 1000 ? 1 : 0;
 }
 
 } // namespace totk

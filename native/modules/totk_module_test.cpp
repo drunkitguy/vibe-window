@@ -905,6 +905,97 @@ int main() {
         m->destroy(i0);
         assert(g_nothrow_live == nullptr);
     }
+    // 1.2.1: live position and layer (T3b), a source per domain, the status's grace.
+    {
+        Host h;
+        std::memcpy(h.api.build_id, totk::kBuild121Bytes.data(), 32);
+        const std::string dir = "romfs:/UI/Map/MainField/";
+        h.PutRomfs(dir + "G_00-00_02.bntx.zs", {1});
+        h.PutRomfs("romfs:Mals/USen.Product.121.sarc.zs", {0x28, 0xB5, 0x2F, 0xFD});
+        totk::test::PutLive(h, {.rupees = 1000000}); // the status out of bounds, the position not
+        const auto& o = totk::kOffsets121;
+        const std::uint64_t main = Host::kMainBase,
+                            at = totk::test::PutChain(h, totk::test::PutChain(h, main, o.actor),
+                                                      o.position);
+        void* i = m->create(&h.api, "{}");
+        assert(i);
+        const auto act = [&](const char* name, std::int64_t arg) {
+            return ext->on_action(i, name, arg) == EDEN_DSMOD_TRUE;
+        };
+        const auto map = [&h] {
+            Host::Ints out;
+            for (const auto& [key, value] : h.ints)
+                if (key.starts_with("totk.map."))
+                    out.emplace(key, value);
+            return out;
+        };
+        const Host::Ints live{{"totk.map.valid", 1}, {"totk.map.source", 2}, {"totk.map.layer", 0}};
+        const Host::Floats live_xy{{"totk.map.x", -1234.5}, {"totk.map.y", -2345.25}};
+        // No save yet: the live position alone gives the map and the selected layer's tiles; the
+        // status (out of bounds) and every save domain stay empty.
+        PollNow(i); // the worker probes the tiles
+        assert(act("totk.ui.page", kPageMap));
+        SampleClean(m, i, h);
+        assert(map() == live && h.floats == live_xy);
+        assert(h.texts.at("totk.map.tile.0") == dir + "G_00-00_02.bntx.zs");
+        assert(h.ints.at("totk.status.valid") == 0 && h.ints.at("totk.gear.valid") == 0 &&
+               h.ints.at("totk.inv.valid") == 0 && h.ints.at("totk.ability.valid") == 0);
+        // The layer follows Link only when his layer changes; the pills still switch it.
+        const auto layer_after = [&](float y) {
+            h.Put<float>(at + 4, y);
+            SampleClean(m, i, h);
+            return h.ints.at("totk.map.layer");
+        };
+        assert(act("totk.map.layer", 2) && layer_after(150.f) == 2); // still the Surface
+        assert(layer_after(2000.f) == 1);                             // the Sky
+        assert(act("totk.map.layer", 0) && layer_after(1500.f) == 0);
+        assert(layer_after(-500.f) == 2); // the Depths
+        assert(act("totk.map.layer", 1) && layer_after(-600.f) == 1);
+        assert(layer_after(150.f) == 0);
+        // CA10 on the map page with the live readers on: no allocation in 1000 samples.
+        {
+            const long before = t_news;
+            for (int n = 0; n < 1000; ++n)
+                m->sample(i, &h.api);
+            assert(t_news == before);
+        }
+        // A torn sample (the last read: the position's second pass) keeps source 2 and the
+        // previous position.
+        const unsigned start = h.read_calls;
+        SampleClean(m, i, h);
+        const unsigned per_sample = h.read_calls - start;
+        h.Put<float>(at, 0.f);
+        h.corrupt_read = h.read_calls + per_sample;
+        SampleClean(m, i, h);
+        assert(map() == live && h.floats == live_xy);
+        SampleClean(m, i, h); // the new x
+        assert(h.floats.at("totk.map.x") == 0.0);
+        // The save arrives: the position stays live, the status (still out of bounds) is the save.
+        Configure(se, i, d);
+        PollNow(i);
+        SampleClean(m, i, h);
+        assert(h.ints.at("totk.map.source") == 2 && h.ints.at("totk.status.source") == 1);
+        // The status in bounds, the position out of them: the last live position for
+        // kLiveGrace - 1 samples, then the save's (and the layer stays where it was).
+        h.Put<std::uint32_t>(totk::test::PutChain(h, main, o.rupees), 1234);
+        h.Put<float>(at, 6000.5f);
+        for (int n = 1; n < kLiveGrace; ++n) {
+            SampleClean(m, i, h);
+            assert(map() == live && h.floats.at("totk.map.x") == 0.0 &&
+                   h.ints.at("totk.status.source") == 2);
+        }
+        SampleClean(m, i, h);
+        assert((map() == Host::Ints{{"totk.map.valid", 1}, {"totk.map.source", 1},
+                                    {"totk.map.layer", 0}}));
+        assert((h.floats == Host::Floats{{"totk.map.x", 100.5}, {"totk.map.y", 300.25}}));
+        assert(h.ints.at("totk.status.source") == 2);
+        // In bounds again: live at once.
+        h.Put<float>(at, -1234.5f);
+        SampleClean(m, i, h);
+        assert(map() == live && h.floats == live_xy && h.write_calls == 0);
+        m->destroy(i);
+        assert(g_nothrow_live == nullptr);
+    }
 
     // Owned flags for all seven: a save owning only ability `a` (both IsGet and IsGetAnyway)
     // publishes owned 1 for `a` and 0 for the other six.

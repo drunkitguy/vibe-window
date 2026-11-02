@@ -482,9 +482,9 @@ def abilities_page(derived):
 
 
 def map_page(derived, actions):
-    """The last save's position on the selected layer's tiles (pan and zoom), the layer pills,
-    Centre and the position line. Nothing but "No save data yet" without a position
-    (totk.map.valid), so no tiles either."""
+    """Link's position (live, else the last save's) on the selected layer's tiles (pan and
+    zoom), the layer pills, Centre and the position line. Nothing but "No save data yet" without
+    a position (totk.map.valid), so no tiles either."""
     valid, shown = {"need_bind": "totk.map.valid"}, {"hide_bind": "totk.map.valid", "hide_eq": 0}
     overlays = []
     for n in range(TILE_COLS * TILE_ROWS):
@@ -524,9 +524,9 @@ def map_page(derived, actions):
          **valid},
         {"type": "label", "rect": [620, 540, 0, 40], "text": "No save data yet",
          "text_scale": 5, "align": "center", "color": DIM, "need_bind": "!totk.map.valid"},
-        # The position line replaces the source line: x and z (the save's, not the map's y).
-        {"type": "label", "rect": [16, 1052, 150, 24], "text": "Last save", "text_scale": 4,
-         "color": DIM, **valid},
+        # The position line replaces the source line: its source, x and z (not the map's y).
+        {"type": "label", "rect": [16, 1052, 150, 24], "text_bind": "totk.map.source",
+         "text_map": {"1": "Last save", "2": "Live"}, "text_scale": 4, "color": DIM, **valid},
         {"type": "value", "rect": [176, 1052, 130, 24], "bind": "ui.map.x", "text": "x ",
          "text_scale": 4, "color": VALUE, **valid},
         {"type": "value", "rect": [320, 1052, 130, 24], "bind": "ui.map.z", "text": "z ",

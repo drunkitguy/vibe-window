@@ -10,6 +10,7 @@
 #endif
 
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <cstdint>
 #include <cstdio>
@@ -188,12 +189,15 @@ inline std::uint64_t PutChain(Host& h, std::uint64_t base, const Chain& c) {
     return at;
 }
 
-// Live values for a fake 1.2.1 layout; battery false leaves both battery chains unmapped.
+// Live values for a fake 1.2.1 layout; battery false leaves both battery chains unmapped,
+// position false the position.
 struct Live {
     std::uint32_t hearts = 48, max_hearts = 80, rupees = 1234;
     float stamina = 1500.f, max_stamina = 2000.f;
     bool battery = true;
     float battery_now = 900.f, max_battery = 3000.f;
+    bool position = true;
+    float x = -1234.5f, y = 150.f, z = 2345.25f; // the Surface
 };
 
 // The whole status layout of `o` (kOffsets121 by default) with "Player" as the actor's name.
@@ -211,6 +215,8 @@ inline void PutLive(Host& h, const Live& v = {}, const Offsets& o = kOffsets121)
         h.Put(PutChain(h, main, o.battery), v.battery_now);
         h.Put(PutChain(h, main, o.max_battery), v.max_battery);
     }
+    if (v.position)
+        h.Put(PutChain(h, actor, o.position), std::array<float, 3>{v.x, v.y, v.z});
 }
 
 // A save directory in memory with the runtime's read_save_file semantics [S1
