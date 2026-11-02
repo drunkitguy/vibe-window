@@ -327,7 +327,7 @@ Doable in this Linux container now (no game, no Windows, no Thor):
 | T4v | Restyle (the reference look): game font, TotK textures, header page tabs, home page = Gear + status right column + ability bar (inventory side framed, filled by T6) | T3a'.1, T4r (T8a names the textures; starts with the `UNVERIFIED` table) | done: 81e0055 + 8426a73, critic SATISFIED round 2; TEX roles None until T8a (fallbacks only) |
 | T6 | Inventory side of the home page: 8 category icon tabs, icon grid, detail pane with Equipped badge, hold and drag to a refused use | T4v | done: f59ee90 + 3e11daa + 1a10f15, critic SATISFIED round 3; touch feel untested (T8) |
 | T5 | Abilities page: 7 large tiles with the game's icons, owned/locked, battery, refused select | T4v | done: c6e99f3, critic SATISFIED round 1; ability icon paths UNVERIFIED (T8a) |
-| T7 | Map page: Surface/Sky/Depths tiles as `romfs:` paths, the game's layer icons and player icon, pan/zoom | T4v, T3a' | done |
+| T7 | Map page: Surface/Sky/Depths tiles as `romfs:` paths, the game's layer icons and player icon, pan/zoom | T4v, T3a' | done: 7d17331 + 3ad54b0, critic SATISFIED round 2 |
 
 Order after the redesign (user, 2026-11-02): **T3a' -> T4v -> T6 -> T5 -> T7** here; T8a as soon
 as H1c's CI build with patch 0009 runs on the PC; T4v's `TEX` follow-up after T8a.
