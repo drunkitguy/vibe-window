@@ -44,13 +44,24 @@ Everything below is blocked on you, in this order. Send logs, `.shot` files and 
    native size, tap error under 2 px, no added frame drops at 60 fps.
 5. **T2.** You play **1.2.0** (D2, answered). Send `xxd -s 0x40 -l 32 -p main` from
    `eden-cli --dump-romfs` of base + update, so T2 confirms the 1.2.0 build id T2a sets.
-6. **Vendoring zstd (T3a): approved by the user.** Four files from the PyPI `zstandard` 0.23.0
-   sdist, hashes in §T3a. The user also chose to stay on 1.2.0 for memory work (D2b).
-7. **T8 (after T4-T7 are coded here).** Install the package on the PC, load a save, and send the
-   `.shot` pictures and `DSMod` log lines listed in §T8. This is the first time icons, names and
-   map tiles from your romfs and values from your save are seen.
-8. **T3 (later, memory).** Provide the dumps (exefs/romfs, kept outside the repo) or run discovery
-   on the PC, plus the test saves listed in "What needs the user". Not needed for T4-T7.
+6. **Approve vendoring `stb_truetype.h` (T3a').** TotK's fonts are CFF outlines (`.bfotf`), so
+   the module rasterizes them. The file is `native/modules/third_party/stb_truetype.h` v1.26
+   (public domain) from the companions clone [S2], copied to `native/third_party/`; the ACNH module already does the same with it.
+   The session's classifier refused compiling outside code once (zstd, T3a), so the coder asks you
+   first. The zstd vendoring you approved is **no longer needed in the module** (patch 0009 below
+   decodes zstd in Eden Duo, which already links zstd); the coder uses those files only to build
+   patch 0009's standalone test, outside the repo.
+7. **T8a (after T3a' and H1c): texture dump.** Use the CI-built eden-cli (it now applies
+   `host/eden-duo/0001-0009`). Install the package, create a file
+   `<Eden data dir>/dualscreen/user/0100F2C0115B6000/totk-dump` containing `1`, start TotK 1.2.0
+   once, load a save, quit. Send every log line with `totk dump`. Then, in the dev-tools build's
+   console, run the `imgdump` lines the coder lists in §T8a and send the PNGs back (they stay out
+   of the repo). This names the game's UI textures for 1.2.0, which no public source lists.
+8. **T8 (after T4v-T7 are coded here).** Install the package on the PC, load a save, and send the
+   `.shot` pictures and `DSMod` log lines listed in §T8. This is the first time the restyled pages
+   are seen with your game's textures, font, icons and map tiles, and values from your save.
+9. **T3 (later, memory).** Provide the dumps (exefs/romfs, kept outside the repo) or run discovery
+   on the PC, plus the test saves listed in "What needs the user". Not needed for T3a'-T7.
 
 ## Facts that shape the plan
 
@@ -123,8 +134,8 @@ Everything below is blocked on you, in this order. Send logs, `.shot` files and 
    `g++ ... -I$EDEN_SOURCE_ROOT/src` and nothing else [S2 `tools/botw/build_modules.sh`]. The
    companions' shared CMake needs fmt/nlohmann_json/zstd from `$EDEN_SOURCE_ROOT/.cache/cpm`,
    which exists only after Eden Duo was configured once [S2 `native/README.md`]; our clone has
-   none. This repo therefore gets its own small CMake that needs only the headers; zstd is
-   vendored in T3a.
+   none. This repo therefore gets its own small CMake that needs only the headers; zstd was to be
+   vendored in T3a (superseded 2026-11-02: zstd moves into Eden Duo, patch 0009, §R2).
 10. **Three build gates** [S3 MODULE_GUIDE §3; S1 `mod_module.cpp:213-230`, `:263-276`]: the
     loader's `module.build_ids` prefix check, the module's `supports_build`, and `create`
     comparing all 32 bytes. On failure the host publishes `module_ready = 0`,
@@ -158,8 +169,10 @@ Everything below is blocked on you, in this order. Send logs, `.shot` files and 
     (base extension, RGBA8 ≤4096², ≤16 MiB) and text through published values [S1
     `dsmod_module_extensions.h:70-88`; S3 MODULE_GUIDE §1.4, §2.1]. The host lends its ASTC
     decoder (`EdenDsmodHostExtensions::decode_astc`) [S1 `dsmod_module_extensions.h:45-64`].
+    (2026-11-02: decision changed, §R2: patch 0009 adds zstd to the runtime.)
     The Wonder module already does zstd -> SARC -> BNTX -> deswizzle -> ASTC/BC -> RGBA
-    (`native/modules/wonder_assets.cpp`, GPL-3.0, 540 lines) [S2]; T3a adapts it.
+    (`native/modules/wonder_assets.cpp`, GPL-3.0, 540 lines) [S2]; old T3a adapted it. Superseded: patch 0009 decodes zstd in the runtime and the
+    runtime's own BNTX decoder does the rest; the module keeps names and the font (§R2, T3a').
 16. **The manifest `msbt` text source only loads labels the manifest names statically**
     (`mod_nx_runtime.cpp:2326-2379` collects `text_src` / `text_map` labels) [S1], so item names
     that change with the save are decoded by the module and published as text (`bind_text`),
@@ -274,7 +287,7 @@ Source: [S2] BotW README and `native/modules/botw_*.h`.
 | Champions (`botw_champions`) | Drop | Sage vows are a TotK extension |
 | Round minimap from the native HUD transform (`botw_map_view`) | Adapt (T3+) | Needs a live camera/position reader |
 | Full map: tiles as 120 world-space `overlays` with `src_bind` + `src_detail_bind` (BotW manifest `map` page), labels, regions, pins, saved icons, moving and death markers (`botw_map*`) | Adapt | T7: the same 120-overlay pattern; tile pictures are module images; one layer at a time. Labels, pins, stamps later |
-| Item icons as `romfs:` sources in `sprite_map` (`romfs:/UI/StockItem/<id>.sbitemico#<id>`, 1278 entries) [S2 BotW manifest] | Adapt | TotK icons are zstd (fact 15): `module:totk:icon/<id>` keys through `load_image` instead (T3a) |
+| Item icons as `romfs:` sources in `sprite_map` (`romfs:/UI/StockItem/<id>.sbitemico#<id>`, 1278 entries) [S2 BotW manifest] | Adapt | TotK icons are zstd (fact 15): `romfs:/UI/Tex/Icon/<id>.bntx.zs` paths published by the module, decoded by the runtime with patch 0009 (T3a', §R2) |
 | Koroks, trackers, DLC locations (`botw_map_koroks`, `botw_tracker_*`) | Drop (v1) | Tables generated from 1.6.0 data |
 | Shrine compass, sensor (`botw_shrine_compass`, `botw_sensor`) | Adapt (later) | Shrines + lightroots |
 | Quests (`botw_quests`) | Adapt (later) | |
@@ -284,7 +297,7 @@ Source: [S2] BotW README and `native/modules/botw_*.h`.
 | Hold-to-cook, recipes, heal advisor (`botw_hold*`, `botw_recipes*`, `botw_heal_advisor`) | Adapt (later) | Recipe data from the player's romfs |
 | Travel (`botw_warp*`, `warp-ui-hook.S`) | Adapt (last) | Shrines, lightroots, Skyview towers |
 | Text helpers (`botw_msbt_reflow`, `botw_text_measure`, `botw_detail_*`) | Reuse (later) | Game-independent. T3a decodes MSBT itself (`totk_msbt.h`, adapted from the runtime's `mod_msbt.cpp`) |
-| zstd -> SARC -> BNTX -> RGBA (`wonder_assets.cpp`, Wonder module, not BotW) [S2] | Adapt | T3a, plus zstd dictionaries |
+| zstd -> SARC -> BNTX -> RGBA (`wonder_assets.cpp`, Wonder module, not BotW) [S2] | Superseded | Patch 0009 + the runtime's decoders (T3a'); plan B only |
 | Press flash, event hold, recent gear (`botw_press`, `botw_event_hold`, `botw_recent_gear`) | Reuse | Game-independent |
 | Layout animations, fx curves, drawn state (`botw_layout_fx`, `botw_fx_curves`, `botw_drawn`) | Drop | BotW-specific |
 | Generated 1.6.0 metadata headers (armor, weapon, consume, status, descriptions) | Drop | Read from romfs at runtime |
@@ -299,17 +312,21 @@ Doable in this Linux container now (no game, no Windows, no Thor):
 
 | # | Packet | Depends | Status |
 |---|---|---|---|
-| 0 | Decisions: D1 host path = **C** (user, done); D2 target version = **1.2.0** (user, done); D2b = **stay on 1.2.0** (user, done); zstd vendoring = **approved** (user) | - | done |
+| 0 | Decisions: D1 host path = **C** (user, done); D2 target version = **1.2.0** (user, done); D2b = **stay on 1.2.0** (user, done); zstd vendoring = **approved** (user; now only for patch 0009's test); stb_truetype vendoring = **ask** (T3a'); redesign defaults (§R5, What needs the user) | - | done except stb_truetype |
 | H1a | Eden Duo: native modules on Windows (loader, harness compile fix, tests), as patches | - | done: `host/eden-duo/0001-0003` + `host/eden-duo-companions/0001`; loader Catch2 tests pass standalone; full eden-duo build blocked (proxy 403 on CPM fmt download), real-Windows checks in H1c; critic SATISFIED round 3 |
 | T1 | TotK package skeleton: build gate, fail-closed reader, tests; Linux `.so` and Windows DLL; `.dsmod.zip` | H1a (builder patch) | done: `2c482b6` (+ plan `911aed8`); gcc/clang/MinGW builds and ctest pass (MinGW under wine), single export, package + wine probe pass; critic SATISFIED round 3 |
 | H1b | eden-cli composite layout: `--window-rect`, `--aux-rect`, borderless, aux not focusable | H1a | done: `afe952e`, patch 0004 adds `--window-rect`/`--aux-rect` (borderless, hidden until placed), non-focusable aux, 640x360 main floor, 32767 bound, ledger rows; parser tests pass natively and under wine; SDL and harness code compile-checked only in H1c; critic SATISFIED round 3 |
 | T2a | Retarget the skeleton to 1.2.0 (`kTargetBuild`, data file name, tests) | T1 | done: `d175a18`; 1.2.0 build id and data file; critic SATISFIED (with T3s) |
-| T3a | Romfs assets in the module: vendored zstd + `ZsDic` dictionaries, SARC, BNTX + deswizzle + host ASTC, MSBT names; `load_image` in T4's base extensions | T2a, T4 (zstd approved by the user) | todo |
+| T3a' | Game assets first (replaces T3a): Eden Duo patch 0009 (zstd + `ZsDic` in the runtime's romfs reader), the game font through the module (`.bfotf` + stb_truetype), item names from MSBT, icon/tile keys as `romfs:` paths, `totk.assets.valid`, the one-shot texture dump for T8a | T4, stb_truetype approval | todo |
 | T3s | Save reader: newest `slot_0N`, `progress.sav` GameData by murmur3 hash, domain snapshots (status, gear, pouches, abilities, position); save extension export; module worker thread | T2a | done: `6edf1ef`, `f4b1527`, `b535fca`; two-read stability gate, unknowns published as absent, gives up after 8 reads; 3 toolchains + wine + TSan/ASan + fuzz pass; real saves untested (T8); critic SATISFIED round 3 |
-| T4 | Shell + Gear page (status strip = Ready v1, 4 equipped cards; armor row deferred, no armor equip key), tab bar, notice overlay, base extensions (`configure`, `on_action`), manifest generator + checker; names fall back to ids and icons stay blank until T3a | T3s | doing |
-| T5 | Abilities page: 7 ability tiles from owned flags, battery, refused select action | T4 | todo |
-| T6 | Inventory page: 8 tabs in game order, icon grid, detail pane, hold and drag to a refused Use zone | T4 | todo |
-| T7 | Map page: Surface/Sky/Depths tiles from romfs, layer pills, last-save marker, pan/zoom | T4, T3a | todo |
+| T4 | Shell + Gear page, tab bar, notice overlay, base extensions, manifest generator + checker | T3s | done: `3be5876`..`7e9ab94`; shell, tab bar, notice, base extensions + action table (refusals logged once), Gear page with 4 cards and 3 states, generator + checker with runtime-faithful visibility tests; critic SATISFIED round 3 (7 -> 1 -> 0 findings). Its look is superseded by T4v |
+| T4v | Restyle (the reference look): game font, TotK textures, header page tabs, home page = Gear + status right column + ability bar (inventory side framed, filled by T6), typed-key checker, render tool + side-by-side renders | T3a' (T8a names the textures; T4v can start before with the `UNVERIFIED` table) | todo |
+| T6 | Inventory side of the home page: 8 category icon tabs, icon grid, detail pane with Equipped badge, hold and drag to a refused use | T4v | todo |
+| T5 | Abilities page: 7 large tiles with the game's icons, owned/locked, battery, refused select | T4v | todo |
+| T7 | Map page: Surface/Sky/Depths tiles as `romfs:` paths, the game's layer icons and player icon, pan/zoom | T4v, T3a' | todo |
+
+Order after the redesign (user, 2026-11-02): **T3a' -> T4v -> T6 -> T5 -> T7** here; T8a as soon
+as H1c's CI build with patch 0009 runs on the PC; T4v's `TEX` follow-up after T8a.
 
 Needs the user, a Windows PC, the Thor or another repo:
 
@@ -319,7 +336,8 @@ Needs the user, a Windows PC, the Thor or another repo:
 | H2 | apollo2-vibe window-host (`claude/clever-clarke-k7hhhj`): verify the 1920x2160 window-only composite with no host code; H2b (`dualScreen=1` pin) only if a check fails | H1c, H3 | blocked: user |
 | H3 | Vibe Window client (`/home/user/vibe-window` `app/`, plan branch): "Dual screen" setting, split renderer, bottom-screen touch | H1b | done: `2d21128`, global Dual screen setting in `app/`; stream split onto the Thor's second display through a `Presentation` using the decoder's transform matrix; pointer ids 0-4 top, 5-9 bottom (host touch max 10); setting-off path behind one `if`; `DualScreenLayoutTest` 13 tests pass + android-all type-check; Gradle, Robolectric and the Thor untested; critic SATISFIED round 4 |
 | T2 | Pin the build: user's `xxd` output confirms or replaces T2a's `kTargetBuild`; data file renamed if needed; T1 tests rerun | T2a, dump | blocked: user |
-| T8 | First real run on the PC (romfs paths, save keys, pictures, sample cost), then end-to-end on the Thor through apollo2-vibe | T4-T7, H1c (H2, H3 for the Thor part) | blocked: user |
+| T8a | Texture dump on the PC: `totk dump` log lines (archive versions, texture list, layout panes, Mals members) and `imgdump` PNGs; turns the `UNVERIFIED` texture table into names | T3a', H1c | blocked: user |
+| T8 | First real run on the PC (romfs paths, save keys, pictures, sample cost), then end-to-end on the Thor through apollo2-vibe | T4v-T7, T8a, H1c (H2, H3 for the Thor part) | blocked: user |
 | T3 | Memory discovery on the user's build (Windows dev-tools eden-cli, gdbstub): live GameData object (replaces the save as source), player position + layer, current stamina, current ability, scene/menu state; sentinel test, second boot [S3 PORTING_A_GAME §2-3] | T2, H1c, D2b | blocked: user |
 | T9 | Release: `windows-x86_64` module (plus `android-arm64-v8a` only if path A is wanted) | T8 | todo |
 | T10+ | Extensions, one packet each: live readers behind the T4-T7 keys (T3), actions (guest call on Windows, quick-menu steering with readback, or load-plan helper), map reveal from Skyview Towers, stamps and pins, travel, compass, quests, recipes, item-name language | T9 | todo |
@@ -658,6 +676,279 @@ Acceptance (user): `./gradlew assembleDebug testDebugUnitTest` passes on their m
 with the setting off, launch arguments and rendering are unchanged. On the Thor (user): both screens at native size, tap error under 2 px on the
 companion, no added frame drops at 60 fps.
 
+## Visual redesign: the reference look (user, 2026-11-02)
+
+User feedback on T4's first render (built-in pixel font, flat boxes, coloured placeholder squares):
+"i don't like how that looks. how do we get it to be more like this", with a photo of the Eden Duo
+BotW companion on a Thor bottom screen [S36]: page tabs on top (Map / Inventory / Quests with L/R
+hints), category tabs with icons, a grid of the game's item icons with a selected cell, a detail
+pane (name, description, an "Equipped" badge), a right column with heart and stamina bars, stat
+chips, equipped gear icons around a Link figure, and a bottom row of rune icons with counts; the
+game's font and dark Sheikah-slate styling. Then: "rather than us design assets, is there a way we
+can just leverage the existing totk asset files". So the redesign reads **TotK's own UI textures,
+icons, map tiles and font from the player's romfs at runtime** and ships none of them; code-drawn
+pictures only where no game texture exists (solid fills), declared in `ASSETS.provenance.json`.
+
+### R1. Where the reference look comes from
+
+What the BotW package does [S2 BotW `manifest.json`, `ASSETS.provenance.json`, README]:
+| Piece | Source in BotW |
+|---|---|
+| Font | The game's BFFNT: `font` = `font_atlas` = `romfs:/Font/Font_US.sbfarc#Normal_00.bffnt`, decoded by the runtime |
+| Item icons | `sprite_map`: item id -> `romfs:/UI/StockItem/<id>.sbitemico#<id>` |
+| Frames, panels, gradients | 532 `romfs:` image sources, mostly `romfs:/Pack/Bootup.pack#Layout/Common.sblarc#timg/__Combined.bntx#<texture>^<x>`, plus `composites` that assemble several of those pieces into one picture (e.g. `state-native-frame`, 10 layers) |
+| Text | `msbt` aliases (`Bootup_USen.pack#Message/...msbt`), `text_src` labels |
+| Buttons, rings, gauges | 283 code-drawn PNGs in `assets/` (204 `file:` uses): command bars, stamina rings, gauge arcs, masks, 1x1 solid fills, each declared in `ASSETS.provenance.json` |
+| Layout, cells, bars, highlight frames | Manifest widgets (`rect`, `image` with `fill`/`slice`/`tint`, `bar`, `value`, select/drag keys) |
+| Link figure | **None.** No widget, key or asset in the BotW 1.0.0 package draws Link (searched the manifest for `Link`, `Player`, `figure`, `model`, `bfres`, `doll`: only horse and item names). The photo's figure is not in the clone `383d2d47` (`UNVERIFIED` where it comes from) |
+
+Rendered with the critic's harness and placeholder images (BotW's ready and inventory pages,
+gates opened so every widget shows; scratch `planner-render/botw-*.png`), BotW looks as bare as
+T4: flat dark rects, the built-in font and same-coloured blocks wherever a game texture goes. Its
+look is the game's textures and font, not widget styling. The runtime offers only filled rects
+with a frame, capsule buttons (`pill`), bars and images; no rounded rects or gradients. Images can
+be 9-sliced (`fill: slice`), tiled, mirrored (`flip_x/y`), cropped (`src_rect`), tinted (`tint`,
+`tint_bind`), faded and composited [S1 `mod_types_page.h:162-178,315-317,509-520`]. Single-channel
+BNTX masks keep their channel map, so a white mask tints to any colour [S1
+`mod_nx_assets.cpp:469,527-534`].
+
+### R2. TotK 1.2.0: game font, icons and UI textures
+
+Facts:
+- **UI textures** live in `UI/LayoutArchive/Common.Product.<n>.Nin_NX_NVN.blarc.zs`: zstd (with a
+  `ZsDic` dictionary) around a SARC holding `blyt/<Layout>.bflyt`, `anim/*.bflan` and
+  `timg/__Combined.bntx` [S33][S32 `make_button_icons.py:410-413`]. `n` is 100, 110 or 140 by game
+  version; 1.2.1 ships only `Common.Product.110` [S32 `docs/v1.2.1-port.md:39`]; the 1.2.0 value
+  is `UNVERIFIED` (expected 110; T8a). Layout names known from public layout edits:
+  `PauseMenuBG_00`, `PauseMenuOverlay_00`, `AppMenuBG_00`, `AppMenuOverlay_00`, `AppMap_00`,
+  `AppAlbum_00`, `PlayerStatus_00`, `ShortCutBG_00`, `SystemActionGuide_00`, `PaCommonBtnTitle_00`,
+  `PaRecipeCardList_00` [S32 `ultrawide_layout.py:20-81`][S34 `ui_aspect.c:108-122`]. Texture names
+  known: the button keys `Nt_KeyTexA_00`, `Nt_KeyTexB_00`, `Nt_KeyTexX_00`, `Nt_KeyTexY_00`,
+  `Nt_KeyTexL_00`, `Nt_KeyTexZL_00`, `Nt_KeyTexLSt_00/01` (R8 masks, 72x72 up to 1.2.1) [S32
+  `make_button_icons.py:414-418`]; map pins are the textures starting `MapIcon` [S33]. **No public
+  source lists the pause-menu, category-tab, heart, stamina, rupee, battery or ability textures**:
+  their names are `UNKNOWN: T8a dump`. BNTX texture names carry a `^<x>` suffix and the runtime
+  matches the full name [S1 `mod_nx_assets.cpp:241-250`; S2 BotW `...#Logo2D_00^d`].
+- **Item icons**: `UI/Tex/Icon/<item id>.bntx.zs`, 256x256 ASTC 4x4 sRGB [S28 §2] (1.4.3).
+- **Font**: `Font/Font.Nin_NX_NVN.bfarc.zs` (other regions `Font_KRko`, `Font_CNzh`, `Font_TWzh`),
+  a zstd SARC of `scft/*.bfotf` faces: text faces `scft/nintendo_NTLG-DB_DH_002.bfotf` and
+  `scft/ninP_RodinNTLG-B_DH_003_subset.bfotf`, button pictograms `scft/External.bfotf`
+  (U+E040-U+E068). A `.bfotf` is an OpenType (CFF) font with an 8-byte header, XOR-ed per word with
+  a key: word 0 XOR `0x18029a7f` gives the key, word 1 XOR the key is the big-endian size. The
+  archive is byte-identical in 1.0.0 and 1.2.1 [S32 `make_button_icons.py:4-12,32-33,72-74`], so
+  1.2.0 almost surely has it too (`UNVERIFIED`, T8a). Which text face the pause menu uses is
+  `UNVERIFIED`; v1 uses NTLG-DB.
+- The runtime decodes BFFNT, MFNT and a few others, not OpenType [S1 `mod_assets.cpp:351-430`,
+  `mod_nx_runtime.cpp:1027-1037`]. A module can supply the font: the font extension's
+  `decode_font` gets the bytes of the manifest's `font` source and reports glyphs; the atlas is any
+  image source, e.g. `module:` through `load_image` [S1 `dsmod_module_extensions.h:100-140`]. ACNH
+  does exactly this for its `.bfttf`/`.bfotf` faces with stb_truetype (`acnh_font.cpp`, 700 lines,
+  GPL-3.0; `font: file:acnh_font.txt`, `font_atlas: module:acnh/font/ui:40?p={p}`) [S2]. Glyph
+  size: a label's cap height is `text_scale * 5` px, scaled from the atlas's line height [S1
+  `mod_ui_text.cpp:274-281`].
+- The runtime's romfs reader resolves SARC members, Yaz0, BFRES, BNTX (R8, BC1-BC7, ASTC, with
+  channel maps) and BFFNT inside `NxAssetState::Locate`, but not zstd [S1
+  `mod_nx_runtime.cpp:657-760`, `mod_nx_assets.cpp:83-125`]. Eden Duo already links zstd into
+  core (`target_link_libraries(core PUBLIC ... zstd::zstd)`) [S1 `src/core/CMakeLists.txt:1225`].
+  A module's `read_romfs` with a `#member` path goes through the same `Locate` [S1
+  `mod_module_host.cpp:406-445`, `mod_nx_runtime.cpp:1750-1774`].
+
+**Decision (planner): textures through a runtime patch, the font through the module.**
+- *Font*: must be the module either way. A runtime zstd patch would still hand the runtime a CFF
+  font it cannot rasterize. The module reads the `.bfotf`, removes the XOR, rasterizes with
+  stb_truetype into one atlas, and answers `decode_font` + `load_image` (ACNH's pattern).
+- *Textures, icons, map tiles, MSBT*: **patch 0009** adds zstd + `ZsDic` to `Locate` (next to its
+  Yaz0 branch; about 100 lines with a pure helper) and lets a `.zs` file count as an NX source.
+  Then the manifest names TotK textures exactly as BotW names its own (`romfs:/UI/LayoutArchive/
+  Common.Product.110.Nin_NX_NVN.blarc.zs#timg/__Combined.bntx#<name>`), with composites, 9-slice,
+  tint, preload and the runtime's caches, and every BNTX format the game uses is decoded by code
+  that already exists. The module-only alternative (old T3a) needs vendored zstd, SARC, BNTX
+  deswizzle, host ASTC **and** new BC1/BC3/BC4/BC5/BC7 and R8 decoders in the module (layout
+  textures are BC and R8, not only ASTC [S32 `make_button_icons.py:411`][S28 §2 format list]),
+  cannot feed composites, and duplicates what the runtime has. The patch is smaller and decodes
+  every format correctly. Cost: the art needs the patched eden-cli, which path C already requires
+  (patches 0001-0008, CI applies `000*.patch`); an unpatched runtime shows the pages without game
+  art and a one-line notice (`totk.assets.valid` 0). If path A (stock Android Eden Duo) is ever
+  wanted without the patch, old T3a's module pipeline is plan B behind the same published keys.
+- *Item names and captions*: still published by the module (names change with the save, fact 16);
+  the module reads `PouchContent.msbt` with `read_romfs("romfs:Mals/USen.Product.<n>.sarc.zs#
+  ActorMsg/PouchContent.msbt")`, which patch 0009 decompresses, so the module needs no zstd.
+
+**Naming textures reliably.** Names come from the game, not guesses: T8a's one-shot dump logs the
+`Common.Product.<n>` archive found, its member list, every `__Combined.bntx` texture (name with
+suffix, size, format, channel map) and, for the layouts whose names start `Pause`, `Pouch`, `App`,
+`PlayerStatus`, `ShortCut`, `Map`, every picture and window pane (name, translate, size, material
+texture names, material white/black colours). The generator keeps one table `TEX` (role -> exact
+texture name) marked `UNVERIFIED` until T8a fills it. The pane list says which texture a game
+screen uses where (e.g. the pouch cell, the cursor, the heart pieces), and the material colours
+give the tint for R8/BC4 masks.
+**BFLYT positions** are worth copying as reference values only: proportions (cell pitch, insets,
+icon-to-cell ratio) scaled from the game's 1920x1080 grid to 1240x1080. No layout file is shipped
+or parsed at runtime for placement; numbers go into the generator by hand with a comment naming the
+layout and pane.
+**Without the module dump**, the user can list names on the PC from `eden-cli --dump-romfs`, then
+`zstd -d -D zs.zsdic` on the `.blarc.zs` and Switch Toolbox on `timg/__Combined.bntx` [S33]; the
+module dump is preferred (one run, exact 1.2.0 files, also gives pane rects and colours).
+
+### R3. The Link figure
+
+Not achievable as in the photo. BotW's package has no figure (R1), and TotK's pause menu draws
+Link as a live 3D model (BFRES with skeleton, skinning and the equipped armor); the runtime only
+extracts textures from BFRES [S1 `mod_nx_runtime.cpp:735-750`, `mod_bfres.h`] and renders no
+models. Rendering it is **out of scope**. Fallback in T4v: the right column's centre plate shows
+the equipped weapon's icon at 256 px (its native size) with the fused material's badge and name,
+inside a panel built from the pause menu's own textures. If T8a's texture list has a 2D Link
+picture (any name containing `Link` or `Player` at 256 px or more), the plate uses it instead
+(`UNKNOWN: T8a`). Armor icons around the plate (the photo's left column) come back when an armor
+equip key is verified (T8).
+
+### R4. Reusing BotW's code-drawn assets
+
+Allowed: BotW's `assets/*.png` are GPL-3.0 [S2 LICENSE] and so is this package; a copy keeps the
+licence, gets an `ASSETS.provenance.json` entry naming the source file, the companions commit
+`383d2d47` and "Copyright 2026 Eden DSMod fork / igawa6, GPL-3.0", and the README's credits line.
+Used: **none**. They are BotW-styled (Sheikah-blue command bars, BotW stamina rings, BotW gauge
+arcs) and the user asked for TotK's own art. Our only code-drawn pictures stay generated by
+`gen_manifest.py`: `map-blank.png` (1x1 transparent) and, if a fill needs a picture, 1x1 solids
+(BotW's `solid-*.png` idea, our own bytes).
+
+### R5. Layout spec (canvas 1240x1080; all packets T4v-T7)
+
+**Pages.** Three, switched by header tabs in the photo's order: **Map | Inventory | Abilities**.
+Inventory is the home page and holds Gear and status (right column) and the ability bar (bottom),
+like the photo; the old Gear page becomes that right column. `totk.ui.page`: **0 home, 1 abilities,
+2 map** (was 0 gear, 1 abilities, 2 inventory, 3 map; `kActionArgs[kActPage]` becomes 3). The
+module publishes the inventory tab's lists on page 0 and the map tiles on page 2.
+
+**Tokens** (fallback colours drawn by widgets under or instead of game textures; masks are tinted
+with the BFLYT material colours from T8a, these values until then):
+| Token | ARGB | Use |
+|---|---|---|
+| `bg` | `FF0A0E0D` | manifest background |
+| `panel` | `E6121815` | panels under textures |
+| `edge` | `FF3E4A36` | 2 px panel frames (olive) |
+| `text` | `FFECE5C8` | cream text |
+| `dim` | `FF8F907F` | captions, inactive tabs |
+| `value` | `FFE9C46A` | numbers |
+| `select` | `FF6FF0C0` | selection and active tab (Zonai green) |
+| `heart` | `FFE0464B` | heart bar |
+| `stamina` | `FF74D14C` | stamina bar |
+| `locked` | `66FFFFFF` | tint for not-owned ability icons |
+Colour choices follow S28's TotK look notes (near-black panels, olive edges, cream text, gold
+values, Zonai green selection) [S28 BOTTOM_SCREEN "Look"]; exact values `UNVERIFIED` until T8a.
+
+**Font.** The game font (T3a'): one atlas at cap 48 px. Text scales: 4 (20 px) captions and counts,
+5 (25 px) body, 6 (30 px) names and tab labels, 8 (40 px) big values. `L`/`R` hints are the
+External pictograms U+E044/U+E045 in the same atlas.
+
+**Every page.**
+- Header `[0,0,1240,76]` `panel` + TotK header texture `TEX.header` (9-slice; `UNKNOWN: T8a`, from
+  `PauseMenuBG_00`/`AppMenuBG_00`). Tabs: Map `[140,8,300,60]`, Inventory `[470,8,300,60]`,
+  Abilities `[800,8,300,60]`, each `button` (module `totk.ui.page` k), label scale 6 centred; the
+  current one: `TEX.tab_on` (or a `select` 3 px capsule frame) and `text`, others `dim`. `L` label
+  `[40,14,48,48]` and `R` `[1152,14,48,48]` (U+E044/U+E045, scale 8): taps go to the left and right
+  neighbour page (static per page; no new action); `on_swipe_left`/`right` on the header do the same.
+- Source line `[8,1052,600,24]` scale 4 `dim` ("From last save" / "Live"), as T4.
+- Art notice `[640,1052,592,24]` scale 4 `value`, right-aligned at x 1232: "Game art needs Eden
+  Duo with patch 0009", `need_bind !totk.assets.valid`. The module publishes 0 only after a
+  failed probe and nothing before it; the render tool's `notready`/`full` fixtures show whether an
+  absent key hides the line (T4's visibility tests did the same for `.present`); if it does not,
+  gate on a derived `cmp eq totk.assets.valid 0`.
+- T1 notice overlay as T4 (full canvas, `input_block`).
+
+**Home page** (`home`; T4v draws the right column, the bottom bar and the left side's frames and
+empty state; T6 fills the left side).
+Left side, inventory (x 0-632):
+- Category tabs `[8,84,624,72]`: 8 `button`s 78x72 at x = 8 + 78k (game order, as the data model):
+  icon `[x+11,92,56,56]` `TEX.cat_<k>` (`UNKNOWN: T8a`; fallback a scale 4 short label WPN BOW SHD
+  ARM MAT FOOD ZON KEY); current tab: underline `rect [x+8,152,62,4]` `select` and full tint, others
+  tint `B3FFFFFF`; count `value` `totk.inv.tab{k}.count` scale 4 at `[x+70,90,0,20]` right-aligned.
+  Selected category name `[16,162,400,28]` scale 5 `text`.
+- Grid: scroll region `inv_grid [8,194,624,520]`, `cols 5`, `row_h 124`, `count_bind
+  totk.inv.count`, `reset_bind totk.inv.tab`. Cell `[12+124c,198+124r,116,116]`: slot texture
+  `TEX.slot` (9-slice; fallback `panel` + `edge` frame), icon `[x+4,y+4,108,108]` `src_bind
+  totk.inv.{i}.icon`, count/durability `value` on a shade `[x+56,y+88,56,24]` scale 4 `value`,
+  equipped mark `TEX.equipped` `[x+92,y+4,20,20]` (fallback 14 px `select` square) `need_bind
+  totk.inv.{i}.equipped`, fuse badge `[x+4,y+4,40,40]` `src_bind .fuse_icon`. `select_group inv`,
+  `payload "{i}"`, `draggable`, `on_tap inv_select`, `highlight_src TEX.cursor` (fallback
+  `highlight_color select`, `frame 4`). `on_swipe_left` -> `inv_tab_next`.
+- Detail pane `[8,722,624,206]` (`TEX.detail` 9-slice or `panel`+`edge`): icon `[20,736,128,128]`
+  `src_bind totk.inv.sel.icon` on `TEX.slot`, `on_hold inv_use` (refused); name `[164,738,340,34]`
+  scale 6 `text`, `max_lines 1`, `fit_text`; Equipped badge `[512,738,108,32]` (`TEX.badge` or a
+  `select` capsule, "Equipped" scale 4) `need_bind totk.inv.sel.equipped`; value line
+  `[164,778,440,26]` scale 5 `value` ("Durability 42" / "x17" / hearts for food by `.kind`); fuse
+  and effect `[164,808,440,24]` scale 4 `dim`; caption `[164,836,456,84]` scale 4 `text`, `wrap_width
+  456`, `max_lines 3`. The pane is the drop zone: `accept_group inv`, `drop_action inv_use`
+  (refused).
+- Empty states in the grid area: "No save data yet" (`!totk.inv.valid`), "Nothing here" (count 0).
+
+Right column, Gear and status (x 640-1232):
+- Status panel `[640,84,592,120]`: heart icon `[656,96,44,44]` `TEX.heart` (`UNKNOWN: T8a`, from
+  `PlayerStatus_00`; fallback a `heart` rect 28x28); `bar [712,104,360,22]` `bind
+  totk.status.hearts`, `max_bind totk.status.max_hearts`, colour `heart`, `fill_image
+  TEX.bar` if T8a finds one; `value [1220,98,0,32]` right-aligned scale 5 "h / max" (`max_sep "/"`).
+  Stamina icon `[656,150,44,44]` `TEX.stamina`; `bar [712,158,360,22]` bind and `max_bind`
+  `totk.status.max_stamina` (the save has no current stamina: the bar is full) colour `stamina`;
+  `value [1220,152,0,32]` "Max <n>". Units as published (hearts `UNVERIFIED`, T8).
+- Stat chips `[640,212,592,64]`, three of 192 x 64 at x 640, 840, 1040: Rupees (`TEX.rupee`
+  icon 40 px, `value totk.status.rupees` `group`), Battery (`TEX.battery`, `totk.status.max_battery`
+  `div 100`, `UNVERIFIED` unit), Arrows (`src_bind totk.gear.arrow.icon`, `totk.gear.arrow.count`).
+  Icons fall back to a scale 4 caption.
+- Equipment panel `[640,284,592,644]` (`TEX.equip_panel` or `panel`+`edge`):
+  - Slot cards x 1092, y 300 / 470 / 640, each 128x160: caption scale 4 `dim` (WEAPON / BOW /
+    SHIELD) `[1156,300,0,22]` centred; slot `[1100,324,112,112]` `TEX.slot` + icon `src_bind
+    totk.gear.<s>.icon`; fuse badge `[1172,324,40,40]` `need_bind .fuse`; durability `value .life`
+    `[1156,440,0,24]` centred scale 4 `value`. Three states from `.present` exactly as T4 (1 item, 0
+    "None", absent nothing). `on_hold` -> `gear_swap_k` (refused).
+  - Centre plate `[800,300,272,612]`: `TEX.plate` (`UNKNOWN`), the equipped weapon icon
+    `[808,420,256,256]`, its fuse badge `[1000,420,72,72]`, name `[936,700,0,60]` centred scale 5
+    `wrap_width 256 max_lines 2`, effect `[936,768,0,26]` scale 4 `value` (R3: no 3D Link).
+  - Left column x 652: the arrows card is in the stat chips, so the column shows the bow's and the
+    shield's effects as two lines `[652,300,140,...]` scale 4 `value` while present; the armor cards
+    (head, upper, lower) are reserved here for the packet that verifies an armor equip key.
+- Ability bar `[0,940,1240,108]` (`TEX.bar_bg` or `panel`): 7 slots 172 wide at x = 18 + 172k:
+  icon `[x+54,946,64,64]` `TEX.ability_<a>` (`UNKNOWN: T8a`; first candidate
+  `romfs:/UI/Tex/Icon/Obj_<X>.bntx.zs` with the save's `Obj_X` names, fact data model), drawn twice:
+  full tint `need_bind totk.ability.<a>.owned`, `locked` tint `hide_bind` the same; short name
+  `[x+86,1014,0,22]` centred scale 4 (`text` / `dim`); `on_tap ability_select_k` (refused). No
+  current-ability highlight (live only).
+
+**Abilities page** (`abilities`, T5): tiles 290x400, row 1 at y 92 x = 16 + 306k (k 0-3: Ultrahand,
+Fuse, Ascend, Recall), row 2 at y 508 x = 169 + 306k (Autobuild, Camera, Travel Medallion). Each:
+`TEX.tile` 9-slice (or `panel`+`edge`), icon `[x+65,y+40,160,160]` (owned / `locked` tint as the
+bar), name `[x+145,y+228,0,34]` centred scale 6, "Locked" scale 4 `dim` when not owned, `on_tap`
+refused. Battery strip `[16,924,1208,72]`: `TEX.battery` icon, `value totk.status.max_battery`,
+"Current ability: needs a live reader" scale 4 `dim`.
+
+**Map page** (`map`, T7): `map` widget `[0,76,1240,972]` as old T7 (area, overlays, pan/zoom);
+`marker_src TEX.player_pin` (a `MapIcon...` texture, `UNKNOWN: T8a`; fallback the runtime pin);
+layer pills on the right as in the game's map, top to bottom Sky, Surface, Depths at
+`[1100,96+80j,124,64]` with `TEX.layer_<L>` icons (`UNKNOWN`, from `AppMap_00`; fallback scale 5
+labels), current one `select` frame; Centre `button [1100,968,124,64]` `view_reset`; position
+`[16,1052,...]` replaces the source line text: "Last save x <x>  z <z>" scale 4 `dim`.
+
+**Interactions** (all pages): header tap, L/R tap, header swipe; category tap; grid tap selects,
+swipe left = next category, hold on an item or the detail icon = refused use, drag an item onto the
+detail pane = refused use; hold a gear card = refused swap; tap an ability = refused; map pan,
+pinch, layer pills, Centre. Haptics as T4 (`tap click`, `drop confirm`, `refused reject`).
+
+**Asset list** (all read at runtime; none shipped). `C` = `romfs:/UI/LayoutArchive/Common.Product.
+<n>.Nin_NX_NVN.blarc.zs#timg/__Combined.bntx#` (n `UNVERIFIED`, 110 expected):
+| Role (`TEX.*`) | Source | Status |
+|---|---|---|
+| font | `Font/Font.Nin_NX_NVN.bfarc.zs#scft/nintendo_NTLG-DB_DH_002.bfotf` + `#scft/External.bfotf` via `module:totk:font/body:48` | path known [S32]; 1.2.0 `UNVERIFIED` |
+| item, fuse, arrow icons | `romfs:/UI/Tex/Icon/<id>.bntx.zs` (module publishes the path) | known on 1.4.3 [S28] |
+| map tiles | `romfs:/UI/Map/MainField/<L>_<cc>-<rr>_<lv><suffix>.bntx.zs` (module probes and publishes) | known on 1.4.3 [S28] |
+| L/R hints | External font U+E044/U+E045 (atlas) | [S32] |
+| header, tab_on, slot, cursor, detail, badge, equipped, equip_panel, plate, bar, bar_bg, tile | `C<name>` from the `PauseMenuBG_00`/`AppMenuBG_00`/pouch layouts | `UNKNOWN: T8a` |
+| cat_0..7 (pouch category icons) | `C<name>` | `UNKNOWN: T8a` |
+| heart, stamina, battery, rupee | `C<name>` from `PlayerStatus_00` | `UNKNOWN: T8a` |
+| ability_<a> | `romfs:/UI/Tex/Icon/Obj_<X>.bntx.zs` or `C<name>` | `UNKNOWN: T8a` |
+| player_pin, layer_<L> | `C MapIcon...` / `AppMap_00` textures | prefix known [S33]; names `UNKNOWN: T8a` |
+| solids, map-blank | generated by `gen_manifest.py` | ours |
+Every game texture sits on a widget-drawn fallback (rect, frame or label) so a missing texture
+leaves a readable page; the generator emits both from one helper.
+
 ## Companion pages without memory offsets (T2a-T8)
 
 User direction (2026-11-01): "don't worry about memory locations right now. do the maps, gear,
@@ -691,13 +982,16 @@ same published keys, so no page changes.
   is cleared every tick, so every value is published every `sample` [S3 MODULE_GUIDE §1.2].
 - **Lazy publishing** [S3 MODULE_GUIDE §7.4]: the tab bar sends module action `totk.ui.page`, the
   module publishes `totk.ui.page`, and four `page_binds` follow it. Heavy lists (one inventory
-  tab, the map's tile keys) are published only while their page is open.
+  tab, the map's tile keys) are published only while their page is open. From T4v there are three
+  pages and three `page_binds`.
 - **Fail closed per domain.** Each domain has `totk.<domain>.valid`; a page shows its empty state
   ("No save data yet" / "Not in this save") when it is 0 or missing. Pictures that fail to load
   show nothing (`load_image` returns false; the host retries 4 times, then gives up
   [S3 MODULE_GUIDE §1.4]).
-- **No game data in the repo.** Only generated JSON, one generated 1x1 PNG, and the vendored zstd
-  sources. Tests build every SARC, BNTX, MSBT, zstd frame and save they read in memory.
+- **No game data in the repo.** Only generated JSON, generated PNGs (1x1 transparent, 1x1
+  solids), `totk_font.txt` and the vendored `stb_truetype.h`. Tests build every SARC, BNTX, BFLYT,
+  MSBT, zstd frame and save they read in memory; font tests use a system TTF. Texture names and
+  numbers copied from the T8a dump are names and values, not game data.
 
 ### Preview mode (decided: no)
 
@@ -714,7 +1008,7 @@ Every action in the manifest is `page`, `view_reset` or `module` (checked by CA7
 
 | Action | Argument | Result |
 |---|---|---|
-| `totk.ui.page` | 0 gear, 1 abilities, 2 inventory, 3 map | Accepted; publishes `totk.ui.page` |
+| `totk.ui.page` | 0 home (inventory + gear + status), 1 abilities, 2 map (from T4v; T4 used 0 gear, 1 abilities, 2 inventory, 3 map) | Accepted; publishes `totk.ui.page` |
 | `totk.inv.tab` | 0-7 | Accepted; selection resets to 0 |
 | `totk.inv.tab_next` | ignored | Accepted; wraps 7 -> 0 (swipe left) |
 | `totk.inv.select` | `$payload` = slot index | Accepted if `< totk.inv.count` |
@@ -747,7 +1041,7 @@ known; the manifest gates on `.valid` and `need_bind`.
 | `totk.status.stamina` | int | Live only (T1 `ReadStatus`, offsets UNKNOWN); not in the save list |
 | `totk.gear.valid`, `.source` | int | |
 | `totk.gear.<s>.present` | int | 1 if equipped. weapon/bow/shield/arrow: `Pouch.<P>.EquipIndex[0]` ≥ 0 [S28 `bottom_inventory.c:39,123-124`; S29 `zelda-totk.js:468`]. head/upper/lower: `UNKNOWN` save key (candidate `Pouch.Armor.EquipIndex`, `UNVERIFIED`): published only if found |
-| `totk.gear.<s>.id`, `.name`, `.icon` | text | `Pouch.<P>.Content.Name[idx]`; name from T3a (falls back to the id); icon = `module:totk:icon/<id>` |
+| `totk.gear.<s>.id`, `.name`, `.icon` | text | `Pouch.<P>.Content.Name[idx]`; name from T3a' (falls back to the id); icon = `romfs:/UI/Tex/Icon/<id>.bntx.zs` from T3a' (T4: `module:totk:icon/<id>`) |
 | `totk.gear.<s>.life` | int | `Content.Life[idx]` (weapon, bow, shield) |
 | `totk.gear.arrow.count` | int | `Pouch.Arrow.Content.StockNum[idx]` |
 | `totk.gear.<s>.fuse`, `.fuse_name`, `.fuse_icon` | int, text, text | `Content.Combined.Name[idx]` non-empty (weapon, shield) |
@@ -759,6 +1053,8 @@ known; the manifest gates on `.valid` and `need_bind`.
 | `totk.inv.valid`, `.source`, `.count` | int | Current tab only |
 | `totk.inv.tab{k}.count` | int | k = 0-7, for the tab chips |
 | `totk.inv.{i}.icon`, `.name` | text | Item `i` of the current tab |
+| `totk.inv.sel.equipped` | int | The selected slot equals its pouch's `EquipIndex[0]` (T4v; the detail pane's Equipped badge) |
+| `totk.assets.valid` | int | 1 when `read_romfs` decodes `Pack/ZsDic.pack.zs#zs.zsdic` (patch 0009 present and romfs open), else 0 (T3a') |
 | `totk.inv.{i}.value`, `.kind` | int | kind 1 durability (`Life`), 2 count (`StockNum`), 0 none (armor) |
 | `totk.inv.{i}.equipped` | int | Slot equals that pouch's `EquipIndex[0]` |
 | `totk.inv.{i}.fuse_icon` | text | Fused material's icon |
@@ -766,7 +1062,7 @@ known; the manifest gates on `.valid` and `need_bind`.
 | `totk.inv.sel.value`, `.kind`, `.hearts` | int | `.hearts` = food `LifeRecover` [S29 `pouch.js:502`] |
 | `totk.map.valid`, `.source` | int | |
 | `totk.map.x`, `totk.map.y` | f64 | `PlayerStatus.SavePos` x and -z (the map widget's y points up [S3 PACKAGE_FORMAT §3.3 `@map_view_*`]; TotK z points south [S28 §1]) |
-| `totk.map.tile.{n}`, `totk.map.tile.{n}.d` | text | n = 0..119 (n = r*12 + c): `module:totk:map/<L>/<cc>-<rr>/2` and `/1` for the selected layer |
+| `totk.map.tile.{n}`, `totk.map.tile.{n}.d` | text | n = 0..119 (n = r*12 + c): `romfs:/UI/Map/MainField/<L>_<cc>-<rr>_02<suffix>.bntx.zs` and the `_01` file for the selected layer (T7) |
 
 Tabs in game order (user's list): 0 Weapons (`Pouch.Weapon`), 1 Bows (`Pouch.Bow`, then
 `Pouch.Arrow` appended: `UNVERIFIED` that the game shows arrows there), 2 Shields, 3 Armor,
@@ -782,14 +1078,15 @@ Tabs in game order (user's list): 0 Weapons (`Pouch.Weapon`), 1 Bows (`Pouch.Bow
   `LC_ALL=C.UTF-8 WINEDEBUG=-all`). Test count grows with each packet.
 - CA3. Exports: `nm -D --defined-only build/gcc/0100F2C0115B6000.so` prints exactly the module's
   getters (T2a: `eden_dsmod_get_module`; from T3s also `eden_dsmod_get_save_extensions`; from T4
-  also `eden_dsmod_get_extensions`); `x86_64-w64-mingw32-objdump -p` of the DLL exports the same
+  also `eden_dsmod_get_extensions`; from T3a' also `eden_dsmod_get_font_extensions`); `x86_64-w64-mingw32-objdump -p` of the DLL exports the same
   names and imports no `libstdc++`/`libgcc`/`libwinpthread`/`libzstd` DLL.
 - CA4. From T4: `python3 -I tools/totk/gen_manifest.py --check` exits 0 (the committed
   `manifest.json`, `assets/map-blank.png` and `ASSETS.provenance.json` equal the generator's
   output) and `python3 -I tools/totk/check_manifest.py --eden $E` exits 0 (checks in T4).
 - CA5. Package: T1 acceptance 6 with `--build-id <kTargetBuild>`; `unzip -l` lists exactly
   `package.json`, `dualscreen/manifest.json`, `dualscreen/6F32C68DD3BC7D77.json`, the two
-  modules, and from T4 `dualscreen/ASSETS.provenance.json` and `dualscreen/assets/map-blank.png`.
+  modules, and from T4 `dualscreen/ASSETS.provenance.json` and `dualscreen/assets/map-blank.png`,
+  from T3a' `dualscreen/totk_font.txt`.
 - CA6. Wine probe (extend T1's): `LoadLibraryExW` of the packaged `windows-x86_64` module, then
   each exported getter with the right version and hash returns a table whose `version`,
   `struct_size` and `abi_hash` match the SDK headers; a wrong hash returns null.
@@ -802,7 +1099,8 @@ Tabs in game order (user's list): 0 Weapons (`Pouch.Weapon`), 1 Bows (`Pouch.Bow
   (d) every refused action returns false.
 - CA8. Every field in `totk_offsets.h` is `0` with an `UNKNOWN:` comment (T1 acceptance 9).
 - CA9. `git status --porcelain` shows no build output; `packages/` holds only generated files;
-  no file over 64 KiB is added except `native/third_party/zstd/*`.
+  no file over 64 KiB is added except `native/third_party/stb_truetype.h` (T3a'); no zstd source
+  in the repo (patch 0009's test fetches it into its build dir).
 - CA10. `totk_module_test` counts `operator new` (as it already does) and asserts zero allocations
   across 1000 `sample` calls on a full fixture snapshot with each page selected.
 
@@ -820,77 +1118,110 @@ a "false" case next to 1.4.3 and BotW), `totk_offsets.h` (each lead comment says
 Acceptance: CA1-CA3, CA5, CA6, CA8, CA9; `grep -rn 9B4E4365 native packages` finds only the
 1.2.1 "false" case in `totk_build_test.cpp`.
 
-### T3a (coder, after T4 and the user's zstd decision): romfs assets in the module
+### T3a' (coder, now; replaces T3a): game assets first
 
-**zstd.** The runtime has none (fact 15) and the proxy blocks GitHub downloads (T1). Vendor zstd
-1.5.6's single-file library from the PyPI sdist `zstandard-0.23.0.tar.gz` (sha256
-`b2d8c62d08e7255f68f7a740bae85b3c9b8e5466baa9cbf7f57f1cde0ac6bc09`; members `zstd/zstd.c`
-sha256 `3ef459f74b63efd8bf59bea100f260541a9873b34deac0e373381c3d09acb9a1`, `zstd/zstd.h`
-`4fab9cf39160cd15fbd9fbc2fd637ee300002fa70e307f85e8a7e45c1e057906`, `zstd_errors.h`, `zdict.h`,
-`LICENSE` (BSD; dual BSD/GPLv2)) [S31] into `native/third_party/zstd/` with a `README` naming
-origin and hashes. `pip download zstandard==0.23.0 --no-binary :all: --no-deps` works through the
-proxy (checked). **Permission note:** the planner's attempt to compile that downloaded file was
-refused by the session's auto-mode classifier ("Code from External"); the coder must ask the user
-to approve vendoring it (or the user adds the four files). Fallback if refused: Linux builds link
-Ubuntu's `libzstd-dev` (1.5.5, apt candidate checked), and the Windows DLL waits for the user.
-- CMake: `project(... LANGUAGES C CXX)`; static library `totk_zstd` from `zstd.c` with
-  `ZSTD_MULTITHREAD` off, `ZSTD_DISABLE_ASM=1` (as the companions build zstd [S2
-  `native/modules/CMakeLists.txt:182-183`]), `-w` and no `-Werror`, PIC; the module and the tests
-  link it; module link adds `-ffunction-sections -fdata-sections -Wl,--gc-sections`.
-- Exports: none new; T4 already exports the base extensions. T3a fills their `load_image`.
+Goal: real icons, item names and the game font before any more page work (user, 2026-11-02).
+Decision and evidence: §R2. Old T3a's module pipeline (vendored zstd, SARC, BNTX, ASTC in the
+module) is **not built**; it stays plan B (summary at the end of this packet).
 
-New headers (each with a test; all reads bounds-checked, fail closed, no exceptions across the
-ABI):
-1. `totk_zstd.h` — `class Zs`: `LoadPack(bytes of Pack/ZsDic.pack.zs)`: plain zstd -> SARC -> one
-   `ZSTD_DDict` per `*.zsdic` member, keyed by `ZSTD_getDictID_fromDDict`; `Decompress(in)`:
-   pick the dictionary by `ZSTD_getDictID_fromFrame` (0 = none), require a known
-   `ZSTD_getFrameContentSize` ≤ 64 MiB, output size must match. Unknown dictionary id, error or
-   size mismatch -> `nullopt`.
-2. `totk_sarc.h` — SARC member by name and member list; adapt `SarcWalk`/`SarcMember` from
-   `wonder_assets.cpp:355-410` [S2] (GPL-3.0, keep its copyright line).
-3. `totk_bntx.h` — BNTX texture list, block-linear unswizzle and decode, adapted from
-   `wonder_assets.cpp:62-300` [S2]; ASTC through the host's `decode_astc` (saved in `configure`)
-   [S1 `dsmod_module_extensions.h:45-64`]; formats other than ASTC fail closed (TotK icons and
-   tiles are ASTC [S28 §2]). Fields used per [S28 §2]: BRTI +0x1C format, +0x24 width, +0x28
-   height, +0x34 block height log2. Output RGBA8 ≤ 4096², ≤ 16 MiB [S3 MODULE_GUIDE §2.1].
-4. `totk_msbt.h` — LBL1 + TXT2, UTF-16LE to UTF-8 with surrogates, `0x0E` tags stripped;
-   adapted from the runtime's pure-format `mod_msbt.cpp` (GPL-3.0) [S1 `mod_msbt.h:1-50`].
-5. `totk_assets.h` — `class Assets` (one mutex):
-   - `Read(path)`: `read_romfs` size query, cap 64 MiB, one read, size must match [S3
-     MODULE_GUIDE §1.3].
-   - `EnsureZs()`: `Pack/ZsDic.pack.zs` once.
-   - `Names()`: probe `Mals/USen.Product.<n>.sarc.zs` for n = 200 down to 100 with size queries,
-     first hit wins (n = 142 on 1.4.3 [S28 §2]; the 1.2.0 value is `UNVERIFIED`), decompress,
-     SARC member `ActorMsg/PouchContent.msbt`, labels `<id>_Name` and `<id>_Caption` [S13][S28 §4].
-     English (`USen`) only in v1.
-   - `Icon(id)`: `UI/Tex/Icon/<id>.bntx.zs` [S28 §2], first texture.
-   - `MapTile(L, c, r, level)`: base `UI/Map/MainField/<L>_<cc>-<rr>_<lv>` [S28 §2]; suffixes
-     probed in order: reveal `""`, `_T`, `_TT`, `_TTT`, `_TTTT` x variant `""`, `_A_A`, `_A`, then
-     `.bntx.zs`; the found name is cached per tile. Fully revealed tiles only in v1 (no reveal
-     state without a save rule; T10+). `U` (Depths) tiles are channel masks: drawn as grey from
-     luma, as S28's first version did [S28 §2]. Name grammar `UNVERIFIED` on 1.2.0.
-   - Every miss is logged once per kind with the path tried (T8 reads these lines).
-6. `0100F2C0115B6000.cpp` — `load_image` (T4 left it returning false) for keys
-   `module:totk:icon/<id>` (`<id>` must match `[A-Za-z0-9_]{1,63}`, else refused: nothing from a
-   key reaches `read_romfs` unchecked) and `module:totk:map/<G|S|U>/<cc>-<rr>/<0-4>`
-   (cc 00-11, rr 00-09). The worker thread loads `EnsureZs` and `Names` at start; `load_image`
-   calls `EnsureZs` itself if it runs first.
+**A. Eden Duo patch `host/eden-duo/0009-DSMod-read-zstd-romfs-files-with-ZsDic.patch`** (on top of
+0001-0008, `git format-patch` like them, CI applies `000*.patch`):
+1. New pure files `src/core/mods/mod_zstd.h/.cpp` (namespace `Core::Mods::Zstd`, no runtime, no
+   logging; precedent `mod_yaz0.h`): `class Dicts { bool Add(std::span<const u8> zsdic); bool
+   Decode(std::span<const u8> frame, u64 cap, std::vector<u8>& out, std::string& error) const; }`.
+   `Add`: `ZSTD_createDDict`, keyed by `ZSTD_getDictID_fromDDict` (id 0 refused). `Decode`: magic
+   `28 B5 2F FD`; `ZSTD_getFrameContentSize` must be known and ≤ `cap`; dictionary id from
+   `ZSTD_getDictID_fromFrame` (0 = none, else must be known: "unknown zstd dictionary <id>");
+   `ZSTD_decompress_usingDDict` / `ZSTD_decompress`; output size must equal the content size.
+   DDicts freed in the destructor; copy disabled.
+2. `mod_nx_runtime.cpp`, `NxAssetState::Locate`: after the Yaz0 branch, a zstd branch of the same
+   shape (`ReadAll`, decode with `MaxWholeRead` as cap, `VectorVfsFile`, `RememberExpanded`). A frame
+   that names a dictionary loads the dictionaries once per source prefix: `Locate("<prefix>:Pack/
+   ZsDic.pack.zs")` (plain zstd, no dictionary) -> `NX::ParseSarc` -> `Dicts::Add` for every member
+   ending `.zsdic` (`zs.zsdic`, `pack.zsdic`, `bcett.byml.zsdic` [S28 §2][S30]); stored in
+   `NxAssetState` under `io_mutex`, cleared by `ResetNxAssets`; a failed load is remembered (one
+   warning) until the next reset. No recursion beyond that one plain frame.
+3. `IsNxAssetSource`: test the file name without a trailing `.zs` (so `X.bntx.zs` is an NX
+   source; `X.blarc.zs#...` already is, it has a `#`).
+4. `src/core/mods/duo_core.cmake`: add `mod_zstd.cpp`; core already links `zstd::zstd` [S1
+   `src/core/CMakeLists.txt:1225`]. Ledger row in `tools/duo/duo-touched-ledger.sh` data as the
+   other patches.
+5. Test `host/eden-duo/test/zstd_test.cpp` (std-only asserts, built by `run.sh` like
+   `stage_test`, natively and with MinGW under wine) against `$E/src/core/mods/mod_zstd.cpp` and
+   the zstd 1.5.6 single-file library from the user-approved PyPI sdist (hashes in plan B below),
+   unpacked into the build dir, never committed (`run.sh` takes `ZSTD_DIR`). Cases: two
+   dictionaries made with `ZDICT_finalizeDictionary` and explicit ids pick the right one; a plain
+   frame; unknown id; truncated frame; unknown content size; size over the cap; a dictionary with
+   id 0 refused. The `Locate` hook itself is compiled only in CI (H1c); the critic reviews it by
+   reading.
 
-Tests (`totk_zstd_test`, `totk_sarc_test`, `totk_bntx_test`, `totk_msbt_test`,
-`totk_assets_test`): dictionaries built in the test with `ZDICT_finalizeDictionary` and an
-explicit `dictID` (so two dictionaries with known ids exist), frames made with
-`ZSTD_compress_usingCDict`, a ZsDic-like pack (plain zstd around a SARC of `zs.zsdic` and
-`pack.zsdic`): the right dictionary is chosen, an unknown id, truncation, a missing content size
-and a size over the cap all fail. SARC: lookup, bad magic, offsets past the end, overlapping
-name table. BNTX: one ASTC 4x4 texture in block-linear layout made by a test-only swizzle; a fake
-`decode_astc` fills known colours; odd sizes; unknown format and oversize fail. MSBT: labels,
-tags stripped, a surrogate pair, bad section sizes. Assets: a fake `read_romfs` over an in-memory
-path map (extend `totk_test_host.h`): Mals probe order picks the highest n, icon and tile keys
-through the module table's `load_image`, invalid keys refused without any `read_romfs` call, the
-tile suffix probe order, a missing file gives false.
-Acceptance: CA1-CA10 (three getters), the tests above.
+**B. Module** (`0100F2C0115B6000.cpp`, new headers each with a test):
+1. `totk_msbt.h`: LBL1 + TXT2, UTF-16LE -> UTF-8 with surrogates, `0x0E` tags stripped; adapted
+   from the runtime's pure `mod_msbt.cpp` (GPL-3.0) [S1 `mod_msbt.h:1-50`]. Names: probe
+   `Mals/USen.Product.<n>.sarc.zs` with raw size queries (no `#`) for n = 200 down to 100, first hit
+   wins (142 on 1.4.3 [S28 §2]; 1.2.0 `UNVERIFIED`), then `read_romfs("romfs:Mals/USen.Product.
+   <n>.sarc.zs#ActorMsg/PouchContent.msbt")` (size query, cap 64 MiB, one read). Labels `<id>_Name`,
+   `<id>_Caption`. `totk.names.valid` 1 once loaded; names replace ids in `.name` keys; captions feed
+   `totk.inv.sel.caption` (T6). English only.
+2. Picture keys become `romfs:` paths: `totk.gear.<s>.icon`, `.fuse_icon`, `totk.inv.{i}.icon`,
+   `.fuse_icon`, `totk.inv.sel.icon` = `romfs:/UI/Tex/Icon/<id>.bntx.zs`, `<id>` checked against
+   `[A-Za-z0-9_]{1,63}` (else not published). Built once per snapshot on the worker thread (no
+   allocation in `sample`, CA10). `load_image` keeps refusing every key except the font atlas.
+3. `totk.assets.valid` (new fixed key, int): the worker probes `read_romfs("romfs:Pack/ZsDic.pack.zs
+   #zs.zsdic", size query)` once the romfs is open (retry every 2 s with the save poll): > 0 -> 1
+   (patched runtime), else 0. Logged once.
+4. `totk_font.h` + export `eden_dsmod_get_font_extensions` (by hand, version/hash checks as the
+   other getters; `.def` and version script): spec bytes from the package file
+   `dualscreen/totk_font.txt` = `body:48`; `decode_font` reads `Font/Font.Nin_NX_NVN.bfarc.zs#scft/
+   nintendo_NTLG-DB_DH_002.bfotf` and `#scft/External.bfotf` through the `read_romfs` saved in
+   `create` (decode_font gets no host [S2 `010055D009F78000.cpp:151`]), removes the XOR (key = word
+   0 ^ `0x18029a7f`, size = word 1 ^ key, big-endian, size ≤ file − 8 [S32]), rasterizes with
+   stb_truetype at cap 48 px: U+0020-U+017F, U+2013/2014/2018-201D/2026 from the text face and
+   U+E040-U+E068 from External, shelf-packed into one atlas ≤ 2048x2048 (RGB `FF`, A = coverage);
+   reports a dense glyph run U+0020..U+E068 (missing slots are empty glyphs advancing like a space,
+   as ACNH [S2 `acnh_font.h`]); returns false while the romfs is not readable (the host retries 30
+   times [S1 `mod_assets.cpp:393-405`]). `load_image("module:totk:font/body:48")` returns that
+   atlas. Adapted from `acnh_font.cpp` (GPL-3.0, keep its copyright line); stb_truetype v1.26
+   vendored to `native/third_party/stb_truetype.h` **after the user approves it** (step 6), compiled
+   in one TU with ACNH's pragmas. Manifest: `font: file:totk_font.txt`, `font_atlas:
+   module:totk:font/body:48` (CA5 lists the new package file).
+5. T8a dump (`totk_dump.h`): only when `read_romfs("user:totk-dump", size query) > 0` (the runtime's
+   player-supplied source [S1 `mod_assets.cpp:204-206`]); once per session on the worker; lines
+   prefixed `totk dump`, ≤ 200 chars each: the `Common.Product.<n>` probe (n 100-200, raw size
+   query) and the Mals n; the blarc's SARC member names; every texture of `timg/__Combined.bntx`
+   (name with suffix, width, height, format, channel map; BRTI fields as §plan B); for every
+   `blyt/*.bflyt` whose name starts `Pause`, `Pouch`, `App`, `PlayerStatus`, `ShortCut` or `Map`,
+   each `pic1`/`wnd1` pane (name, translate, size, its material's texture names and white/black
+   colours) via a small BFLYT walker adapted from `acnh_lyt.cpp` (GPL-3.0) [S2]; the Mals archive's
+   member names under `LayoutMsg/`. A failure logs one line and stops the dump.
 
-### T3s (coder, after T2a; may run beside T3a): save reader
+Tests: `totk_msbt_test` (labels, tags, a surrogate pair, bad sizes); `totk_font_test` (XOR header
+round trip with a synthetic key; bad key/size refused; spec parsing; an atlas built from a system
+TTF found at test time, e.g. DejaVu Sans, skipped with a message when none exists: glyph run dense,
+missing slots empty, atlas within bounds; `decode_font` returns false and calls the sink zero times
+when `read_romfs` misses); `totk_dump_test` (BNTX name list and a synthetic BFLYT with one pic1 and
+its material; no dump without the user file); `totk_module_test` (icon paths and id validation,
+`totk.assets.valid` 0/1 from the fake host, names from a fake Mals member, the font getter's
+version/hash checks, CA7 still zero memory calls). Extend `totk_test_host.h`'s fake `read_romfs` to
+answer `#member` paths from an in-memory map.
+Acceptance: CA1-CA10 with **four** getters (CA3), CA5 with `totk_font.txt`, the patch test above
+passing natively and under wine, `git am` of 0001-0009 onto a clean `v1.3.2.2` clone succeeds, and
+the tests above.
+
+Plan B (only if the user wants an unpatched runtime): old T3a in the module (vendored zstd,
+`ZsDic`, SARC from `wonder_assets.cpp:355-410`, BNTX block-linear unswizzle from
+`wonder_assets.cpp:62-300`, ASTC via the host's `decode_astc`, BRTI +0x1C format, +0x24 width,
++0x28 height, +0x34 block height log2 [S28 §2]) **plus** BC1-BC7 and R8 decoders for layout
+textures, serving `module:totk:<...>` keys; the module would then publish `module:` keys instead of
+`romfs:` paths and the generator's `TEX` table would switch prefix. Composites would not be
+available for those textures.
+The approved zstd source (still used by patch 0009's test): PyPI `zstandard-0.23.0.tar.gz` (sha256
+`b2d8c62d08e7255f68f7a740bae85b3c9b8e5466baa9cbf7f57f1cde0ac6bc09`; `zstd/zstd.c` sha256
+`3ef459f74b63efd8bf59bea100f260541a9873b34deac0e373381c3d09acb9a1`, `zstd/zstd.h`
+`4fab9cf39160cd15fbd9fbc2fd637ee300002fa70e307f85e8a7e45c1e057906`) [S31], fetched with
+`pip download zstandard==0.23.0 --no-binary :all: --no-deps`.
+
+### T3s (coder, after T2a): save reader
 
 New headers:
 1. `totk_gamedata.h` — `constexpr uint32_t Murmur3(std::string_view)` (x86_32, seed 0) with
@@ -928,7 +1259,13 @@ range -> not present); fuse and effect labels; abilities need both flags; positi
 (x, -z).
 Acceptance: CA1-CA3 (two getters), CA5-CA10, the tests above. No zstd, no romfs reads.
 
-### T4 (coder, after T3s; does not wait for T3a): shell, Gear page, generator and checker
+### T4 (done, `3be5876`..`7e9ab94`; look superseded by T4v): shell, Gear page, generator and checker
+
+Result: shell, tab bar, notice overlay, base extensions + action table (refusals logged once), Gear
+page with 4 cards and 3 states, manifest generator + checker with runtime-faithful visibility
+tests; critic SATISFIED after 3 rounds (7 -> 1 -> 0 findings). The user rejected its look (§Visual
+redesign); T4v restyles it. The text below is the packet as built.
+
 
 Base extensions move here from T3a: export `eden_dsmod_get_extensions`
 (`DSMOD_SDK_EXPORT_EXTENSIONS`, version script and `.def`), `capabilities` =
@@ -1006,80 +1343,131 @@ per rule above (unknown object key, bad action kind, unknown module action, rect
 string `hide_eq`, `totk.` bind not in `totk_keys.h`) must fail, the committed manifest passes.
 Acceptance: CA1-CA10 (three getters), and `python3 -I -m unittest discover -s tools/totk` passes.
 
-### T5 (coder, after T4): Abilities page
+### T4v (coder, after T3a'): restyle the shell and build the home page's Gear side
 
-`abilities`: seven tiles 280x300, row 1 at y 40 (x = 24 + 300k, k 0-3: Ultrahand, Fuse, Ascend,
-Recall), row 2 at y 360 (Autobuild, Camera, Travel Medallion). Each: a `rect` drawn bright when
-`totk.ability.<a>.owned` and dim otherwise (two rects, `need_bind` / `hide_bind`), the name
-(`bind_text totk.ability.<a>.name` with a static fallback label hidden while the bound name
-exists), "Locked" when not owned; `on_tap` -> `ability_select_k` (`module`
-`totk.ability.select` k, refused). Ability icons: romfs path `UNKNOWN` (find in T8's file list),
-text only in v1. Below: "Battery" `value` `totk.status.max_battery`; "Current ability: needs a
-live reader" label (T3). Empty state as T4.
-Tests: `totk_module_test` owned flags for all seven from a fixture save; select refused for
-0-6 and out of range. Acceptance: CA1-CA10.
+Goal: the §R5 look on the shell and the home page's right column and ability bar, and the left
+side's frames and empty states (T6 fills the grid and detail pane). Starts with the generator's
+`TEX` table `UNVERIFIED` (names T8a has not confirmed yet are emitted as written and miss
+harmlessly over their fallbacks); after T8a, a short follow-up commit fills `TEX` and the tints.
 
-### T6 (coder, after T4): Inventory page
+Carried over from T4 (critic rounds 1-3, keep them): centre- and right-aligned labels anchor at the
+rect's x (the runtime centres on rect x); the checker's rules and their mutation tests; the three
+gear card states from `.present` (1 item, 0 "None", absent nothing) and their visibility tests;
+the tab bar's page binds; the notice overlay; refused actions logged once; the empty state.
 
-`inventory`, BotW's grid pattern [S2 BotW manifest `inventory`]:
-- Tab chips `[0,0,1240,96]`: eight `button`s 155 px wide in game order, each `module`
-  `totk.inv.tab` k; highlighted by a derived `cmp eq` on `totk.inv.tab`; a small count `value`
-  `totk.inv.tab{k}.count`.
-- Grid: scroll region `inv_grid` `[0,104,760,856]`, `row_h 152`, `cols 5`, `count_bind
-  totk.inv.count`, `reset_bind totk.inv.tab`, bar colours. Template `image` `[16,112,136,136]`,
-  `repeat 400`, `repeat_bind totk.inv.count`, `repeat_cols 5`, `repeat_dx 148`, `repeat_row_dy
-  152`, `scroll inv_grid`, `src_bind totk.inv.{i}.icon`, `select_group inv`, `payload "{i}"`,
-  `draggable true`, `on_tap inv_select` (`module` `totk.inv.select` `$payload`); count/durability
-  `value` `totk.inv.{i}.value` on a shade, equipped marker `need_bind totk.inv.{i}.equipped`, fuse
-  badge `src_bind totk.inv.{i}.fuse_icon`. `on_swipe_left` on the grid -> `inv_tab_next` (the
-  scroll region keeps vertical drags [S3 PACKAGE_FORMAT §3.13]).
-- Detail pane `[776,104,440,856]`: icon `[878,120,236,236]` `src_bind totk.inv.sel.icon` with
-  `on_hold inv_use` (`module` `totk.inv.use`, refused); name; value with "Durability"/"x" by
-  `.kind`; hearts for food; fuse; effect; caption in scroll region `inv_caption`
-  `[792,560,408,300]` (`wrap_width 392`); a "Use / Equip" drop zone `[792,880,408,72]` with
-  `accept_group inv` and `drop_action inv_use` (refused: the drag lands, the `refused` haptic
-  plays).
-- Empty states: "No save data yet"; "Nothing here" when `totk.inv.count` is 0.
+Changes:
+1. Module: `totk.ui.page` 0 home, 1 abilities, 2 map (`kActionArgs[kActPage]` = 3); lists
+   published for page 0 (inventory) and 2 (map); `totk.inv.sel.equipped` (new: the selected slot
+   equals the pouch's `EquipIndex[0]`) and `totk.assets.valid` in `totk_keys.h`. Gear and status
+   publish on every page (the header is everywhere; cheap, fixed keys).
+2. **Typed keys** (critic's recommendation after T4): `totk_keys.h` tags every fixed key and key
+   family with its type (`int`, `text`, `f64`), e.g. a parallel `kFixedTypes[]` and a type per
+   family entry. The checker maps each bind field to the type it needs (`bind`, `max_bind`,
+   `need_bind`, `hide_bind`, `repeat_bind`, `count_bind`, `reset_bind`, `text_bind`, `cmp a` ->
+   int or f64; `bind_text`, `src_bind`, `src_detail_bind` -> text; `marker_x_bind`/`y` -> f64) and
+   fails on a mismatch (one mutation test per direction). `totk_module_test` asserts every
+   published key's publish call (`publish_i64`/`_text`/`_f64`) matches its declared type on a full
+   fixture with each page selected.
+3. Generator: tokens (§R5 table), the font keys, `totk_font.txt`, header with three tabs and L/R,
+   source line, art notice, home page right column (status panel, stat chips, equipment panel with
+   the three slot cards and the centre plate) and ability bar, the left side's frames, category tab
+   frames and empty states, a `TEX` table and one helper that emits a game texture over its
+   fallback. Pages `home`, `abilities` (frame and empty state until T5), `map` (until T7).
+4. Render tool `tools/totk/render/` (moved from the critic's scratch harness [S37], GPL-3.0,
+   credit the critic run): `render.sh $E <out dir>` builds `render_page.cpp` against `$E`'s
+   `mod_ui*.cpp` like `host/eden-duo/test/run.sh`; `render_page <manifest> <page id> <state.json>
+   <out.png> [--assets DIR]`. State comes from a JSON file of ints, floats and texts (no TotK
+   state hard-coded, so BotW pages render too); derived values as the harness does today. Every
+   widget key the TotK manifest uses is mapped to the runtime's `Widget` field (`fill`, `slice`,
+   `tint`, `src_rect`, `flip_*`, `pill`, `frame`, `border`, `bar`, `max_bind`, `repeat*`, `scroll`
+   rows, `highlight_*`, `text_*`); an unmapped key fails the run (so the tool cannot silently drift
+   from the manifest). Images: `file:` loads the package PNG; others load `DIR/<sanitized key>.png`
+   when `--assets` has it (the user's T8a `imgdump` PNGs, kept outside the repo), else a labelled
+   placeholder (grey checker with the texture name's last component). The game font: when
+   `--assets` holds `font-atlas.png` + `font-metrics.json` (written by a `totk_font_test` run on a
+   system TTF, or later from the real atlas), use it; else the built-in font.
+   Fixtures `tools/totk/render/states/*.json`: `full`, `mixed`, `none`, `nosave`, `notready`,
+   `noart` (assets.valid 0).
+
+Tests: the checker's new type rules and their mutation tests; `totk_module_test` page indices,
+`totk.inv.sel.equipped`, typed publishing; the generator `--check`.
+Acceptance: CA1-CA10, `python3 -I -m unittest discover -s tools/totk`, and renders: the home page
+in every fixture state, the abilities and map frames, and BotW's `ready` and `inventory` pages
+rendered by the same tool with the same placeholder rules (state: every `botw.*` gate the page
+needs set to 1), placed side by side in the report (scratch PNGs, not committed). The critic
+compares structure: header tabs, grid density, right column, bottom bar, text sizes, empty space
+(no region over 200x200 px without content in the `full` state), every game texture over a
+fallback (render with an empty `--assets`: the page still reads). Not checkable here: the real
+textures and font (T8a/T8).
+
+### T8a (user, after T3a' and H1c): name the game's UI textures
+
+1. CI-built eden-cli with patches 0001-0009 (`.github/workflows/eden-duo-windows.yml`), dev tools
+   on. Package installed as §T8 step 1. Create `<Eden data dir>/dualscreen/user/0100F2C0115B6000/
+   totk-dump` containing `1` [S1 `mod_user_source.h`].
+2. Start TotK 1.2.0, load a save, wait 10 s, quit. Send every log line containing `totk dump`,
+   `totk` and `DSMod` (font, `assets.valid`, Mals n, misses).
+3. In the dev-tools console, `imgdump <src> <out.png>` [S3 PORTING_A_GAME §6 table] for the textures
+   the coder picks from the dump (one line each, listed in the coder's T8a request), plus
+   `imgdump module:totk:font/body:48 font-atlas.png`. Send the PNGs; they are used only in the
+   scratch render (`--assets`), never committed.
+4. Delete the `totk-dump` file.
+Result: the coder fills `TEX`, the tints (BFLYT material colours), `Common.Product.<n>`, the Mals n
+and any BFLYT reference values, in one commit; the critic re-renders with `--assets`.
+
+### T6 (coder, after T4v): the home page's inventory side
+
+§R5 "Home page, left side": category tabs with `TEX.cat_<k>`, the grid (BotW's grid pattern [S2
+BotW manifest `inventory`]: template `image` `repeat 400`, `repeat_bind totk.inv.count`,
+`repeat_cols 5`, `repeat_dx 124`, `repeat_row_dy 124`, `scroll inv_grid`), the detail pane with
+the Equipped badge, caption (`totk.inv.sel.caption`, new text key from T3a's names) and the
+refused use by hold and drop. Module unchanged except `.caption`.
 Tests: `totk_module_test`: each tab's published count and order from a fixture save with all nine
-pouches (arrows after bows), equipped flags, `totk.inv.select` bounds, tab change resets the
-selection, `tab_next` wraps, only the current tab's `{i}` keys are published, 400-item cap.
-Acceptance: CA1-CA10.
+pouches (arrows after bows), equipped flags and `sel.equipped`, `totk.inv.select` bounds, tab change
+resets the selection, `tab_next` wraps, only the current tab's `{i}` keys are published (page 0
+only), 400-item cap. Acceptance: CA1-CA10 and renders (`full` with 40 items in a tab, an empty tab,
+`nosave`) beside BotW's `inventory` render.
 
-### T7 (coder, after T4 and T3a): Map page
+### T5 (coder, after T4v): Abilities page
 
-`map`:
+§R5 "Abilities page": seven tiles with `TEX.ability_<a>` icons (owned / locked tint), names,
+"Locked", refused select, battery strip. Ability icon path: the T8a dump decides between
+`UI/Tex/Icon/Obj_<X>.bntx.zs` and a layout texture.
+Tests: `totk_module_test` owned flags for all seven from a fixture save; select refused for 0-6 and
+out of range. Acceptance: CA1-CA10 and renders (all owned, none owned, `nosave`).
+
+### T7 (coder, after T4v and T3a'): Map page
+
+§R5 "Map page". Data and keys as before, with tile keys as `romfs:` paths:
 - Area `MainField` in `map.areas`: `min [-6000,-5000]`, `max [6000,5000]`, `image
-  file:assets/map-blank.png`, `clamp_view true`, style background dark (BotW's area shape [S2]).
-  Bounds from the tile grid (12x10 tiles of 1000 units from x -6000, z -5000 [S28 §2]).
-- `map` widget `[0,0,1240,968]`, `area MainField`, `pan_zoom true`, `marker_x_bind totk.map.x`,
-  `marker_y_bind totk.map.y` (no `marker_src`: the runtime draws its fallback player pin
-  [S3 PACKAGE_FORMAT §3.12 `pin_outer`]). Without a save the two values are absent; that the
-  marker then stays hidden is `UNVERIFIED` (T8). 120 `overlays`, tile (c, r) -> `x0 = -6000 + 1000c`,
-  `x1 = x0 + 1000`, `y1 = 5000 - 1000r`, `y0 = y1 - 1000` (map y = -z), `src_bind
-  totk.map.tile.{n}`, `src_detail_bind totk.map.tile.{n}.d`, `detail_threshold 360` (level 02 is
-  300 px [S28 §2]); runtime keys at `mod_manifest.cpp:1045-1066` [S1]. Area and overlay `UNVERIFIED`
-  as drawn until T8 (BotW proves the overlay pattern [S2]).
-- Layer pills `[24,24,180,72]` x3 (Surface, Sky, Depths): `module` `totk.map.layer` k,
-  highlighted by derived `cmp eq` on `totk.map.layer`. The module publishes the 240 tile keys for
-  that layer (letters `G`, `S`, `U` [S28 §2]) only while the map page is open.
-- "Last save position" label with `x` / `z` values; a "Centre" button -> `view_reset` on the map
-  widget's `id` [S3 PACKAGE_FORMAT §3.7]. The marker shows on every layer (the save has no layer
-  key we know; guessing it from height would break MODULE_GUIDE's "no heuristics" rule [S3 §6]);
-  T3's live reader adds the real layer.
-Tests: `totk_module_test`: tile keys for each layer equal the expected strings for (0,0),
-(11,9), (5,4); none published off the map page; position (x, -z); the `load_image` key parser
-accepts exactly G/S/U, 00-11, 00-09, 0-4.
-Acceptance: CA1-CA10.
+  file:assets/map-blank.png`, `clamp_view true`, dark background (BotW's area shape [S2]); bounds
+  from the tile grid (12x10 tiles of 1000 units from x -6000, z -5000 [S28 §2]).
+- `map` widget `[0,76,1240,972]`, `pan_zoom true`, `marker_x_bind totk.map.x`, `marker_y_bind
+  totk.map.y`, `marker_src TEX.player_pin` (fallback: no `marker_src`, the runtime's pin). 120
+  `overlays`, tile (c, r) -> `x0 = -6000 + 1000c`, `x1 = x0 + 1000`, `y1 = 5000 - 1000r`, `y0 = y1 -
+  1000`, `src_bind totk.map.tile.{n}`, `src_detail_bind totk.map.tile.{n}.d`, `detail_threshold 360`
+  (level 02 is 300 px [S28 §2]) [S1 `mod_manifest.cpp:1045-1066`].
+- Module: `totk.map.tile.{n}` = `romfs:/UI/Map/MainField/<L>_<cc>-<rr>_02<suffix>.bntx.zs` and `.d`
+  the `_01` file, for the selected layer only while page 2 is open; the suffix found by raw size
+  queries in the order reveal `""`, `_T`, `_TT`, `_TTT`, `_TTTT` x variant `""`, `_A_A`, `_A`
+  (fully revealed only in v1), cached per tile; misses logged once with the path. Depths (`U`)
+  tiles are channel masks [S28 §2]: drawn with `tint` `FF8A8F99` in v1 (`UNVERIFIED` look; a real
+  recolour needs plan B's module decode).
+- Layer pills (Sky, Surface, Depths top to bottom, `totk.map.layer` 1, 0, 2), Centre
+  (`view_reset`), position line; marker on every layer (no layer in the save).
+Tests: `totk_module_test`: tile keys for each layer equal the expected strings for (0,0), (11,9),
+(5,4); none published off page 2; position (x, -z); the suffix probe order with a fake
+`read_romfs`. Acceptance: CA1-CA10 and renders (each layer pill selected, `nosave`).
 
-### T8 (user, after T4-T7 and H1c): first real run
+### T8 (user, after T4v-T7, T8a and H1c): first real run
 
 Only the user can run these. On the Windows PC with the CI-built patched eden-cli:
 1. Unzip `dist/0100F2C0115B6000.dsmod.zip` into `<Eden data dir>/load/0100F2C0115B6000/TotKDuo/`
    so `dualscreen/manifest.json` is directly inside [S3 README "Desktop"].
 2. `eden-cli.exe --aux-window --aux-rect 0,1080,1240,1080 --screenshot-prefix C:\duo\p -g <TotK
    1.2.0>`; load a save. For each page tap its tab, then touch `C:\duo\p.shot`
-   [S3 PORTING_A_GAME §6]; send `p-screen2.png` for Gear, Abilities, Inventory (each tab) and Map
-   (each layer, zoomed out and zoomed in).
+   [S3 PORTING_A_GAME §6]; send `p-screen2.png` for the home page (each category tab, an item
+   selected), Abilities and Map (each layer, zoomed out and zoomed in).
 3. Send every log line containing `totk` and `DSMod` (missing romfs paths, Mals n, dictionary
    ids, refused actions) and the `DSMod snapshot` lines.
 4. Compare with the game: hearts / max hearts / rupees / battery units, equipped weapon, bow,
@@ -1088,8 +1476,9 @@ Only the user can run these. On the Windows PC with the CI-built patched eden-cl
 5. Report average `sample` µs if the dev-tools build prints it [S3 MODULE_GUIDE §6].
 6. Then H2/H3 on the Thor: the same pages on the bottom screen, taps, the swipe, the hold on the
    detail icon and a drag to the Use zone (both must play the refused haptic and change nothing).
-What the user's romfs is needed for: icons, names, captions and map tiles. Without it (or when a
-path differs on 1.2.0) the pages still show ids, numbers and empty picture slots.
+What the user's romfs is needed for: the font, UI textures, icons, names, captions and map tiles.
+Without it, without patch 0009, or when a path differs on 1.2.0, the pages still show ids,
+numbers and the widget-drawn fallbacks in the built-in font.
 
 ## What needs the user
 
@@ -1097,7 +1486,10 @@ path differs on 1.2.0) the pages still show ids, numbers and empty picture slots
 |---|---|---|
 | D2 target version | T2a, T2 | Answered: 1.2.0 |
 | D2b | T3 only | Answered: stay on 1.2.0 |
-| Approve vendoring zstd | T3a | Answered: approved by the user (zstd 1.5.6 files from the PyPI `zstandard` 0.23.0 sdist, hashes in §T3a) |
+| Approve vendoring zstd | T3a | Answered: approved. No longer vendored in the module (§R2); the same files build patch 0009's test outside the repo (hashes in §T3a') |
+| Approve vendoring stb_truetype | T3a' | `native/modules/third_party/stb_truetype.h` v1.26 (public domain) from the companions clone, for the game font (§R2) |
+| T8a dump | T8a, T4v | The `totk-dump` file, one start of TotK 1.2.0 with the CI-built eden-cli (patches 0001-0009), the `totk dump` log lines and the `imgdump` PNGs the coder lists |
+| Reference look decisions | T4v | Defaults taken (change any): pages Map / Inventory (home) / Abilities with Gear in the home page's right column; no 3D Link figure (§R3), the equipped weapon at 256 px instead; English only |
 | T8 run | T8 | Package installed in the CI-built eden-cli, one save loaded, `.shot` pictures per page, `totk`/`DSMod` log lines, values compared with the game |
 | eden-duo fork + Windows build | H1c | A fork repo for the H1 patches, and either a Windows build on their PC (MSVC + Ninja, `tools/windows/load-msvc-env.ps1` [S1 docs/Build.md]) or a GitHub Actions Windows runner in the fork |
 | Windows tests | H1c, H2 | Install the window-host MSI from `apollo2-vibe` branch `claude/clever-clarke-k7hhhj`, add the "TotK duo" app (H2), run the H1c and H2 checks; send host logs and `.shot` screenshots |
@@ -1128,6 +1520,13 @@ Path A stays the fallback: the same package works there with an `android-arm64-v
 - **Save lag and slot choice.** The pages show the last save, not the live game; two saves in the
   same minute tie on the caption date (manual beats auto, then the lower slot), so the wrong one
   of two same-minute saves can show until the next save.
+- **Texture names and archive versions on 1.2.0** are `UNKNOWN` until T8a (no public list).
+  Until then T4v's game textures miss and the fallbacks show; the T8a dump and `imgdump` fix
+  them in one commit.
+- **Patch 0009 is a runtime change.** The art needs the patched eden-cli; a stock Eden Duo
+  shows the fallbacks and the "needs patch 0009" line. Plan B (module decoders) exists.
+- **Font face and coverage.** The menu face is `UNVERIFIED` (NTLG-DB chosen); characters
+  outside the atlas set fall back through the runtime's substitutions.
 - **Spoilers.** The map shows fully revealed tiles in v1 (no reveal state yet).
 - **Text coverage.** The built-in font may lack some characters in item names (e.g. `é`); the
   runtime draws them anyway and logs it [S1 `mod_nx_runtime.cpp:2438`].
@@ -1177,8 +1576,13 @@ Path A stays the fallback: the same package works there with an `android-arm64-v
 | S28 | https://github.com/kitcatkode/totk-android (MIT) `android/BOTTOM_SCREEN.md`, `runtime/bottom_inventory.c`, `runtime/bottom_assets.c` (raw HEAD, read 2026-11-01) | TotK 1.4.3 romfs paths for map tiles, icons, Mals; ZsDic contents; tile grid and levels; Depths masks; GameData keys and live layout on 1.4.3; murmur3 vectors; equip through the quick menu |
 | S29 | https://github.com/marcrobledo/savegame-editors (MIT) `zelda-totk/zelda-totk.js`, `zelda-totk.class.pouch.js`, `zelda-totk.class.item.js` | GameData key names and hashes, pouch structs, ability flags, `slot_0N`, caption date hashes |
 | S30 | GitHub code search "ZsDic.pack.zs" / "bcett.byml.zsdic" (2026-11-01): KillzXGaming/Switch-Toolbox `Switch_Toolbox_Library/Compression/Formats/Zstb.cs`, dt-12345/asb `zstd.py`, valentderah/totk-pc-recomp `runtime/camera_speed.c` (result snippets only; files not opened) | `Pack/ZsDic.pack.zs` is plain zstd around a SARC of dictionaries `zs.zsdic`, `pack.zsdic`, `bcett.byml.zsdic` |
-| S31 | https://pypi.org/project/zstandard/0.23.0/ sdist `zstandard-0.23.0.tar.gz` | zstd 1.5.6 single-file library (`zstd/zstd.c`, BSD or GPLv2), hashes in §T3a |
+| S31 | https://pypi.org/project/zstandard/0.23.0/ sdist `zstandard-0.23.0.tar.gz` | zstd 1.5.6 single-file library (`zstd/zstd.c`, BSD or GPLv2), hashes in §T3a' |
+| S32 | https://github.com/ly05010419/MacNativeGames (MIT) `games/totk/scripts/make_button_icons.py`, `ultrawide_layout.py`, `layout_view.py`, `docs/v1.2.1-port.md` (raw HEAD, read 2026-11-02) | TotK font archive `Font/Font.Nin_NX_NVN.bfarc.zs` and `.bfotf` faces + XOR header; `UI/LayoutArchive/Common.Product.<n>.Nin_NX_NVN.blarc.zs` with `timg/__Combined.bntx`; HUD key texture names; layout names; 1.2.1 has only `Common.Product.110` |
+| S33 | https://github.com/zeldadungeon/maps `tools/README.md` (raw HEAD) | TotK map pins are `MapIcon*` textures in `Common.Product.100...blarc.zs` `timg/__Combined.bntx`; decompress with `zs.zsdic` |
+| S34 | https://github.com/kuraeow/ultratears (GPL-3.0) `src/host/ui_aspect.c` (raw HEAD) | TotK layout names in `Common.Product.140` (full-screen menu backgrounds, AppMap, PlayerStatus) |
+| S36 | User's photo `images/1.png` (2026-11-02) | The reference look: Eden Duo BotW companion on a Thor bottom screen |
+| S37 | Critic's render harness `scratchpad/critic-t4/render/harness.cpp` (T4 rounds) | Renders a manifest page with the runtime's own `RenderPage`; basis of T4v's render tool |
 
 The MinGW and wine results come from spikes in the planner's scratch dir
 (`/tmp/claude-0/-home-user/6540dfaa-428d-5b44-8a41-bf2bc5812bad/scratchpad/spike`), not from a
-web source.
+web source. The BotW placeholder renders in §R1 are in `scratchpad/planner-render/`.
