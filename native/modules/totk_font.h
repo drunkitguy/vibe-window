@@ -1,10 +1,13 @@
 // SPDX-FileCopyrightText: Copyright 2026 Eden DSMod fork
 // SPDX-License-Identifier: GPL-3.0-or-later
-// The game font from the player's romfs (nothing shipped), adapted from the ACNH module's
+// The game font from the player's game files (nothing shipped), adapted from the ACNH module's
 // acnh_font.cpp/.h in igawa6/eden-duo-companions (GPL-3.0) [S2]:
 //   Font/Font.Nin_NX_NVN.bfarc.zs, a zstd SARC (Eden Duo patch 0009 reads its members), with the
 //   text face scft/nintendo_NTLG-DB_DH_002.bfotf and the button pictograms scft/External.bfotf
-//   (U+E040-U+E068) [S32 make_button_icons.py:4-12,72-75].
+//   (U+E040-U+E068) [S32 make_button_icons.py:4-12,72-75]. The archive is the same in 1.0.0 and
+//   1.2.1 [S32], so it is read from "base:", the romfs the base NCA ships (no update, no
+//   LayeredFS [S1 mod_assets.cpp:196-199]): stb_truetype does not bounds-check table contents
+//   and a corrupt font from a mod would crash the emulator. So font mods never show here.
 // .bfotf: an OpenType (CFF) font behind an 8-byte header, the whole file XOR-ed per word with one
 //   key (all u32 big-endian here; S32 reads the same words little-endian, magic 0x18029a7f):
 //   +0 0x7F9A0218 ^ key   +4 plain size ^ key   +8 font bytes ^ key (plain = the first `size`).
@@ -14,7 +17,8 @@
 //   U+2013/2014/2018-201D/2026 from the text face, U+E040-U+E068 from External, shelf-packed.
 // The ABI wants one dense run: U+0020..U+E068; slots neither face renders are empty glyphs
 // advancing like a space. Metrics as ACNH: line_height = cap, bearing_y = box top above the
-// baseline, advance rounded; RGB 0xFF, A = coverage.
+// baseline, advance rounded; RGB 0xFF, A = coverage. The cap height is the top of the text
+// face's 'H' (no 'H': no atlas).
 #pragma once
 
 #include <algorithm>
@@ -62,8 +66,8 @@ inline constexpr std::uint32_t kMinCap = 8, kMaxCap = 96;
 inline constexpr std::uint32_t kMaxAtlas = 2048;
 inline constexpr std::uint32_t kFirst = 0x20, kLast = 0xE068;
 inline constexpr const char* kTextPath =
-    "romfs:Font/Font.Nin_NX_NVN.bfarc.zs#scft/nintendo_NTLG-DB_DH_002.bfotf";
-inline constexpr const char* kExtPath = "romfs:Font/Font.Nin_NX_NVN.bfarc.zs#scft/External.bfotf";
+    "base:Font/Font.Nin_NX_NVN.bfarc.zs#scft/nintendo_NTLG-DB_DH_002.bfotf";
+inline constexpr const char* kExtPath = "base:Font/Font.Nin_NX_NVN.bfarc.zs#scft/External.bfotf";
 
 struct Atlas {
     std::uint32_t cap = 0, width = 0, height = 0;
@@ -122,7 +126,6 @@ struct Face {
     std::vector<std::uint8_t> plain; // stbtt_fontinfo points into it: never resized after Init
     stbtt_fontinfo info{};
     float units_per_em = 0;
-    float cap_units = 0; // top of 'H' in font units
 };
 
 // One face from a .bfotf. False when unreadable or malformed.
@@ -134,31 +137,25 @@ inline bool LoadFace(const EdenDsmodHostApi& h, const char* path, Face& f) {
     if (!TablesInside(f.plain) || !stbtt_InitFont(&f.info, f.plain.data(), 0))
         return false;
     f.units_per_em = std::round(1.0f / stbtt_ScaleForMappingEmToPixels(&f.info, 1.0f));
-    for (const int probe : {'H', 'E', 'I'}) {
-        int x0, y0, x1, y1;
-        const int gi = stbtt_FindGlyphIndex(&f.info, probe);
-        if (gi != 0 && stbtt_GetGlyphBox(&f.info, gi, &x0, &y0, &x1, &y1) && y1 > 0) {
-            f.cap_units = float(y1);
-            break;
-        }
-    }
-    if (f.cap_units <= 0) {
-        int ascent, descent, gap;
-        stbtt_GetFontVMetrics(&f.info, &ascent, &descent, &gap);
-        f.cap_units = float(ascent) * 0.7f;
-    }
-    return f.units_per_em > 0 && f.cap_units > 0; // every scale divides by these
+    return f.units_per_em > 0; // ext_scale divides by it
 }
 
-// The atlas at `cap` from the player's romfs, or null while either face is not readable (the
-// host retries decode_font) or when a face is malformed or the glyphs do not fit 2048x2048.
+// The atlas at `cap` from the base romfs, or null without that source, while either face is not
+// readable (the host retries decode_font) or when a face is malformed or the glyphs do not fit
+// 2048x2048.
 inline std::shared_ptr<const Atlas> Load(const EdenDsmodHostApi& h, std::uint32_t cap) {
-    if (!h.read_romfs || cap < kMinCap || cap > kMaxCap)
+    if (!h.read_romfs || !(h.capabilities & EDEN_DSMOD_CAP_SOURCE_BASE) || cap < kMinCap ||
+        cap > kMaxCap)
         return nullptr;
     Face text, ext;
     if (!LoadFace(h, kTextPath, text) || !LoadFace(h, kExtPath, ext))
         return nullptr;
-    const float scale = float(cap) / text.cap_units;
+    int x0, y0, x1, cap_units = 0; // the top of 'H' in font units; 0 for an empty glyph
+    if (const int H = stbtt_FindGlyphIndex(&text.info, 'H'))
+        stbtt_GetGlyphBox(&text.info, H, &x0, &y0, &x1, &cap_units);
+    if (cap_units <= 0)
+        return nullptr;
+    const float scale = float(cap) / float(cap_units);
     const float ext_scale = scale * text.units_per_em / ext.units_per_em;
 
     struct Raster {
@@ -192,9 +189,6 @@ inline std::shared_ptr<const Atlas> Load(const EdenDsmodHostApi& h, std::uint32_
             if (r.w > 0 && r.h > 0 && r.w <= 512 && r.h <= 512) {
                 r.coverage.assign(std::size_t(r.w) * r.h, 0);
                 stbtt_MakeGlyphBitmap(&f.info, r.coverage.data(), r.w, r.h, r.w, s, s, gi);
-                if (std::all_of(r.coverage.begin(), r.coverage.end(),
-                                [](std::uint8_t v) { return v == 0; }))
-                    r.w = r.h = 0;
             } else {
                 r.w = r.h = 0;
             }
@@ -206,8 +200,6 @@ inline std::shared_ptr<const Atlas> Load(const EdenDsmodHostApi& h, std::uint32_
                                          [](const Raster& r, std::uint32_t c) { return r.cp < c; });
         return it != rasters.end() && it->cp == cp ? &*it : nullptr;
     };
-    if (!find('A')) // not a Latin text face
-        return nullptr;
     // Shelf pack in code point order into the smallest power-of-two width (height <= 2x width),
     // 1 px clear around each glyph.
     constexpr std::uint32_t kPad = 1;

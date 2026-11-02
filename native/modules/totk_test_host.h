@@ -53,6 +53,7 @@ struct Host {
     std::mutex romfs_mutex;
     std::map<std::string, std::vector<std::uint8_t>, std::less<>> romfs;
     unsigned romfs_calls = 0;
+    std::vector<std::string> romfs_paths; // every path asked for, in order
     EdenDsmodHostApi api{};
 
     Host() {
@@ -111,6 +112,7 @@ struct Host {
             auto& h = *static_cast<Host*>(u);
             std::scoped_lock lock{h.romfs_mutex};
             ++h.romfs_calls;
+            h.romfs_paths.emplace_back(path);
             const auto it = h.romfs.find(std::string_view(path));
             if (it == h.romfs.end())
                 return 0;

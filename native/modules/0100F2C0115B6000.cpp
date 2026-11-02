@@ -572,8 +572,9 @@ EdenDsmodBool OnAction(void* instance, const char* action, std::int64_t arg) {
     }
 }
 
-// The atlas at `cap`, built from the romfs through the create host's read_romfs (decode_font gets
-// no host [S2 010055D009F78000.cpp:151]); null while the font is not readable.
+// The atlas at `cap`, built from the base: romfs (totk_font.h) through the create host's
+// read_romfs (decode_font gets no host [S2 010055D009F78000.cpp:151]); null while the font is not
+// readable.
 std::shared_ptr<const totk::font::Atlas> Font(Instance& in, std::uint32_t cap) {
     std::scoped_lock lock{in.font_mutex};
     if (!in.font || in.font->cap != cap) {

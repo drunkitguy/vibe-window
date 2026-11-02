@@ -834,13 +834,27 @@ int main() {
         m->destroy(blind);
     }
 
-    // The font from the romfs (system fonts as .bfotf files; skipped without one): decode_font
-    // reports the dense run once, load_image the atlas it was measured on; a bad spec is refused.
+    // The font from the base: romfs (system fonts as .bfotf files; skipped without one):
+    // decode_font reports the dense run once, load_image the atlas it was measured on; a bad
+    // spec is refused; a host without the base: source gets no font; only base: font paths.
     if (const auto text = totk::test::SystemTextFont(), extf = totk::test::SystemExtFont();
         !text.empty() && !extf.empty()) {
         Host hf;
         hf.PutRomfs(totk::font::kTextPath, totk::test::Bfotf(text, 0x12345678));
         hf.PutRomfs(totk::font::kExtPath, totk::test::Bfotf(extf, 0x9ABCDEF0));
+        {
+            void* nobase = m->create(&hf.api, "{}");
+            const std::string spec = "body:48";
+            const auto bytes = reinterpret_cast<const std::uint8_t*>(spec.data());
+            bool sunk = false;
+            const EdenDsmodFontSink mark = [](void* r, std::uint32_t, std::uint32_t,
+                                              const EdenDsmodFontGlyph*, std::uint32_t) {
+                *static_cast<bool*>(r) = true;
+            };
+            assert(nobase && !fe->decode_font(nobase, bytes, spec.size(), &sunk, mark) && !sunk);
+            m->destroy(nobase);
+        }
+        hf.api.capabilities |= EDEN_DSMOD_CAP_SOURCE_BASE;
         void* fi = m->create(&hf.api, "{}");
         assert(fi);
         struct Got {
@@ -888,6 +902,13 @@ int main() {
         assert(got.calls == 3 && static_cast<Instance*>(fi)->font->cap == 30);
         assert(hf.MemoryCalls() == 0);
         m->destroy(fi);
+        unsigned font_reads = 0;
+        for (const auto& path : hf.romfs_paths) // the worker is joined: no lock needed
+            if (path.find("Font/") != std::string::npos) {
+                ++font_reads;
+                assert(path.starts_with("base:Font/"));
+            }
+        assert(font_reads > 0);
     } else {
         std::puts("totk_module_test: no system font found; font atlas cases skipped");
     }
