@@ -42,27 +42,30 @@ Everything below is blocked on you, in this order. Send logs, `.shot` files and 
    bottom taps move the companion, taps within 50 px of the bottom edge, controller input after
    taps. Also check two fingers on each screen at once. Then the §H3 checks: both screens at
    native size, tap error under 2 px, no added frame drops at 60 fps.
-5. **T2.** You play **1.2.0** (D2, answered). Send `xxd -s 0x40 -l 32 -p main` from
-   `eden-cli --dump-romfs` of base + update, so T2 confirms the 1.2.0 build id T2a sets.
-6. **Approve vendoring `stb_truetype.h` (T3a').** TotK's fonts are CFF outlines (`.bfotf`), so
-   the module rasterizes them. The file is `native/third_party/stb_truetype.h` v1.26
-   (public domain) from the companions clone [S2], copied to `native/third_party/`; the ACNH module already does the same with it.
-   The session's classifier refused compiling outside code once (zstd, T3a), so the coder asks you
-   first. The zstd vendoring you approved is **no longer needed in the module** (patch 0009 below
-   decodes zstd in Eden Duo, which already links zstd); the coder uses those files only to build
-   patch 0009's standalone test, outside the repo.
-7. **T8a (after T3a' and H1c): texture dump.** Use the CI-built eden-cli (it now applies
+5. **Update to 1.2.1 (D2b, user said yes), only after T2b is in CI.** Live data needs 1.2.1: the
+   pointer chains found are for 1.2.1 ([S9][S7][S38], §L2); 1.2.0 has none [S9]. You need the **1.2.1 update file (v393216)** itself, not the latest: a console update
+   installs the newest one, 1.4.3 (v720896) [S5] (`UNVERIFIED` whether Nintendo still serves
+   v393216), and with 1.4.3 none of these chains apply (fact: offsets moved [S7]; 1.4.3 has only the
+   GameData layout [S28 §3], so status and position would need new scans). Then back up your
+   saves and install it in Eden (§T8c steps 1-2). Before T2b's package (CI "TotK companion") is
+   built, the companion on 1.2.1 shows only the notice page.
+6. **T8a on 1.2.1 if you said yes in step 5, else 1.2.0 (after T2b and H1c): texture dump.** Use the CI-built eden-cli (it applies
    `host/eden-duo/0001-0011`) and the CI-built companion package. Install the package, create the
-   `totk-dump` file, start TotK 1.2.0 once, load a save, wait 2 minutes, quit; the log should then
-   contain `totk dump done` (or `failed`), as §T8a explains. Send every log line with `totk` or `DSMod`. Then write the `imgdump` lines the
-   coder lists into the `EDEN_DSMOD_CMD` file and send the PNGs back (they stay out of the repo).
-   Exact PowerShell steps in §T8a. This names the game's UI textures for 1.2.0, which no public
-   source lists.
-8. **T8 (after T4v-T7 are coded here).** Install the package on the PC, load a save, and send the
-   `.shot` pictures and `DSMod` log lines listed in §T8. This is the first time the restyled pages
-   are seen with your game's textures, font, icons and map tiles, and values from your save.
-9. **T3 (later, memory).** Provide the dumps (exefs/romfs, kept outside the repo) or run discovery
-   on the PC, plus the test saves listed in "What needs the user". Not needed for T3a'-T7.
+   `totk-dump` file, start TotK (1.2.1 if you said yes in step 5, else 1.2.0) once, load a save, wait 2 minutes, then quit. The log should
+   then contain `totk dump done` (or `failed`), as §T8a explains.
+   - Send every log line with `totk`, `DSMod` or `build_id=`. Eden's `Querying NSO patch existence for
+     build_id=<hex>, name=main` line (every boot, trailing zeros trimmed [S1 `src/core/file_sys/patch_manager.cpp:473-475`];
+     `Patching NSO` appears only with an exefs patch or `dump_nso` [S1 `src/core/loader/nso.cpp:221`])
+     confirms the build id (T2) even when the package is refused. Romfs names may differ from 1.2.0 (Mals n, `Common.Product` n), and
+     the dump records them.
+   - Then write the `imgdump` lines the coder lists into the `EDEN_DSMOD_CMD` file and send the PNGs
+     back (they stay out of the repo).
+   Exact PowerShell steps are in §T8a.
+7. **T8c (after T3a and T3b are coded here): check live values.** Console `chain` reads, a few
+   in-game changes against the HUD, then send the log (§T8c).
+8. **T8 (after T4v-T7): first real run.** Install the package on the PC, load a save, and send the
+   `.shot` pictures and `DSMod` log lines listed in §T8.
+9. **T8d (after T3c): GameData check and ability scan** (§T8d).
 
 ## Facts that shape the plan
 
@@ -233,7 +236,7 @@ hex characters [S3 PORTING_A_GAME §1.3; S3 PACKAGE_FORMAT §1].
 - 1.4.x moved code a lot: one function sits at `0xFBB374` in 1.2.1 and `0x9F1510` in 1.4.3
   [S7]. Offsets do not carry over between 1.2.1 and 1.4.x.
 
-**Target build (decision D2, user: 1.2.0).** One build only. T1 assumed 1.2.1; the user plays
+**Target build (decision D2, user: 1.2.0; extended by D2b below).** One build only until T2b. T1 assumed 1.2.1; the user plays
 **1.2.0** (update v327680). T2a switches `kTargetBuild` to the 1.2.0 id
 `6F32C68DD3BC7D77AA714B80E92A096A737CDA77` + 24 zeros (`UNVERIFIED` zero tail, T2 confirms with
 the user's `xxd`). Two sources agree on the 20 bytes: TkSharp `NSO_BINARY_ID_120 =
@@ -242,10 +245,14 @@ the user's `xxd`). Two sources agree on the 20 bytes: TkSharp `NSO_BINARY_ID_120
 - Consequence for T3 (memory) only: 1.2.0 has the fewest leads. switch-cheats-db holds 30 cheats
   for `6F32C68DD3BC7D77`, all render-resolution, contrast and saturation (no pointer chains),
   against 111 for 1.2.1 [S9]; totk-mods' offsets are 1.2.1 [S7]; lotuskit covers 1.0.0, 1.1.0 and
-  1.2.1 [S28 §Sources]. Decision **D2b (user, before T3)**: stay on 1.2.0 and find every offset
-  from scratch, or update to 1.2.1 (most leads) or 1.4.3 (current, live GameData layout known
-  [S28 §3]). T4-T7 read the save and the romfs, which do not depend on the build, so D2b does not
-  block them.
+  1.2.1 [S38].
+
+**Decision D2b (2026-11-02, user): live data on 1.2.1.** The user asked "I want live
+data. What do we need to do". The user chose to update TotK to **1.2.1** (update v393216, build `9B4E43650501A4D4489B4BBFDB740F26AF3CF850` [S6]; 16-hex
+prefix also in [S5] and [S7 `phantom-foothold/src/program/GameProfiles.hpp:20`]; zero tail
+`UNVERIFIED`, T2). The package keeps serving 1.2.0 (save and romfs pages, no memory reads) and adds
+1.2.1 with live readers (T2b). Live values replace the save where valid; the companion stays
+read-only (CA7). Plan: §Live data on 1.2.1.
 
 ## Public TotK research (leads, never facts)
 
@@ -253,9 +260,13 @@ Every lead is confirmed from code and live validation before use [S3 PORTING_A_G
 
 | Source | License | What it gives | Use |
 |---|---|---|---|
-| switch-cheats-db `cheats/0100F2C0115B6000.json` [S9] | none found; authors credited in file | 1.2.1: 111 cheats incl. pointer chains. Rupees `[[main+0x4721B98]+0xD8]+0x28EA4` (cheat 9); hearts chain from `main+0x46AF308` `+0x480 +0x228 +0x2F8` (cheat 3); stamina via `main+0x4721B98` and `main+0x46AF308` (cheat 4); motion via `main+0x471DCB0 +0xC8 +0x178 +0x30`, float `+0xFC` (cheat 17); battery, durability, arrows, pouch sizes, Korok map. 1.0.0-1.1.2: ASM hooks for HP/stamina/quantity. No 1.4.x entries | Anchors for T3 (1.2.1) |
+| switch-cheats-db `cheats/0100F2C0115B6000.json` [S9] | none found; authors credited in file | 1.2.1: 111 cheats incl. pointer chains. Rupees `[[main+0x4721B98]+0xD8]+0x28EA4` (cheat 9); hearts chain from `main+0x46AF308` `+0x480 +0x228 +0x2F8` (cheat 3); stamina via `main+0x4721B98` and `main+0x46AF308` (cheat 4); motion via `main+0x471DCB0 +0xC8 +0x178 +0x30`, float `+0xFC` (cheat 17); battery, durability, arrows, pouch sizes, Korok map. 1.0.0-1.1.2: ASM hooks for HP/stamina/quantity. No 1.4.x entries. Value chains decoded in §L2 | Anchors for T3a-T3c (1.2.1, D2b) |
+| Eiffel2018 1.2.1 set (mirror xenocard/Eiffel2018 [S40]) decoded with Atmosphere's opcode table [S39] | none found | Author of the [S9] 1.2.1 value cheats (codes identical); widths and hop counts per chain (§L2) | §L2 |
+| Arch9SK7 MyNXCheats `9B4E43650501A4D4.txt` [S41] | none found | 1.2.1: mostly code patches; time-of-day code site `main+0xB3920C`, temperature `main+0xB7D13C`/`+0xB7D208`; no data address | Gaps only |
+| aquacluck/totk-lotuskit [S38] | not determined | 1.2.1 symbols: `gmd::GameDataMgr::sInstance` `main+0x04721B98`, `SceneModule::sInstance` `main+0x04728538`; actor struct (name +0x218, position +0x2B4); GameData flag list with types and hashes (`PlayerStatus.CurrentSpecialPower` Enum 0xf6e7eacd, `MapData.CurrentLayer` Enum 0x1294b632) | §L2, T3c, T3d |
+| lingxup-hash/switch-native-mac 1.2.1 cheat test [S42] | not determined | A third party read the Eiffel 1.2.1 hearts, stamina, weapon and rupee chains read-only (zero writes) on 1.2.1 in a Mac native port, not Eden | Supporting only |
 | MyNXCheats `277178B7DBA1B6D4.txt` [S10] | none found | 1.4.3 cheat list: Inf. Health, Stamina, Battery, Horse Stamina, Perfect Thermometer, Gloom, Items x999, durability, movement. Code types not inspected (`UNVERIFIED`) | Anchors for T3 if target is 1.4.3 |
-| afiaka87/totk-mods `Totk121Offsets.hpp` [S7] | MIT | 1.2.1: SceneModule `main+0x04728538`; GameDataMgr holder `main+0x0462E3D8` (double deref), `GameDataGetInt` `main+0x010CD5BC`, `GameDataSetInt` `main+0x00B51B08`, int store `+200`; resident actors (scene `+0x1E8`, components `+0x58`, index 13, list `+0x28`, stride `0x70`); actor name `+0x218`, position Vec3f `+0x2B4`, rotation `+0x2C0`, velocity `+0x320` | Best lead set for 1.2.1 |
+| afiaka87/totk-mods `Totk121Offsets.hpp` [S7] | MIT | 1.2.1: SceneModule `main+0x04728538`; GameDataMgr holder `main+0x0462E3D8` (double deref), `GameDataGetInt` `main+0x010CD5BC`, `GameDataSetInt` `main+0x00B51B08`, int store `+200`; resident actors (scene `+0x1E8`, components `+0x58`, index 13, list `+0x28`, stride `0x70`); actor name `+0x218`, position Vec3f `+0x2B4`, rotation `+0x2C0`, velocity `+0x320`; actor component registry `+0x228` (`+0x220` on 1.0.0, `self-recall/src/program/main.cpp`); GameData write queues and loading flag (`botw-abilities/src/champions/GameData.cpp:48,64-74`) | Best lead set for 1.2.1 |
 | TkSharp `TkPatch.cs` [S6] | not determined | Full 20-byte build ids 1.1.0-1.4.3 | Build ids |
 | TotkMods/Research `Formats/Sav` [S11], dt-12345 gmd_scripts `gamedata.md` [S12] | not determined | GameData flags hashed with murmur3-32; full list in romfs `GameData/GameDataList.Product.110.byml.zs`; 33 types; structs such as `PlayerStatus` | Read flag names from the player's romfs at runtime; never ship the list |
 | zeldamods/objmap-totk [S13] | GPL-3.0 | Layers Sky / Surface (`Ground`) / Depths; MainField = Sky + Surface, MinusField = Depths; map unit col `(x+5000)/1000`, row `(z+4000)/1000`; item names from `USen.Product.100/ActorMsg/PouchContent` labels `<Actor>_Name` (`tools/make_names_list.py:22-40`) | Map layer model; MSBT label scheme |
@@ -313,7 +324,7 @@ Doable in this Linux container now (no game, no Windows, no Thor):
 
 | # | Packet | Depends | Status |
 |---|---|---|---|
-| 0 | Decisions: D1 host path = **C** (user, done); D2 target version = **1.2.0** (user, done); D2b = **stay on 1.2.0** (user, done); zstd vendoring = **approved** (user; now only for patch 0009's test); stb_truetype vendoring = **approved** (user); redesign defaults = **accepted** (user) | - | done |
+| 0 | Decisions: D1 host path = **C** (user, done); D2 target version = **1.2.0** (user, done); D2b = **live data** (user, 2026-11-02); **update to 1.2.1** (user, 2026-11-02; needs the user's own v393216 file, Next steps 5); zstd vendoring = **approved** (user; now only for patch 0009's test); stb_truetype vendoring = **approved** (user); redesign defaults = **accepted** (user) | - | done |
 | H1a | Eden Duo: native modules on Windows (loader, harness compile fix, tests), as patches | - | done: `host/eden-duo/0001-0003` + `host/eden-duo-companions/0001`; loader Catch2 tests pass standalone; full eden-duo build blocked (proxy 403 on CPM fmt download), real-Windows checks in H1c; critic SATISFIED round 3 |
 | T1 | TotK package skeleton: build gate, fail-closed reader, tests; Linux `.so` and Windows DLL; `.dsmod.zip` | H1a (builder patch) | done: `2c482b6` (+ plan `911aed8`); gcc/clang/MinGW builds and ctest pass (MinGW under wine), single export, package + wine probe pass; critic SATISFIED round 3 |
 | H1b | eden-cli composite layout: `--window-rect`, `--aux-rect`, borderless, aux not focusable | H1a | done: `afe952e`, patch 0004 adds `--window-rect`/`--aux-rect` (borderless, hidden until placed), non-focusable aux, 640x360 main floor, 32767 bound, ledger rows; parser tests pass natively and under wine; SDL and harness code compile-checked only in H1c; critic SATISFIED round 3 |
@@ -328,9 +339,16 @@ Doable in this Linux container now (no game, no Windows, no Thor):
 | T6 | Inventory side of the home page: 8 category icon tabs, icon grid, detail pane with Equipped badge, hold and drag to a refused use | T4v | done: f59ee90 + 3e11daa + 1a10f15, critic SATISFIED round 3; touch feel untested (T8) |
 | T5 | Abilities page: 7 large tiles with the game's icons, owned/locked, battery, refused select | T4v | done: c6e99f3, critic SATISFIED round 1; ability icon paths UNVERIFIED (T8a) |
 | T7 | Map page: Surface/Sky/Depths tiles as `romfs:` paths, the game's layer icons and player icon, pan/zoom | T4v, T3a' | done: 7d17331 + 3ad54b0, critic SATISFIED round 2 |
+| T2b | One package for 1.2.0 (save only) and 1.2.1 (live): two-row build table, both ids in `module.build_ids`, `data.json`, CI | T2a, D2b | todo |
+| T3a | Live status on 1.2.1: chain walker in `ReadStatus`, hearts, stamina, rupees, battery; save fallback | T2b | todo |
+| T3b | Live position and layer: player actor chain with name check, map marker, layer follows Link | T3a | todo |
+| T3c | Live inventory and equipped items from the GameData tables, through the existing save parser; index self-check | T3a, T8c | todo |
+| T3d | Current ability, one chain from T8d's scan | T8d | blocked: user |
 
 Order after the redesign (user, 2026-11-02): **T3a' -> T4v -> T6 -> T5 -> T7** here; T8a as soon
 as H1c's CI build with patch 0009 runs on the PC; T4v's `TEX` follow-up after T8a.
+Live data (D2b): **T2b -> T3a -> T3b -> T8c (user) -> T3c -> T8d (user) -> T3d**. T3a-T3d are the
+live packets; the asset packet is T3a' (the old asset T3a is superseded).
 
 Needs the user, a Windows PC, the Thor or another repo:
 
@@ -339,13 +357,14 @@ Needs the user, a Windows PC, the Thor or another repo:
 | H1c | Windows build of the patched fork (MSVC Ninja per [S1 docs/Build.md], `EDEN_DSMOD_BUILD_DEV_TOOLS=ON`), smoke run: TotK package installed, notice page in the aux window, `.shot` screenshots, a tap on the aux window keeps controller input | H1a, H1b, T1 | blocked: user (CI build in progress: `.github/workflows/eden-duo-windows.yml`, `5d72e9c`, `15c60e8`) |
 | H2 | apollo2-vibe window-host (`claude/clever-clarke-k7hhhj`): verify the 1920x2160 window-only composite with no host code; H2b (`dualScreen=1` pin) only if a check fails | H1c, H3 | blocked: user |
 | H3 | Vibe Window client (`/home/user/vibe-window` `app/`, plan branch): "Dual screen" setting, split renderer, bottom-screen touch | H1b | done: `2d21128`, global Dual screen setting in `app/`; stream split onto the Thor's second display through a `Presentation` using the decoder's transform matrix; pointer ids 0-4 top, 5-9 bottom (host touch max 10); setting-off path behind one `if`; `DualScreenLayoutTest` 13 tests pass + android-all type-check; Gradle, Robolectric and the Thor untested; critic SATISFIED round 4 |
-| T2 | Pin the build: user's `xxd` output confirms or replaces T2a's `kTargetBuild`; data file renamed if needed; T1 tests rerun | T2a, dump | blocked: user |
+| T2 | Pin the builds: the `DSMod module: loaded ... build <hex>` log line [S1 `mod_module.cpp:311`] (T8a, T8c; printed only when the id matched). If the package is refused (`dual-screen module does not support this game build`, no id [S1 `mod_module.cpp:229-230,316`]), the fallback is Eden's `Querying NSO patch existence for build_id=<hex>, name=main` line, printed on every NSO load with trailing zeros trimmed [S1 `src/core/file_sys/patch_manager.cpp:473-475`] (not `Patching NSO`, which needs an exefs patch or `dump_nso` [S1 `src/core/loader/nso.cpp:221`]) (1.2.1 with a zero tail shows `9B4E43650501A4D4489B4BBFDB740F26AF3CF85`; any extra hex means the tail is not zero), or `xxd -s 0x40 -l 32 -p main` confirms or replaces T2b's 1.2.1 id (and T2a's 1.2.0 id if the user still runs it); T1 tests rerun | T2b, dump | blocked: user |
 | T8a | Texture dump on the PC: `totk dump` log lines (archive versions, texture list, layout panes, Mals members) and `imgdump` PNGs; turns the `UNVERIFIED` texture table into names | T3a', H1c | blocked: user |
 | T8 | First real run on the PC (romfs paths, save keys, pictures, sample cost), then end-to-end on the Thor through apollo2-vibe | T4v-T7, T8a, H1c (H2, H3 for the Thor part) | blocked: user |
-| T3 | Memory discovery on the user's build (Windows dev-tools eden-cli, gdbstub): live GameData object (replaces the save as source), player position + layer, current stamina, current ability, scene/menu state; sentinel test, second boot [S3 PORTING_A_GAME §2-3] | T2, H1c, D2b | blocked: user |
-| T3L | Live 3D Link figure on the companion (user wants it later): hook TotK's pause-menu Link render to a second target, or `mirror` the menu while paused as a stopgap; deferred by the user until memory work | T3 | later (user) |
+| T8c | Check live values on the PC (1.2.1): dev-console `chain` reads of every §L2 chain, in-game changes against the HUD, log and profile lines | T3a, T3b, H1c | blocked: user |
+| T8d | GameData index check lines (T3c) and the ability change scan (finds T3d's address) | T3c, H1c | blocked: user |
+| T3L | Live 3D Link figure on the companion (user wants it later): hook TotK's pause-menu Link render to a second target, or `mirror` the menu while paused as a stopgap; deferred by the user until memory work | T3a-T3c | later (user) |
 | T9 | Release: `windows-x86_64` module (plus `android-arm64-v8a` only if path A is wanted) | T8 | todo |
-| T10+ | Extensions, one packet each: live readers behind the T4-T7 keys (T3), actions (guest call on Windows, quick-menu steering with readback, or load-plan helper), map reveal from Skyview Towers, stamps and pins, travel, compass, quests, recipes, item-name language | T9 | todo |
+| T10+ | Extensions, one packet each: more live readers (time, weather, temperature, scene/menu state: no lead yet, §L2), actions (guest call on Windows, quick-menu steering with readback, or load-plan helper), map reveal from Skyview Towers, stamps and pins, travel, compass, quests, recipes, item-name language | T9 | todo |
 
 ### H1a (coder, first)
 
@@ -960,8 +979,8 @@ abilities and inventory." So T4-T7 are built from two sources that need no offse
 Live values (current hearts and stamina, the equipped item right now, Link's position, the
 current ability) come from **live reader functions** with `UNKNOWN` offsets (0) that return
 "invalid" without any host call, as T1's `ReadStatus` does. The module prefers a valid live value
-over the save; with every offset 0 it always uses the save. T3 later fills the offsets behind the
-same published keys, so no page changes.
+over the save; with every offset 0 it always uses the save. T3a-T3d fill the 1.2.1 chains behind
+the same published keys, so no page changes (§Live data on 1.2.1).
 
 ### Shared rules
 
@@ -1036,9 +1055,10 @@ known; the manifest gates on `.valid` and `need_bind`.
 | `totk.ready` | int 1 | Module loaded (T1) |
 | `totk.ui.page`, `totk.inv.tab`, `totk.inv.sel`, `totk.map.layer` | int | Module UI state (actions above) |
 | `totk.names.valid` | int | 1 once the PouchContent name table loaded (T3a) |
-| `totk.status.valid`, `.source` | int | 1 valid; source 1 save, 2 live (T1 key kept) |
+| `totk.status.valid`, `.source` | int | 1 valid; source 1 save, 2 live (T1 key kept). Every `.source` below is 2 while its domain is live (T3a-T3c) |
 | `totk.status.hearts`, `.max_hearts`, `.max_stamina`, `.rupees`, `.max_battery` | int | `PlayerStatus.Life`, `.MaxLife`, `.MaxStamina`, `.CurrentRupee`, `.MaxEnergy` (float, published rounded x100). Units as the save stores them, `UNVERIFIED` (T8 compares with the game's HUD) |
-| `totk.status.stamina` | int | Live only (T1 `ReadStatus`, offsets UNKNOWN); not in the save list |
+| `totk.status.stamina` | int | Live only (T3a, 1.2.1; f32 rounded); not in the save list |
+| `totk.status.battery` | int | Live only (T3a, 1.2.1; f32 x100 rounded, as `.max_battery`) |
 | `totk.gear.valid`, `.source` | int | |
 | `totk.gear.<s>.present` | int | 1 if equipped. weapon/bow/shield/arrow: `Pouch.<P>.EquipIndex[0]` ≥ 0 [S28 `bottom_inventory.c:39,123-124`; S29 `zelda-totk.js:468`]. head/upper/lower: `UNKNOWN` save key (candidate `Pouch.Armor.EquipIndex`, `UNVERIFIED`): published only if found |
 | `totk.gear.<s>.id`, `.name`, `.icon` | text | `Pouch.<P>.Content.Name[idx]`; name from T3a' (falls back to the id); icon = `romfs:/UI/Tex/Icon/<id>.bntx.zs` from T3a' (T4: `module:totk:icon/<id>`) |
@@ -1049,7 +1069,7 @@ known; the manifest gates on `.valid` and `need_bind`.
 | `totk.ability.valid`, `.source` | int | |
 | `totk.ability.<a>.owned` | int | `IsGet.Obj_X` and `IsGetAnyway.Obj_X` both true [S29 `zelda-totk.js:1686-1689`], X = `UltraHand`, `OneTouchBond`, `Tooreroof`, `ReverseRecorder`, `AutoBuilder`, `Camera`, `Warp` [S29 `zelda-totk.class.item.js:168-175`, `zelda-totk.js:491-504`] |
 | `totk.ability.<a>.name` | text | `Obj_X_Name` in PouchContent if present (`UNVERIFIED`), else not published (manifest shows its own short label) |
-| `totk.ability.current` | int | Live only, offset UNKNOWN: never published in T5 |
+| `totk.ability.current` | int | Live only, `UNKNOWN` until T8d's scan; published from T3d |
 | `totk.inv.valid`, `.source`, `.count` | int | Current tab only |
 | `totk.inv.tab{k}.count` | int | k = 0-7, for the tab chips |
 | `totk.inv.{i}.icon` | text | Item `i` of the current tab (names only for the selection, `totk.inv.sel.name`; `{i}.name` dropped in T6 as unbound) |
@@ -1083,7 +1103,8 @@ Tabs in game order (user's list): 0 Weapons (`Pouch.Weapon`), 1 Bows (`Pouch.Bow
   `manifest.json`, `assets/map-blank.png` and `ASSETS.provenance.json` equal the generator's
   output) and `python3 -I tools/totk/check_manifest.py --eden $E` exits 0 (checks in T4).
 - CA5. Package: T1 acceptance 6 with `--build-id <kTargetBuild>`; `unzip -l` lists exactly
-  `package.json`, `dualscreen/manifest.json`, `dualscreen/6F32C68DD3BC7D77.json`, the two
+  `package.json`, `dualscreen/manifest.json`, `dualscreen/6F32C68DD3BC7D77.json` (from T2b
+  `dualscreen/data.json`), the two
   modules, and from T4 `dualscreen/ASSETS.provenance.json` and `dualscreen/assets/map-blank.png`,
   from T3a' `dualscreen/totk_font.txt`.
 - CA6. Wine probe (extend T1's): `LoadLibraryExW` of the packaged `windows-x86_64` module, then
@@ -1094,9 +1115,13 @@ Tabs in game order (user's list): 0 Weapons (`Pouch.Weapon`), 1 Bows (`Pouch.Bow
   field names in comments are allowed, none expected); (b) the manifest has no action with kind
   `write`, `slot_write`, `call`, `sequence` or `button`; (c) `totk_module_test` runs a full
   fixture (save + romfs + every action in the table above, valid and out-of-range arguments) and
-  asserts `write_calls == 0`, `read_calls == 0` and `is_mapped_calls == 0` with default offsets;
+  asserts `write_calls == 0`, `read_calls == 0` and `is_mapped_calls == 0` with default offsets
+  (from T2b: zero memory calls on the 1.2.0 build; on 1.2.1 `write_calls == 0` and every read goes
+  through `ReadGuest<MissingIsMapped::Reject>`);
   (d) every refused action returns false.
-- CA8. Every field in `totk_offsets.h` is `0` with an `UNKNOWN:` comment (T1 acceptance 9).
+- CA8. Every field in `totk_offsets.h` is `0` with an `UNKNOWN:` comment (T1 acceptance 9). From
+  T3a: `Offsets{}` (1.2.0) stays all empty; every hop in `kOffsets121` cites its source (`[S9]
+  cheat N`, [S7], [S38]) and carries `UNVERIFIED until T8c` until T8c passes that field.
 - CA9. `git status --porcelain` shows no build output; `packages/` holds only generated files;
   no file over 64 KiB is added except `native/third_party/stb_truetype.h` (T3a') and the generated
   `manifest.json` (checked by `gen_manifest.py --check`, so its size is not hand-maintained); no zstd source
@@ -1417,6 +1442,8 @@ folder exists (portable) [S1 `src/common/fs/path_util.cpp:115-118`]. The log is
 chunks and completed when eden-cli quits (`flush_line` is off by default) [S1
 `src/common/logging.cpp:276-279`, `src/common/settings.h:927`], so read it after quitting. eden-cli
 keeps the window it was started from; where a step says "in a second window", open another one.
+D2b: run this on **1.2.1** if you said yes in Next steps 5 (after T2b's package; read "1.2.0" below as 1.2.1), else on 1.2.0 as written; on 1.2.1 Mals and
+`Common.Product` numbers may differ from 1.2.0 (1.2.1 has only `Common.Product.110` [S32]).
 Keys and the TotK 1.2.0 update are set up as for H1c's smoke run: keys in `$d\keys\`, the update
 installed once with `.\eden-cli.exe --install <TotK 1.2.0 update.nsp>` [S1
 `src/yuzu_cmd/dsmod_harness.cpp:232,831`].
@@ -1437,7 +1464,7 @@ installed once with `.\eden-cli.exe --install <TotK 1.2.0 update.nsp>` [S1
    the log; the next start rewrites it). In the same window, check that the dump finished:
    `Select-String -Path "$d\log\eden_log.txt" -Pattern 'totk dump (done|failed)'` prints a line.
    Then save what to send:
-   `Select-String -Path "$d\log\eden_log.txt" -Pattern 'totk|DSMod' | ForEach-Object Line | Set-Content -Encoding utf8 totk-log.txt`.
+   `Select-String -Path "$d\log\eden_log.txt" -Pattern 'totk|DSMod|build_id=' | ForEach-Object Line | Set-Content -Encoding utf8 totk-log.txt`.
    Send `C:\duo\totk-log.txt` (the dump, the Mals n, the item-name line, missing romfs paths).
 3. Texture PNGs. The dev console is a file [S1 `mod_console.cpp:72-90`]: the runtime reads one
    command per write and empties the file, and mirrors its answers to `<file>.out`. It reads
@@ -1520,11 +1547,12 @@ Tests: `totk_module_test`: tile keys for each layer equal the expected strings f
 
 ### T8 (user, after T4v-T7, T8a and H1c): first real run
 
-Only the user can run these. On the Windows PC with the CI-built patched eden-cli:
+Only the user can run these. On the Windows PC with the CI-built patched eden-cli (D2b: on 1.2.1 if you said yes in
+Next steps 5, else 1.2.0; on 1.2.1 the pages say "Live" where T3a-T3c read memory):
 1. Unzip `dist/0100F2C0115B6000.dsmod.zip` into `<Eden data dir>/load/0100F2C0115B6000/TotKDuo/`
    so `dualscreen/manifest.json` is directly inside [S3 README "Desktop"].
 2. `eden-cli.exe --aux-window --aux-rect 0,1080,1240,1080 --screenshot-prefix C:\duo\p -g <TotK
-   1.2.0>`; load a save. For each page tap its tab, then touch `C:\duo\p.shot`
+   1.2.1, or 1.2.0 per Next steps 5>`; load a save. For each page tap its tab, then touch `C:\duo\p.shot`
    [S3 PORTING_A_GAME §6]; send `p-screen2.png` for the home page (each category tab, an item
    selected), Abilities and Map (each layer, zoomed out and zoomed in).
 3. Send every log line containing `totk` and `DSMod` (missing romfs paths, Mals n, dictionary
@@ -1539,23 +1567,354 @@ What the user's romfs is needed for: the font, UI textures, icons, names, captio
 Without it, without patch 0009, or when a path differs on 1.2.0, the pages still show ids,
 numbers and the widget-drawn fallbacks in the built-in font.
 
+## Live data on 1.2.1 (D2b: T2b, T3a-T3d, T8c, T8d)
+
+Decision D2b (2026-11-02): the user wants live data and chose 1.2.1 (T2b-T3c are coded and tested on fakes before the user updates). A valid live value replaces the save value
+behind the same key; when a chain fails, that domain falls back to the save (fail closed per
+domain). Read-only: the module calls only `is_mapped` and `read_memory`, never `write_memory` or a
+guest call (CA7) [S1 `dsmod_module_abi.h:166-193`]. No game data, dumps or console output are
+committed.
+
+### L1. What the runtime gives
+
+- `main_base`/`main_size` describe the game's main NSO (`load_base + module_start`) and are reset
+  before every call, so every `main+X` lead below is `main_base + X` [S1 `src/core/loader/nso.cpp:405-410`,
+  `mod_module_host.cpp:197-201,547-548`; S3 ARCHITECTURE]. The dev console's `chain` command uses
+  the same base (`main_region_begin`) and the same hop rule as §L2 [S1 `mod_module_host.cpp:201`,
+  `mod_console.cpp:730-757`], so T8c checks each chain without the module.
+- `read_memory` checks `is_mapped` first and refuses address 0, size 0, wrap, more than 64 MiB and
+  other processes [S1 `mod_module_host.cpp:29,211-221`, `mod_state.cpp:53-58`]. Reads are safe
+  from any thread [S1 `mod_module_host.cpp:446-451`]. `queue_guest_call` is null, so the game's
+  getters (e.g. `GameDataGetInt` [S7]) cannot be called: the module walks memory itself
+  [S1 `dsmod_module_abi.h:189-193`].
+- `sample` runs at 60 Hz on the tick thread, which competes with the game [S3 MODULE_GUIDE §1.2,
+  ARCHITECTURE §5]. `EDEN_DSMOD_PROFILE=1` logs `DSMod profile (CPU, 5s): sample=... avg=...us`
+  [S1 `mod_module_host.cpp:36,80`].
+- One package serves both builds. The loader prefix-matches the running build against
+  `module.build_ids` (1-256 entries), then calls `supports_build` and `create`
+  [S1 `mod_module.cpp:221-230,272-274`]. Pages and the data file load on any build; the data file
+  is `<BUILD16>.json`, then lower case, then `data.json` [S1 `mod_manifest.cpp:2669-2672,2794`].
+  The builder repeats `--build-id` and needs no data file per id [S2
+  `tools/build_dualscreen_package.py:212-217,281-286,343`]. Shipped precedent: Wonder accepts old
+  builds for a page and reads memory on one build only [S2 `010015100B514000.cpp:40-52,325-328,
+  1344-1352`]; MK8D picks a per-build profile in `create` [S2 `mk8d_reader.cpp:434-442`].
+- Per-build data addresses are fine behind the exact 32-byte build gate (BotW reads `main+0x2CA6D50`
+  the same way [S2 `botw_pouch.h:46-48,104-107`]); MODULE_GUIDE's accessor rule [S3 §7.2] guards
+  against updates, which the gate already refuses (`shortcut: no accessor decode, add it if a
+  third build is ever targeted`).
+
+### L2. 1.2.1 leads (each `UNVERIFIED` until T8c)
+
+Chain notation `T {A, B, C}`: address = `main+A`; then for each next hop, address = u64 at address
+\+ hop; read `T` at the last address. This is exactly the console's `chain A B C` [S1
+`mod_console.cpp:730-757`]. Decoded from Eiffel2018's 1.2.1 set [S40] (same codes in [S9] key
+`9B4E43650501A4D4`) with Atmosphere's opcode table [S39]: every pointer hop is a 64-bit type-5
+load; value widths come from the store opcodes. The tails are the same on 1.0.0, 1.1.0 and 1.2.1;
+only the heads move (player `0x45D6750`/`0x46B1BA8`/`0x46AF308`; GameData `0x4646C60`/`0x47242B8`/
+`0x4721B98`), and the registry offset is 0x220 on 1.0.0 and 0x228 later, as totk-mods' self-recall
+has it [S9][S7].
+
+| Value | Chain | Type, unit | Source |
+|---|---|---|---|
+| player name check | `{0x46AF308, 0x480, 0x218, 0x0}` | 7 bytes `Player\0`, any alignment (a `char*` from `sead::SafeString::cstr()`; [S28 `runtime/world_survey.c:92-94`] and [S38 `src/program/util/actor.cpp:189`] read it without an alignment check) | actor `[[main+0x46AF308]+0x480]` [S9 cheats 1-7]; name pointer at actor+0x218 [S7 `Totk121Offsets.hpp`][S28 `runtime/game_version.h:78-84`][S38 `src/program/structs/engineActor.hpp:128,197-210`: `BaseProc` is 0x218 bytes on 1.2.1, then `mActorName` (one `const char*` [S38 `subrepo/sead/include/prim/seadSafeString.h:145`]) at +0x218, `mComponents` data at +0x228, `mPosition` at +0x2B4] |
+| hearts | `u32 {0x46AF308, 0x480, 0x228, 0x2F8, 0x1830, 0x8}` | quarter hearts | cheat 3 copies max into it [S9] |
+| max hearts | `u32 {0x46AF308, 0x480, 0x228, 0x2F8, 0x1838, 0x8}` | quarter hearts: cheat 1a writes 0xA0 (40 hearts), 1b 0xC (3) | [S9] |
+| stamina | `f32 {0x46AF308, 0x480, 0x228, 0x3A8, 0x13FC}` | per wheel `UNVERIFIED` | cheat 4 [S9] |
+| max stamina | `f32 {0x4721B98, 0x198, 0x5BC}` | 3000.0 = "3 rings" | cheat 2 [S9] |
+| rupees | `u32 {0x4721B98, 0xD8, 0x28EA4}` | rupees | cheat 9 [S9] |
+| battery | `f32 {0x4728538, 0x1E8, 0x58, 0xF8, 0x5C}` | per cell `UNVERIFIED` | cheat 28 [S9]; prefix = SceneModule +0x1E8 +0x58 [S7][S38 `syms/exking/engine/hacks.py:19`] |
+| max battery | `f32 {0x4721B98, 0x198, 0x594}` | cheat 29 writes 48000.0 | [S9] |
+| position | `f32[3] {0x46AF308, 0x480, 0x2B4}` | world x, y, z | actor +0x2B4 [S7][S28 `game_version.h:83`][S38 `src/program/structs/engineActor.hpp:210`]; combining the cheat actor with this layout is `UNVERIFIED` |
+| GameDataMgr | `[main+0x4721B98]` | | lotuskit `gmd::GameDataMgr::sInstance` [S38 `syms/exking/gmd/GameDataMgr.py:4-8`]; totk-mods uses `[[main+0x462E3D8]]` [S7 `runtime-support/include/totk/engine/Totk121Offsets.hpp:30-33`]; same object `UNVERIFIED` |
+
+GameData layout on 1.2.1 (T3c):
+- One block per value type at mgr + 8 + type*0x60 (save type numbers), values pointer at
+  block+0x10. Every cheat fits: Int 0xD8, IntArray 0x138, Float 0x198, String64Array 0x678 [S9].
+  The planner computed this from the offsets; the same grid is in [S28 `runtime/gamedata_live.c:4-7`] (1.4.3).
+- Hash table of {u32 hash, u32 index} at block+0x18, count +0x20, size +0x24; slot = hash % size,
+  next slot on a clash, hash 0 = empty. Seen on 1.4.3 only [S28 `gamedata_live.c:36-46`]:
+  `UNVERIFIED` on 1.2.1.
+- IntArray entry: 0x40 bytes, u32 length +0x20, int32 array pointer +0x28. String64Array entry:
+  0x90 bytes, length +0x70, element array +0x78; element = 0x50 bytes {char* text, u32 capacity,
+  char[64] text at +0xC} [S28 `gamedata_live.c:10,24-27`]. The 0x40/+0x28, 0x90/+0x78 and 0x50
+  sizes fit every 1.2.1 pouch cheat [S9 cheats 8, 10-13, 32, 42-58]; element size 4 and text at
+  +0xC are 1.4.3 only, so T3c's structural check tests the element layout (pointer at the element equals element +
+  0xC; vtables InMain).
+- Self-check from the cheat offsets ((offset - 0x78) / 0x90; the planner matched cheat names to
+  keys): String64Array indices Armor 9, Bow 12, KeyItem 15, Material 16, Shield 18,
+  SpecialParts 19, Weapon 22.
+- Writes are queued and flushed once a frame [S7 `botw-abilities/src/champions/GameData.cpp:48`;
+  S28 BOTTOM_SCREEN §5 H], so read twice. Loading gate, exactly as totk-mods [S7
+  `botw-abilities/src/champions/GameData.cpp:64-73`]: `u32 n = [mgr+0xCC0]`, need 1 ≤ n ≤ 16;
+  `file = u64 [mgr+0xCC8]`, need non-null; `loading = u8 [file+0x78] & 2` (a null file also counts
+  as loading). totk-mods applies it to the manager from the holder, `[[main+0x462E3D8]]` [S7
+  `GameData.cpp:137-138`, `Totk121Offsets.hpp:30-31` "DOUBLE dereference"], so T3c requires
+  `[[main+0x462E3D8]] == [main+0x4721B98]` before using the gate.
+- Unknown: single Int/Float entry stride, Bool, Enum and EnumArray layouts.
+
+No lead in any 1.2.1 source read ([S9][S40][S41][S7][S38]): current ability, Ultrahand/Fuse/
+Autobuild state, a live layer flag, time of day, weather, temperature (code sites only,
+`main+0xB3920C`, `main+0xB7D13C` [S41]), equipped armor. A third party read the hearts, stamina,
+weapon and rupee chains read-only on 1.2.1 in a Mac native port [S42]; that supports the chains
+but is not a check in Eden.
+
+### T2b (coder, first): one package for 1.2.0 and 1.2.1
+
+- `totk_build.h`: `kTargetBuild` becomes `kBuild120` (unchanged) and `kBuild121` =
+  `9B4E43650501A4D4489B4BBFDB740F26AF3CF850` + 24 zeros (zero tail `UNVERIFIED`, T2).
+  `IsSupportedBuild(hex)` and `IsSupportedBuild(bytes)` match either exactly; `Is121(bytes)`.
+- `0100F2C0115B6000.cpp`: `SupportsBuild` and `Create` use `IsSupportedBuild`; `Create` sets
+  `in->offsets = Is121(host->build_id) ? kOffsets121 : Offsets{}` (`kOffsets121` is empty until
+  T3a). On 1.2.0 nothing changes: save and romfs pages, zero memory calls.
+- `git mv packages/TearsOfTheKingdom/dualscreen/6F32C68DD3BC7D77.json data.json` (`{}`, found on
+  any build [S1 `mod_manifest.cpp:2669-2672`]; the module ignores its config).
+- `.github/workflows/totk-companion.yml` Package step: read both 64-hex ids from `totk_build.h`,
+  require exactly two, and pass `--build-id` once for each.
+- Tests: `totk_build_test` (1.2.1 now true; 1.4.3, BotW and 1.2.1 with one byte changed false);
+  `totk_module_test` (supports_build and create accept both ids; 1.2.0 full fixture: zero memory calls).
+Acceptance: CA1-CA10 (CA5 with `dualscreen/data.json`); `unzip -p dist/0100F2C0115B6000.dsmod.zip
+package.json` lists both ids in `module.build_ids`.
+
+### T3a (coder, after T2b): live status
+
+1. `totk_offsets.h`: chains per field instead of one root:
+   `struct Chain { std::uint8_t n = 0; std::array<std::uint64_t, 6> hop{}; };` (n 0 = UNKNOWN).
+   `Walk` starts at a base: address = base + hop[0], then for each next hop address = u64 at
+   address + hop. `Offsets` holds `actor` (base main: `{0x46AF308, 0x480, 0x0}`, gives the actor
+   pointer); actor-relative tails `name {0x218, 0x0}`, `hearts {0x228, 0x2F8, 0x1830, 0x8}`,
+   `max_hearts {0x228, 0x2F8, 0x1838, 0x8}`, `stamina {0x228, 0x3A8, 0x13FC}` (T3b adds
+   `position {0x2B4}`); main-relative `max_stamina, rupees, battery, max_battery` as in §L2.
+   `inline constexpr Offsets kOffsets121{...}`, each hop commented with its source and
+   `UNVERIFIED until T8c`. Each tail is the §L2 chain with its `{0x46AF308, 0x480}` head cut off, so
+   the console `chain` lines of §T8c still check them.
+2. `totk_status.h`: one `Walk(h, base, chain)` returning the final address or 0. For a main-relative
+   chain base is `main_base` and the first slot must be `InMain`. Alignment applies to the address
+   being read, not to a pointer value: every u64 slot read needs `slot % 8 == 0`; the caller's final
+   u32/f32 read (and the 12-byte position) needs `addr % 4 == 0`; the name bytes need none. Every
+   pointer loaded must be non-null and ≥ 0x10000 (BotW's floor [S2 `botw_pouch.h:23-27`]); additions
+   are overflow-checked; every read goes through the existing `ReadGuest<MissingIsMapped::Reject>`.
+   `ReadStatusOnce` walks the actor once, checks its name (7 bytes `Player\0` at the pointer from
+   the `name` tail), then reads hearts, max hearts and stamina through the tails from that one
+   actor pointer, so the name check guards those values; then the main-relative fields.
+   `ReadStatus` keeps its two reads, compared bitwise.
+   `Status`: hearts, max_hearts and rupees u32; stamina, max_stamina, battery and max_battery f32.
+   The battery pair is optional (absent if its chains fail, e.g. before the game gives a battery);
+   the other five are all or nothing.
+   Plausibility bounds (fail closed; from the cheat values [S9], `UNVERIFIED`): 12 ≤ max_hearts ≤
+   160, hearts ≤ 2*max_hearts, rupees ≤ 999999, 0 < max_stamina ≤ 3000, 0 ≤ stamina ≤
+   2*max_stamina, 0 < max_battery ≤ 48000, 0 ≤ battery ≤ max_battery, all floats finite
+   (`shortcut: bonus hearts and bonus stamina caps UNKNOWN, tighten after T8c`).
+3. `0100F2C0115B6000.cpp` `PublishStatus`: same shape; source 2 when live. A torn or failed
+   sample does not flip to the save: `Instance` keeps the last valid live `Status` and a miss
+   counter (plain fields, no allocation; tick thread only, like `page`). On a valid sample store it
+   and reset the counter; on a mismatch or failure republish the stored one with source 2; only after
+   `kLiveGrace` = 30 consecutive misses (0.5 s at 60 Hz) publish the save with source 1
+   (`shortcut: N samples grace, tune after T8c`). Stamina published as
+   `lround`, battery and max battery as `llround(x*100)` (as the save's `.max_battery`); new key
+   `totk.status.battery` in `totk_keys.h`. One log line the first time live is valid and the first
+   time it falls back after the grace: `totk live status: hearts=H/M stamina=S/MS rupees=R
+   battery=B/MB | save: hearts=... max_hearts=... max_stamina=... rupees=...` (T8c compares units).
+4. `totk_save.h`: lotuskit types `PlayerStatus.MaxStamina` as Float [S38 `GMDHash_InfoList.mjs`],
+   and cheat 2 writes a float [S9]. When Int and UInt miss, read Float, rounded (one line).
+   `totk_save_test`: a save with `PlayerStatus.MaxStamina` as Float 2000.0 publishes
+   `max_stamina` 2000.
+5. Generator: when `totk.status.stamina` exists, the stamina bar shows it over `max_stamina` (else
+   the full bar as now); when `totk.status.battery` exists, the battery chip shows it over the max.
+Tests: `totk_status_test` on `totk_test_host.h` fake memory:
+- a full fake 1.2.1 layout gives valid with the exact values;
+- the same layout with `"Player\0"` at an address with `addr % 8 == 1` is still valid;
+- each of these gives invalid: an unmapped hop, a u64 slot at an address not 8-aligned, a u32 or
+  f32 at an address not 4-aligned, a null or < 0x10000 pointer,
+  a first slot outside main, a name other than `Player`, a torn read (`corrupt_read`), each bound broken,
+  main_base + hop[0] wrapping past 2^64, a loaded pointer + hop wrapping to a mapped low address
+  (only the overflow check rejects it; both kept from today's `totk_status_test.cpp:62-65,91-93`);
+- a missing battery chain gives the five values without battery;
+- `Offsets{}` makes zero host calls.
+`totk_module_test`:
+- a 1.2.1 fixture with memory publishes source 2 and the live values;
+- a 1.2.1 fixture with empty memory publishes the save values with source 1;
+- a valid live layout, then one sample with `corrupt_read` set: source stays 2 with the previous
+  values; then `kLiveGrace` failing samples: source 1 with the save values;
+- `write_calls == 0` everywhere, and CA10 still sees zero allocations.
+Acceptance: CA1-CA10 (CA7(c) and CA8 as amended); a `full` render with live stamina.
+
+### T3b (coder, after T3a): live position and layer
+
+- `kOffsets121.position` = actor tail `{0x2B4}`, 12 bytes, 4-aligned (§L2 row `{0x46AF308, 0x480,
+  0x2B4}`). `ReadPosition` in `totk_status.h` reuses T3a's single actor walk and name check, reads
+  twice and compares, and applies bounds: x in
+  [-6000, 6000] and z in [-5000, 5000] (T7's map area [S28 §2]), y in [-1500, 3500]
+  [S28 `runtime/world_survey.c:53-56`], all finite.
+- Layer: y < -100 is Depths, y > 1000 is Sky, else Surface [S28 `runtime/bottom_map.c:109`]
+  (`shortcut: height threshold, upgrade if MapData.CurrentLayer (Enum 0x1294b632 [S38]) proves to follow Link`).
+- Module: `totk.map.x`/`.y` = (x, -z) with `totk.map.source` 2. When Link's layer changes,
+  `totk.map.layer` follows it; the pills still switch it by hand. Same grace as T3a: `Instance`
+  keeps the last valid live position and its own miss counter; a torn or failed sample republishes
+  it with source 2, and only `kLiveGrace` consecutive misses fall back to the save's `SavePos`.
+  Read in `sample` like the status (`shortcut: tick-thread reads, move to the worker if T8c's
+  profile line shows the cost`).
+- Live position does not need a save (a new game before its first save): `Sample` publishes
+  `totk.map.valid` 1, `.source`, `.x`/`.y` and the map-page tile keys from the live or save
+  position **before** the `!snap` return (today `totk.map.valid` = `snap && snap->position` and the
+  tiles sit inside `if (snap->position)` [`0100F2C0115B6000.cpp:492-515`]).
+- If T8c shows the cheat actor is not `Player`, switch the head to the resident-actor walk with the
+  same name check: SceneModule `main+0x4728538` +0x1E8, components +0x58, index 13, list +0x28,
+  stride 0x70, +8, +0x40 (three sources [S7][S28 `world_survey.c:78-100`]
+  [S38 `src/program/util/actor.cpp:166-193`]). Do not build it unless needed.
+Tests: position and layer from fake memory (each threshold side; out of bounds falls back to the
+save); the layer follows only on a change; source per domain; live memory with no save gives
+`totk.map.valid` 1 with `totk.map.source` 2; one `corrupt_read` sample keeps source 2 and the
+previous position.
+Acceptance: CA1-CA10; map renders with a live marker on each layer.
+
+### T3c (coder, after T8c passes T3a): live inventory and equipped items
+
+Reuse the save path. The live reader writes a `progress.sav`-format buffer, and the existing
+`GameData::Parse` + `BuildSnapshot` turn it into tabs and gear. There is no new snapshot code, and
+the parser's bounds checks apply to live data too.
+1. Move the test save writer (`totk_test_host.h`, "progress.sav writer") into `totk_gamedata.h`
+   unchanged; the tests keep using it.
+2. `totk_live.h`, run on the existing 2 s worker poll (`shortcut: 2 s lag, poll faster if T8d finds it
+   laggy`):
+   - every address and offset below is an `Offsets` field (`totk_offsets.h`), never a literal in
+     `totk_live.h`: `gmd_mgr` 0x4721B98 [S38 `syms/exking/gmd/GameDataMgr.py`], `gmd_holder`
+     0x462E3D8, `gmd_count` 0xCC0, `gmd_file` 0xCC8, `gmd_loading` 0x78 and the block grid
+     (8 + type*0x60), each with its §L2 source. All are 0 in `Offsets{}` and set only in
+     `kOffsets121`. When `gmd_mgr` is 0 the poll is skipped (zero host calls) and the save stays
+     the source, so 1.2.0 and unknown builds never read these addresses (CA8);
+   - mgr = `[main+gmd_mgr]` (T3a's pointer rules). Every poll, also read `[[main+gmd_holder]]`
+     (two reads) and stay on the save unless it equals mgr (logged once per session:
+     `totk live gamedata: managers differ`). Then the §L2 gate on mgr: `u32 n =
+     [mgr+gmd_count]`, 1 ≤ n ≤ 16; `file = u64 [mgr+gmd_file]`, non-null; skip (keep the last
+     snapshot) while `u8 [file+gmd_loading] & 2`;
+   - for each IntArray and String64Array key `ReadPouch` reads (`Pouch.*.Content.Name`,
+     `.Combined.Name`, `.Life`, `.StockNum`, `.LifeRecover`, `.EquipIndex` [S29]), look the hash up
+     in its type's table (§L2);
+   - bounds: count ≤ 0x10000, count ≤ size ≤ 0x40000 [S28 `gamedata_live.c:38-46`], index < count,
+     text NUL within 64 bytes; an array longer than `kMaxItems` (400, `totk_save.h:23`) is not
+     rejected: read min(length, `kMaxItems`) elements of every parallel array of that pouch, as
+     the save path publishes at most `kMaxItems` [`totk_save.h:268`] (the real 1.2.1 lengths are
+     `UNKNOWN: T8d's totk-log.txt`);
+   - read the arrays into the buffer, twice, and compare.
+3. Self-check once per session, before publishing: the seven `Pouch.*.Content.Name` indices must
+   equal §L2's, else log `totk live gamedata: index check FAILED <key> <got>` and stay on the save.
+   Then the structural check, every poll, with one extra u64 read at mgr+0 and block and entry each read from +0 in one bulk read
+   (block 0x28 bytes, entry its full size) so their vtables come with the fields (no 1.2.1 vtable
+   address needed): u64 `[mgr]`, `[block]` and `[entry]` of each key used must be InMain (they
+   are vtables; S28 `gamedata_live.c` checks a vtable on the manager, every type block and every
+   value: "every vtable checked, so a game that moved anything gives "none"" [S28
+   `runtime/gamedata_live.c:11`]); and for every String64 element read, the u64 at the element
+   must equal element + 0xC (S28 gives the element as "a pointer to its text, u32 capacity, the
+   64-byte text at +0xc" [`gamedata_live.c:10`]; that the pointer targets its own +0xC is
+   `UNVERIFIED until T8d`, and if wrong the check fails safe with the log line below). A content check cannot do this: a text 4 bytes off still reads
+   as an id suffix (`on_Sword_001`), and an empty text tests nothing. Any failure logs
+   `totk live gamedata: index check FAILED layout` once and stays on the save. On a pass, log `totk live gamedata: ok` once (T8d step 1).
+4. Module: tabs and gear come from the live snapshot (`totk.inv.source` and `totk.gear.source` 2).
+   Abilities stay from the save (Bool layout UNKNOWN). Effect labels (EnumArray layout UNKNOWN) are
+   copied from the save's item at the same pouch index when the ids match, else absent.
+Tests: a fake GameDataMgr with hash tables in `totk_test_host.h`:
+- two pouches give the same tabs as the matching save;
+- each of these keeps the save: index check failed, hash missing, text without
+  NUL, loading bit set, `[[main+gmd_holder]]` different from `[main+gmd_mgr]`, element text and
+  its self-pointer at +0x10 with zeros at +0xC (layout check), a block vtable outside main;
+- a pouch array of 401 names publishes 400 items, as the save path;
+- `Offsets{}` with a fake GameDataMgr in memory makes zero host calls and publishes the save;
+- a torn second pass keeps the previous snapshot.
+Acceptance: CA1-CA10; a live fixture and its matching save fixture publish identical keys.
+
+### T3d (after T8d): current ability
+
+`UNKNOWN: current ability; find it with T8d's change scan`. Lead: GameData Enum
+`PlayerStatus.CurrentSpecialPower` (0xf6e7eacd) [S38 `GMDHash_InfoList.mjs`]; under the §L2 grid
+its block's values pointer is mgr+0x258 (`UNVERIFIED`), and whether it changes live is `UNVERIFIED`.
+After T8d: one chain in `kOffsets121` and the value-to-ability table T8d measured, published as
+`totk.ability.current` (0-6, key already listed); the Abilities page highlights that tile. Nothing
+is coded before T8d.
+
+### T8c (user, PC, after T3a and T3b are in CI): check live values
+
+PowerShell, as §T8a: `cd C:\duo; $d = "$env:APPDATA\eden"`. Read-only throughout: no cheats, no
+`writeb`.
+1. **Before updating**, back up the saves (the 1.2.0 to 1.2.1 save change is `UNVERIFIED`):
+   `Copy-Item -Recurse "$d\nand\user\save" C:\duo\save-backup-120` [S1 `src/common/fs/fs_paths.h:24`,
+   `src/core/file_sys/savedata_factory.cpp:32,150-152`].
+2. Only after T2b's package is in CI and you said yes to D2b: `.\eden-cli.exe --install <TotK
+   1.2.1 update.nsp>` (your own v393216 file, not 1.4.3; Next steps 5); install the newest `totk-companion` package
+   as §T8a step 1.
+3. `$env:EDEN_DSMOD_CMD = "C:\duo\dsmod-cmd.txt"; $env:EDEN_DSMOD_PROFILE = "1"; .\eden-cli.exe
+   --aux-window -g <TotK>`. Load a save and stand still on the Surface.
+4. Save these lines as `C:\duo\chains.txt` (name, hearts, max hearts, stamina, max stamina,
+   rupees, battery, max battery, position, GameDataMgr twice):
+   ```
+   chain 46AF308 0x480 0x218 0x0
+   chain 46AF308 0x480 0x228 0x2F8 0x1830 0x8
+   chain 46AF308 0x480 0x228 0x2F8 0x1838 0x8
+   chain 46AF308 0x480 0x228 0x3A8 0x13FC
+   chain 4721B98 0x198 0x5BC
+   chain 4721B98 0xD8 0x28EA4
+   chain 4728538 0x1E8 0x58 0xF8 0x5C
+   chain 4721B98 0x198 0x594
+   chain 46AF308 0x480 0x2B4
+   chain 4721B98
+   chain 462E3D8 0x0
+   ```
+   In a second window: `foreach ($l in Get-Content C:\duo\chains.txt) { Set-Content -Encoding ascii
+   C:\duo\dsmod-cmd.txt $l; Start-Sleep 2 }`. Each line answers `DSMod chain ...` in
+   `C:\duo\dsmod-cmd.txt.out` (`chain` is a direct read and cannot freeze [S1 `mod_console.cpp:730-732`]).
+   `@dst` prints four s32 words, so floats (stamina, battery, position) show as their bit patterns;
+   the coder decodes them, nothing to convert by hand [S1 `mod_console.cpp:752-756`].
+5. Run step 4 again after each of these, writing down what the HUD shows:
+   (a) take one hit;
+   (b) sprint until the wheel drops;
+   (c) spend or pick up rupees;
+   (d) use a Zonai device;
+   (e) walk about 50 m;
+   (f) stand on a sky island, then in the Depths.
+   Each time, check that the home page's source line says "Live" and that the values and the map
+   marker follow the HUD.
+6. Quit, then send:
+   - `C:\duo\dsmod-cmd.txt.out`;
+   - `Select-String -Path "$d\log\eden_log.txt" -Pattern 'totk|DSMod|build_id=' | ForEach-Object Line | Set-Content -Encoding utf8 totk-log.txt`
+     (it holds `DSMod module: loaded ... build <hex>` and `Querying NSO patch existence for build_id=<hex>, name=main`
+     for T2, the `totk live status` lines and the
+     `DSMod profile` lines);
+   - your HUD notes from step 5;
+   - one `.shot` of the home page (§T8 step 2).
+Result: the coder drops `UNVERIFIED until T8c` from each field that followed the HUD, fixes the
+units and bounds (quarter hearts, stamina per wheel, battery per cell), and removes any failing
+chain; that domain stays on the save.
+
+### T8d (user, PC, after T3c is in CI): GameData check and ability scan
+
+1. Start as T8c step 3, open the inventory once, quit, and send the `totk live gamedata` log lines.
+2. Ability scan (for T3d), one console line at a time:
+   - `chain 4721B98 0x258`, and note the last pointer `P`;
+   - `cscan P 65536` (256 KiB of ints: the index of `PlayerStatus.CurrentSpecialPower` and the
+     Enum entry stride are unknown, so scan wide once; `clist` prints the first 60 candidates
+     [S1 `mod_console.cpp:547-618`]);
+   - select another ability, `cnarrow diff`, wait 5 s, `cnarrow same`;
+   - do that select/diff/same round three times, then `clist`.
+   If `clist` lists nothing, repeat with the actor from `chain 46AF308 0x480` (its last pointer `A`:
+   `cscan A 2048`) [S1 `mod_console.cpp:547-618`].
+   Send `dsmod-cmd.txt.out` and the ability selected at each step.
+
 ## What needs the user
 
 | Item | For | What exactly |
 |---|---|---|
 | D2 target version | T2a, T2 | Answered: 1.2.0 |
-| D2b | T3 only | Answered: stay on 1.2.0 |
+| D2b | T2b, T3a-T3d, T8c | Answered (user, 2026-11-02): live data on 1.2.1. Needs the user's own v393216 update file (Next steps 5) |
 | Approve vendoring zstd | T3a | Answered: approved. No longer vendored in the module (§R2); the same files build patch 0009's test outside the repo (hashes in §T3a') |
-| Approve vendoring stb_truetype | T3a' | `native/third_party/stb_truetype.h` v1.26 (public domain) from the companions clone, for the game font (§R2) |
-| T8a dump | T8a, T4v | The `totk-dump` file, one start of TotK 1.2.0 with the CI-built eden-cli (patches 0001-0011) and companion package, the `totk`/`DSMod` log lines and the `imgdump` PNGs the coder lists (PowerShell steps in §T8a) |
+| Approve vendoring stb_truetype | T3a' | Answered: approved; vendored as `native/third_party/stb_truetype.h` v1.26 (public domain) for the game font (§R2) |
+| T8a dump | T8a, T4v | The `totk-dump` file, one start of TotK (1.2.1 if you update, else 1.2.0; Next steps 5-6) with the CI-built eden-cli (patches 0001-0011) and companion package, the `totk`/`DSMod` log lines and the `imgdump` PNGs the coder lists (PowerShell steps in §T8a) |
 | Reference look decisions | T4v | Accepted by the user: pages Map / Inventory (home) / Abilities with Gear in the home page's right column; no 3D Link figure (§R3), the equipped weapon at 256 px instead; English only |
 | T8 run | T8 | Package installed in the CI-built eden-cli, one save loaded, `.shot` pictures per page, `totk`/`DSMod` log lines, values compared with the game |
 | eden-duo fork + Windows build | H1c | A fork repo for the H1 patches, and either a Windows build on their PC (MSVC + Ninja, `tools/windows/load-msvc-env.ps1` [S1 docs/Build.md]) or a GitHub Actions Windows runner in the fork |
 | Windows tests | H1c, H2 | Install the window-host MSI from `apollo2-vibe` branch `claude/clever-clarke-k7hhhj`, add the "TotK duo" app (H2), run the H1c and H2 checks; send host logs and `.shot` screenshots |
 | Vibe Window APK | H3 | Install the H3 client build on the Thor and turn on Settings -> "Dual screen" (keep "Show only the app window" on) |
-| Build id | T2 | `xxd -s 0x40 -l 32 -p main` from `eden-cli --dump-romfs` of base + update [S3 PORTING_A_GAME §1] |
-| Dump + running game for RE | T3 | Discovery runs on their Windows PC (dev-tools eden-cli, gdbstub), or they provide exefs/romfs and keys to this container outside the repo. Nothing from it is committed |
-| Test saves | T3, T8 | Isolated profile copies: Great Sky Island; Surface with Ultrahand/Fuse/Ascend/Recall; late game with Autobuild and Depths |
+| Build id | T2 | The `DSMod module: loaded ... build <hex>` log line, or when the package is refused the `Querying NSO patch existence for build_id=<hex>, name=main` line [S1 `patch_manager.cpp:473-475`] (T8a, T8c filter `totk|DSMod|build_id=`), or `xxd -s 0x40 -l 32 -p main` from `eden-cli --dump-romfs` of base + update [S3 PORTING_A_GAME §1] |
+| Live checks on 1.2.1 | T8c, T8d | Save backup, the 1.2.1 update, the console `chain` lines and in-game changes of §T8c; the GameData lines and ability scan of §T8d. Nothing from it is committed |
+| Test saves | T8, T8c, T8d | Isolated profile copies: Great Sky Island; Surface with Ultrahand/Fuse/Ascend/Recall; late game with Autobuild and Depths |
 | Thor | H2, H3, T8 | Stream "TotK duo" with Dual screen on; check both screens and touch |
 
 ## Host path (decided: C)
@@ -1599,6 +1958,18 @@ Path A stays the fallback: the same package works there with an `android-arm64-v
   it to the focused window; H2 checks it, `SDL_WINDOW_NOT_FOCUSABLE` limits focus theft.
 - **Latency**: the client split adds a GPU pass; the composite doubles encoded pixels.
 - **1.4.x has few leads**: only ASM cheats [S10] and code offsets [S6][S7].
+- **Live chains are cheat leads, unchecked in Eden** [S9][S40]. A chain that resolves to the wrong
+  object gives plausible wrong numbers. The guards are the exact build gate, the `Player` name
+  check, pointer rules, plausibility bounds and the double read; T8c compares with the HUD before
+  `UNVERIFIED` is dropped.
+- **Live read cost on the tick thread**: about 45 pointer hops, read twice, per `sample`
+  (T3a + T3b). T8c reports the `DSMod profile` line; the reads move to the worker if the cost
+  shows.
+- **1.2.1 update and saves**: whether 1.2.0 saves load unchanged is `UNVERIFIED`; back them up first
+  (T8c step 1). The save reader has no version gate (`totk_save.h`).
+- **Missing live domains**: abilities owned, effect labels, armor, time, weather, temperature and
+  the current ability have no 1.2.1 lead (§L2). They stay on the save or are absent until a scan
+  finds them.
 - **Performance**: module `sample` must not allocate, do file I/O or log per frame; measure
   [S3 MODULE_GUIDE §9].
 - **Licensing**: Eden Duo, the companions, objmap-totk and Artemis are GPL-3.0
@@ -1609,13 +1980,13 @@ Path A stays the fallback: the same package works there with an `android-arm64-v
 
 | # | URL | What it proves |
 |---|---|---|
-| S1 | https://github.com/igawa6/eden-duo (clone `v1.3.2.2`, `5fa93ed4`) | Module ABI/SDK headers, loader gates, Windows gaps, harness, aux window, Windows build docs, runtime 22 |
-| S2 | https://github.com/igawa6/eden-duo-companions (clone `383d2d47`) | BotW package, module, tests, load plan, build script, CMake, package builder |
+| S1 | https://github.com/igawa6/eden-duo (clone `v1.3.2.2`, `5fa93ed4`) | Module ABI/SDK headers, loader gates (`module.build_ids` list), data-file fallback `data.json`, guest read API, dev console `chain`/`cscan`, profile line, Windows gaps, harness, aux window, Windows build docs, runtime 22 |
+| S2 | https://github.com/igawa6/eden-duo-companions (clone `383d2d47`) | BotW package, module, tests, load plan, build script, CMake, package builder (repeatable `--build-id`); Wonder and MK8D multi-build modules |
 | S3 | S2 `docs/` (PORTING_A_GAME, MODULE_GUIDE, PACKAGE_FORMAT, ARCHITECTURE) | Porting method, build-id rules, package format, NCE, headless testing |
 | S4 | https://raw.githubusercontent.com/blawar/titledb/master/versions.json | TotK update versions and catalog dates |
 | S5 | https://github.com/HamletDuFromage/switch-cheats-db `versions/0100F2C0115B6000.json` | Version -> 16-hex build id; 720896 is latest |
 | S6 | https://github.com/TKMM-Team/TkSharp `TkSharp.Core/TkPatch.cs` | Full 20-byte build ids 1.1.0-1.4.3 |
-| S7 | https://github.com/afiaka87/totk-mods (`0b4ec43e`, MIT) | Version names per build id; 1.2.1 offsets |
+| S7 | https://github.com/afiaka87/totk-mods (`0b4ec43e`, MIT) | Version names per build id; 1.2.1 offsets (`zonai-survey/.../Totk121Offsets.hpp`, `runtime-support/include/totk/engine/Totk121Offsets.hpp`); registry 0x220 vs 0x228 (`self-recall/src/program/main.cpp`); GameData queues and loading flag (`botw-abilities/src/champions/GameData.cpp`); 1.2.1 id (`phantom-foothold/src/program/GameProfiles.hpp:20`) |
 | S8 | https://mp1st.com/title-updates-and-patches/the-legend-of-zelda-tears-of-the-kingdom-update-1-4-2-released-for-switch-2-issues ; https://zeldawiki.wiki/wiki/The_Legend_of_Zelda:_Tears_of_the_Kingdom/Version_History (search result; unreachable here) | 1.4.2 on 2025-07-03; 1.4.3 on 2026-02-17 |
 | S9 | https://github.com/HamletDuFromage/switch-cheats-db `cheats/0100F2C0115B6000.json` | Cheat chains 1.0.0-1.2.1; none for 1.4.x |
 | S10 | https://github.com/Arch9SK7/MyNXCheats `.../0100F2C0115B6000/cheats/277178B7DBA1B6D4.txt` | 1.4.3 cheat list |
@@ -1632,7 +2003,7 @@ Path A stays the fallback: the same package works there with an `android-arm64-v
 | S26 | https://github.com/libsdl-org/SDL `src/video/windows/SDL_windowswindow.c` (release-3.4.8) | `SDL_WINDOW_NOT_FOCUSABLE` -> `WS_EX_NOACTIVATE`; resizable -> `WS_THICKFRAME`, `WS_MAXIMIZEBOX` |
 | S27 | /home/user/vibe-window `app/` (tag `v1.4.10`, merged by `4128b20`) | Vibe Window client: launch args, secondary display, GL renderer, touch |
 | S25 | https://github.com/ClassicOldSong/moonlight-android (branch `moonlight-noir`, GPL-3.0) `app/src/main/java/com/limelight/Game.java` | Artemis external-display handling |
-| S28 | https://github.com/kitcatkode/totk-android (MIT) `android/BOTTOM_SCREEN.md`, `runtime/bottom_inventory.c`, `runtime/bottom_assets.c` (raw HEAD, read 2026-11-01) | TotK 1.4.3 romfs paths for map tiles, icons, Mals; ZsDic contents; tile grid and levels; Depths masks; GameData keys and live layout on 1.4.3; murmur3 vectors; equip through the quick menu |
+| S28 | https://github.com/kitcatkode/totk-android (MIT) `android/BOTTOM_SCREEN.md`, `runtime/bottom_inventory.c`, `runtime/bottom_assets.c` (raw HEAD, read 2026-11-01); `runtime/gamedata_live.c`, `world_survey.c`, `bottom_map.c`, `game_version.h` (`837a8253`, read 2026-11-02) | TotK 1.4.3 romfs paths for map tiles, icons, Mals; ZsDic contents; tile grid and levels; Depths masks; GameData keys and live layout on 1.4.3 (type blocks, hash table, IntArray/String64Array entries); murmur3 vectors; equip through the quick menu; 1.2.1 actor name +0x218, position +0x2B4; height thresholds for the layer; position bounds |
 | S29 | https://github.com/marcrobledo/savegame-editors (MIT) `zelda-totk/zelda-totk.js`, `zelda-totk.class.pouch.js`, `zelda-totk.class.item.js` | GameData key names and hashes, pouch structs, ability flags, `slot_0N`, caption date hashes |
 | S30 | GitHub code search "ZsDic.pack.zs" / "bcett.byml.zsdic" (2026-11-01): KillzXGaming/Switch-Toolbox `Switch_Toolbox_Library/Compression/Formats/Zstb.cs`, dt-12345/asb `zstd.py`, valentderah/totk-pc-recomp `runtime/camera_speed.c` (result snippets only; files not opened) | `Pack/ZsDic.pack.zs` is plain zstd around a SARC of dictionaries `zs.zsdic`, `pack.zsdic`, `bcett.byml.zsdic` |
 | S31 | https://pypi.org/project/zstandard/0.23.0/ sdist `zstandard-0.23.0.tar.gz` | zstd 1.5.6 single-file library (`zstd/zstd.c`, BSD or GPLv2), hashes in §T3a' |
@@ -1641,6 +2012,11 @@ Path A stays the fallback: the same package works there with an `android-arm64-v
 | S34 | https://github.com/kuraeow/ultratears (GPL-3.0) `src/host/ui_aspect.c` (raw HEAD) | TotK layout names in `Common.Product.140` (full-screen menu backgrounds, AppMap, PlayerStatus) |
 | S36 | User's photo `images/1.png` (2026-11-02) | The reference look: Eden Duo BotW companion on a Thor bottom screen |
 | S37 | Critic's render harness `scratchpad/critic-t4/render/harness.cpp` (T4 rounds) | Renders a manifest page with the runtime's own `RenderPage`; basis of T4v's render tool |
+| S38 | https://github.com/aquacluck/totk-lotuskit (`59dcfccd`) `syms/exking/gmd/GameDataMgr.py`, `syms/exking/engine/hacks.py`, `src/program/structs/engineActor.hpp`, `subrepo/sead/include/prim/seadSafeString.h`, `src/program/util/actor.cpp`, `frontend/assets/data/GMDHash_InfoList.mjs` | 1.2.1 GameDataMgr `main+0x04721B98` and SceneModule `main+0x04728538`; actor layout; GameData flag types and hashes |
+| S39 | https://github.com/Atmosphere-NX/Atmosphere/blob/master/docs/features/cheats.md | Cheat opcode semantics (type 5 loads, 6/A stores and widths, 7 add, 9 move, loops) used to decode §L2 |
+| S40 | https://github.com/xenocard/Eiffel2018/blob/main/0100F2C0115B6000/cheats/9B4E43650501A4D4.txt | Eiffel2018 is the author of the 1.2.1 value cheats in [S9] (identical codes) |
+| S41 | https://github.com/Arch9SK7/MyNXCheats/blob/main/The%20Legend%20Of%20Zelda%20Tears%20Of%20The%20Kingdom/0100F2C0115B6000/cheats/9B4E43650501A4D4.txt | 1.2.1 code patches; time and temperature code sites only |
+| S42 | https://github.com/lingxup-hash/switch-native-mac/blob/main/cheats/totk-1.2.1/王国之泪1.2.1金手指测试结果.md (2026-10-22) | Third-party read-only run of the Eiffel 1.2.1 chains (hearts, stamina, weapon, rupees readable, zero writes) in a Mac native port |
 
 The MinGW and wine results come from spikes in the planner's scratch dir
 (`/tmp/claude-0/-home-user/6540dfaa-428d-5b44-8a41-bf2bc5812bad/scratchpad/spike`), not from a
