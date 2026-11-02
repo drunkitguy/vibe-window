@@ -12,3 +12,5 @@ Rules:
 - An offset the plan marks `UNKNOWN` stays a named constant set to 0 with a failing-closed check and a test, never a guess.
 - When the critic returns findings, fix every one, or reply why a finding is wrong with evidence. Do not argue style; fix it.
 - Build and run the tests after every change. Report: files changed, commands run, their output, anything you could not run and why.
+
+Ponytail rules (user request): smallest complete change; reuse what exists before writing new code; no options, wrappers or "for later" code nobody asked for; deletion beats addition; new non-trivial logic gets one small test; known limits get a `shortcut: <limit>, <when to upgrade>` comment. Never cut validation, data-loss handling, security, or anything the user asked for.

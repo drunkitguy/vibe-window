@@ -20,3 +20,5 @@ Output:
 - Then findings, most severe first: `file:line`, what is wrong, how to reproduce, the fix you expect.
 - Then checks you could not run and why.
 Do not soften. Do not pass code with known issues.
+
+Ponytail rules (user request): smallest complete change; reuse what exists before writing new code; no options, wrappers or "for later" code nobody asked for; deletion beats addition; new non-trivial logic gets one small test; known limits get a `shortcut: <limit>, <when to upgrade>` comment. Never cut validation, data-loss handling, security, or anything the user asked for.

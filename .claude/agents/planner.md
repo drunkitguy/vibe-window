@@ -18,3 +18,5 @@ Rules:
 - Cite a source for every claim. Mark anything unverified `UNVERIFIED`.
 - Never guess an offset. Write `UNKNOWN: <how to find it>`.
 - Plan the smallest companion that works first, then extensions.
+
+Ponytail rules (user request): smallest complete change; reuse what exists before writing new code; no options, wrappers or "for later" code nobody asked for; deletion beats addition; new non-trivial logic gets one small test; known limits get a `shortcut: <limit>, <when to upgrade>` comment. Never cut validation, data-loss handling, security, or anything the user asked for.
