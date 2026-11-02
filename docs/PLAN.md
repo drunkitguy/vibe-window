@@ -325,8 +325,8 @@ Doable in this Linux container now (no game, no Windows, no Thor):
 | T4 | Shell + Gear page, tab bar, notice overlay, base extensions, manifest generator + checker | T3s | done: `3be5876`..`7e9ab94`; shell, tab bar, notice, base extensions + action table (refusals logged once), Gear page with 4 cards and 3 states, generator + checker with runtime-faithful visibility tests; critic SATISFIED round 3 (7 -> 1 -> 0 findings). Its look is superseded by T4v |
 | T4r | Render tool `tools/totk/render/` moved from the critic's harness + fixtures (§T4v item 4) | T4 | done: 05aec2d + dcd41fc (with patch 0012 for romfs: icon binds), critic SATISFIED; no game-font rendering (built-in font only) |
 | T4v | Restyle (the reference look): game font, TotK textures, header page tabs, home page = Gear + status right column + ability bar (inventory side framed, filled by T6) | T3a'.1, T4r (T8a names the textures; starts with the `UNVERIFIED` table) | done: 81e0055 + 8426a73, critic SATISFIED round 2; TEX roles None until T8a (fallbacks only) |
-| T6 | Inventory side of the home page: 8 category icon tabs, icon grid, detail pane with Equipped badge, hold and drag to a refused use | T4v | doing |
-| T5 | Abilities page: 7 large tiles with the game's icons, owned/locked, battery, refused select | T4v | todo |
+| T6 | Inventory side of the home page: 8 category icon tabs, icon grid, detail pane with Equipped badge, hold and drag to a refused use | T4v | done: f59ee90 + 3e11daa + 1a10f15, critic SATISFIED round 3; touch feel untested (T8) |
+| T5 | Abilities page: 7 large tiles with the game's icons, owned/locked, battery, refused select | T4v | doing |
 | T7 | Map page: Surface/Sky/Depths tiles as `romfs:` paths, the game's layer icons and player icon, pan/zoom | T4v, T3a' | todo |
 
 Order after the redesign (user, 2026-11-02): **T3a' -> T4v -> T6 -> T5 -> T7** here; T8a as soon
