@@ -53,8 +53,8 @@ Everything below is blocked on you, in this order. Send logs, `.shot` files and 
    patch 0009's standalone test, outside the repo.
 7. **T8a (after T3a' and H1c): texture dump.** Use the CI-built eden-cli (it now applies
    `host/eden-duo/0001-0011`) and the CI-built companion package. Install the package, create the
-   `totk-dump` file, start TotK 1.2.0 once, load a save, wait for `totk dump done` (or `failed`) in
-   the log, quit. Send every log line with `totk` or `DSMod`. Then write the `imgdump` lines the
+   `totk-dump` file, start TotK 1.2.0 once, load a save, wait 2 minutes, quit; the log should then
+   contain `totk dump done` (or `failed`), as §T8a explains. Send every log line with `totk` or `DSMod`. Then write the `imgdump` lines the
    coder lists into the `EDEN_DSMOD_CMD` file and send the PNGs back (they stay out of the repo).
    Exact PowerShell steps in §T8a. This names the game's UI textures for 1.2.0, which no public
    source lists.
