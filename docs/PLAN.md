@@ -983,11 +983,15 @@ page is `gear`; the T1 page `main` goes away.
 - Status strip `[0,0,1240,120]`: `value` widgets for hearts / max hearts (`max_bind`,
   `max_sep " / "`), max stamina, rupees (`group`), max battery, each with a short text label;
   `need_bind totk.status.valid`.
-- Equipped row, four cards at x = 24 + 300k, y 140, 284x380 (weapon, bow, shield, arrows):
+- Equipped row, four cards at x = 24 + 300k, y 140, 284x430 (weapon, bow, shield, arrows; height
+  430 so the effect line sits inside the card, manager decision after T4 critic round 1), each
+  with a slot caption label above the card (WEAPON / BOW / SHIELD / ARROWS) so a "None" card
+  still names its slot:
   `image` `[x+62,160,160,160]` `src_bind totk.gear.<s>.icon`; name `label` `[x+12,330,260,90]`
   `bind_text .name`, `wrap_width 260`, `max_lines 2`; `value` `.life` (or `.count`)
   `[x+12,430,260,40]`; fuse badge `image` `[x+190,160,64,64]` `src_bind .fuse_icon`,
-  `need_bind .fuse`, fuse name `[x+12,476,260,36]`; effect text under it. Three states from
+  `need_bind .fuse`, fuse name `[x+12,476,260,36]`; effect text `[x+12,520,260,36]` inside the
+  card. Centre-aligned labels anchor at x = the centre (the runtime centres on rect x). Three states from
   `.present`: 1 the item widgets; 0 a "None" label; absent nothing (use the hide/need rules of
   [S3 PACKAGE_FORMAT §3.5] as written for an absent key, and say which in the report). Each card
   `on_hold` -> `gear_swap_k` (`module` `totk.gear.swap` k, refused).
