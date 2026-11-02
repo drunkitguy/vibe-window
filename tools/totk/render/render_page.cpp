@@ -7,10 +7,8 @@
 //   A page_binds point the state publishes is set to the rendered page's `equals` value.
 //   Images: "file:" from the package folder; anything else DIR/<key, [^A-Za-z0-9._-] -> _>.png
 //   when --assets has it, else a translucent grey checker labelled with the key's last component.
-//   Font: DIR/font-atlas.png + DIR/font-metrics.json ({"line_height", "ascent",
-//   "first_codepoint", "glyphs": [[x, y, w, h, bearing_x, bearing_y, advance], ...]}), else the
-//   built-in one. A widget key no runtime source names fails the run (--allow-unknown-keys lists
-//   it instead, for packages that carry generator notes such as BotW's).
+//   Text uses the runtime's built-in font. A widget key no runtime source names fails the run
+//   (--allow-unknown-keys lists it instead, for packages with generator notes such as BotW's).
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -279,25 +277,6 @@ int main(int argc, char** argv) try {
     const u32 ch = man.canvas_h != 0 ? man.canvas_h : 1080;
     Canvas c;
     c.Resize(cw, ch);
-    std::shared_ptr<const Image> atlas;
-    FontMetrics font;
-    if (!assets.empty() && fs::exists(assets / "font-atlas.png") &&
-        fs::exists(assets / "font-metrics.json")) {
-        atlas = LoadPng(assets / "font-atlas.png");
-        const J m = ReadJson(assets / "font-metrics.json");
-        font.line_height = m.at("line_height").get<u32>();
-        font.ascent = m.value("ascent", 0u);
-        font.first_codepoint = m.value("first_codepoint", 0x20u);
-        for (const J& g : m.at("glyphs")) {
-            font.glyphs.push_back({g.at(0).get<u16>(), g.at(1).get<u16>(), g.at(2).get<u16>(),
-                                   g.at(3).get<u16>(), g.at(4).get<s16>(), g.at(5).get<s16>(),
-                                   g.at(6).get<u16>()});
-        }
-        if (!font.Valid()) {
-            Fail("font-metrics.json has no glyphs or no line height");
-        }
-        c.SetFont(atlas.get(), &font);
-    }
     if (!RenderPage(c, man, *page, s, images, {}, nullptr, {}, {}, nullptr, nullptr, texts)) {
         Fail("RenderPage drew nothing for page '" + page_id + "'");
     }
