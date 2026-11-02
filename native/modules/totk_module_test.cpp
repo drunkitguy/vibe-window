@@ -991,11 +991,14 @@ int main() {
             assert(map() == live && h.floats.at("totk.map.x") == 0.0 &&
                    h.ints.at("totk.status.source") == 2);
         }
-        SampleClean(m, i, h);
-        assert((map() == Host::Ints{{"totk.map.valid", 1}, {"totk.map.source", 1},
-                                    {"totk.map.layer", 0}}));
-        assert((h.floats == Host::Floats{{"totk.map.x", 100.5}, {"totk.map.y", 300.25}}));
-        assert(h.ints.at("totk.status.source") == 2);
+        for (int n = 0; n < 3; ++n) { // and pos_misses stops at the grace
+            SampleClean(m, i, h);
+            assert((map() == Host::Ints{{"totk.map.valid", 1}, {"totk.map.source", 1},
+                                        {"totk.map.layer", 0}}));
+            assert((h.floats == Host::Floats{{"totk.map.x", 100.5}, {"totk.map.y", 300.25}}));
+            assert(h.ints.at("totk.status.source") == 2);
+        }
+        assert(static_cast<Instance*>(i)->pos_misses == kLiveGrace);
         // In bounds again: live at once.
         h.Put<float>(at, -1234.5f);
         SampleClean(m, i, h);
