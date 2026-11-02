@@ -213,48 +213,103 @@ class CheckManifestTest(unittest.TestCase):
 
 
 class GenManifestTest(unittest.TestCase):
+    """The generated manifest's behaviour, evaluated with the runtime's rules: need_bind "k" hides
+    unless k is published and non-zero, "!k" hides only when it is non-zero; hide_bind reads a
+    missing value as 0; a derived cmp/expr has no value while one of its inputs is missing."""
+
+    def setUp(self):
+        self.m = gen_manifest.manifest()
+        self.derived = {d["name"]: d for d in self.m["derived"]}
+        self.gear = self.page("gear")
+
+    def page(self, page_id):
+        return next(p for p in self.m["pages"] if p["id"] == page_id)["widgets"]
+
+    def value(self, key, snap):
+        if key in snap:
+            return snap[key]
+        d = self.derived.get(key)
+        if d is None:
+            return None
+        if "cmp" in d:
+            a, b = (d[s] if isinstance(d[s], int) else self.value(d[s], snap) for s in "ab")
+            if a is None or b is None:
+                return None
+            return int({"eq": a == b, "ne": a != b, "ge": a >= b, "gt": a > b,
+                        "le": a <= b, "lt": a < b}[d["cmp"]])
+        # The generator's only expr form: "k * 0 + ... + 1" (1 while every k exists).
+        self.assertRegex(d["expr"], r"^(?:[\w.]+ \* 0 \+ )+1$")
+        names = check_manifest.expr_names(d["expr"])
+        return None if any(self.value(n, snap) is None for n in names) else 1
+
+    def visible(self, w, snap):
+        gate = w.get("need_bind", "")
+        if gate:
+            v = self.value(gate.lstrip("!"), snap)
+            shown = v is not None and v != 0
+            if shown == gate.startswith("!"):
+                return False
+        if "hide_bind" in w:
+            hv = self.value(w["hide_bind"], snap) or 0
+            if "hide_eq" in w and hv == w["hide_eq"]:
+                return False
+        return True
+
     def test_committed_files_are_generated(self):
         for name, data in gen_manifest.outputs().items():
             self.assertEqual((gen_manifest.OUT / name).read_bytes(), data, name)
 
+    def test_tabs_and_page_binds(self):
+        """Tab k sends totk.ui.page k on every page, and totk.ui.page == k shows PAGES[k]."""
+        actions = self.m["actions"]
+        for page_id, _, _ in gen_manifest.PAGES:
+            tabs = [w for w in self.page(page_id) if w["type"] == "button"]
+            self.assertEqual(len(tabs), len(gen_manifest.PAGES), page_id)
+            for k, (_, caption, _) in enumerate(gen_manifest.PAGES):
+                tab = next(w for w in tabs if w["text"] == caption)
+                self.assertEqual(tab["rect"], [310 * k, 968, 310, 112])
+                self.assertEqual(actions[tab["on_tap"]], {
+                    "kind": "module", "action": "totk.ui.page", "argument": k}, (page_id, k))
+        binds = self.m["page_binds"]
+        self.assertEqual(len(binds), len(gen_manifest.PAGES))
+        for k, (page_id, _, _) in enumerate(gen_manifest.PAGES):
+            matching = [b for b in binds if b["equals"] == k]
+            self.assertEqual(len(matching), 1, k)
+            self.assertEqual(matching[0]["point"], "totk.ui.page")
+            self.assertEqual(matching[0]["when_equal"]["page"], page_id, k)
+
+    def test_card_hold_sends_its_slot(self):
+        """Card k (weapon, bow, shield, arrows) holds to totk.gear.swap k."""
+        cards = sorted((w for w in self.gear if w["type"] == "rect" and "on_hold" in w),
+                       key=lambda w: w["rect"][0])
+        self.assertEqual(len(cards), len(gen_manifest.SLOTS))
+        for k, card in enumerate(cards):
+            self.assertEqual(card["rect"], [24 + 300 * k, 140, 284, 430])
+            self.assertEqual(self.m["actions"][card["on_hold"]], {
+                "kind": "module", "action": "totk.gear.swap", "argument": k}, k)
+
+    def test_empty_state(self):
+        """"No save data yet" shows while totk.gear.valid is 0 or absent, never at 1."""
+        label = next(w for w in self.gear if w.get("text") == "No save data yet")
+        for valid, shown in ((None, True), (0, True), (1, False)):
+            snap = {"totk.ready": 1} if valid is None else {"totk.ready": 1,
+                                                            "totk.gear.valid": valid}
+            self.assertEqual(self.visible(label, snap), shown, valid)
+
+    def test_notice(self):
+        """The notice covers every page while totk.ready is absent or 0, and goes at 1."""
+        for page_id, _, _ in gen_manifest.PAGES:
+            notice = [w for w in self.page(page_id) if w.get("hide_bind") == "totk.ready"]
+            self.assertEqual(len(notice), 3, page_id)
+            self.assertTrue(notice[0]["input_block"])
+            self.assertEqual(self.page(page_id)[-3:], notice)  # on top
+            for ready, shown in ((None, True), (0, True), (1, False)):
+                snap = {} if ready is None else {"totk.ready": ready}
+                for w in notice:
+                    self.assertEqual(self.visible(w, snap), shown, (page_id, ready))
+
     def test_gear_card_states(self):
-        """Each card's visible widgets per .present state, evaluated with the runtime's rules:
-        need_bind "k" hides unless k is published and non-zero, "!k" hides only when it is
-        non-zero; a derived cmp/expr has no value while one of its inputs is missing."""
-        m = gen_manifest.manifest()
-        widgets = next(p for p in m["pages"] if p["id"] == "gear")["widgets"]
-        derived = {d["name"]: d for d in m["derived"]}
-
-        def value(key, snap):
-            if key in snap:
-                return snap[key]
-            d = derived.get(key)
-            if d is None:
-                return None
-            if "cmp" in d:
-                a, b = (d[s] if isinstance(d[s], int) else value(d[s], snap) for s in "ab")
-                if a is None or b is None:
-                    return None
-                return int({"eq": a == b, "ne": a != b, "ge": a >= b, "gt": a > b,
-                            "le": a <= b, "lt": a < b}[d["cmp"]])
-            # The generator's only expr form: "k * 0 + ... + 1" (1 while every k exists).
-            self.assertRegex(d["expr"], r"^(?:[\w.]+ \* 0 \+ )+1$")
-            names = check_manifest.expr_names(d["expr"])
-            return None if any(value(n, snap) is None for n in names) else 1
-
-        def visible(w, snap):
-            gate = w.get("need_bind", "")
-            if gate:
-                v = value(gate.lstrip("!"), snap)
-                shown = v is not None and v != 0
-                if shown == gate.startswith("!"):
-                    return False
-            if "hide_bind" in w:
-                hv = value(w["hide_bind"], snap) or 0
-                if "hide_eq" in w and hv == w["hide_eq"]:
-                    return False
-            return True
-
+        """Each card's exact visible widgets per state of .present (and .fuse, the value)."""
         def role(w, caption):
             src = w.get("src_bind", "") + w.get("bind_text", "")
             for suffix, name in ((".fuse_icon", "fuse_icon"), (".icon", "image"),
@@ -268,26 +323,29 @@ class GenManifestTest(unittest.TestCase):
 
         for k, (slot, caption, field, _) in enumerate(gen_manifest.SLOTS):
             x0, g = 24 + 300 * k, f"totk.gear.{slot}"
-            card = [w for w in widgets if x0 <= w["rect"][0] <= x0 + 284 and
+            card = [w for w in self.gear if x0 <= w["rect"][0] <= x0 + 284 and
                     120 <= w["rect"][1] < 570]
+            fuses = slot in ("weapon", "shield")
             item = {"caption", "card", "image", "name", "value"}
-            if slot in ("weapon", "shield"):
+            if fuses:
                 item |= {"fuse_icon", "fuse_name"}
             if slot != "arrow":
                 item.add("effect")
             full = {f"{g}.present": 1, f"{g}.{field}": 42}  # only numbers gate (SnapshotNumber)
-            if slot in ("weapon", "shield"):
+            if fuses:
                 full[f"{g}.fuse"] = 1
             no_value = {k: v for k, v in full.items() if not k.endswith(field)}
-            for state, snap, expect in (("present 1", full, item),
-                                        ("present 1, value unknown", no_value, item - {"value"}),
-                                        ("present 0", {f"{g}.present": 0},
-                                         {"caption", "card", "none"}),
-                                        ("absent", {}, set())):
+            states = [("present 1", full, item),
+                      ("present 1, value unknown", no_value, item - {"value"}),
+                      ("present 0", {f"{g}.present": 0}, {"caption", "card", "none"}),
+                      ("absent", {}, set())]
+            if fuses:  # the module publishes .fuse 0 for an unfused weapon or shield
+                states.append(("present 1, fuse 0", {**full, f"{g}.fuse": 0},
+                               item - {"fuse_icon", "fuse_name"}))
+            for state, snap, expect in states:
                 snap = {"totk.ready": 1, "totk.gear.valid": 1, **snap}
-                shown = sorted(role(w, caption) for w in card if visible(w, snap))
+                shown = sorted(role(w, caption) for w in card if self.visible(w, snap))
                 self.assertEqual(shown, sorted(expect), f"{slot}, {state}")
-
 
 if __name__ == "__main__":
     unittest.main()
