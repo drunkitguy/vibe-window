@@ -327,7 +327,7 @@ Doable in this Linux container now (no game, no Windows, no Thor):
 | T4v | Restyle (the reference look): game font, TotK textures, header page tabs, home page = Gear + status right column + ability bar (inventory side framed, filled by T6) | T3a'.1, T4r (T8a names the textures; starts with the `UNVERIFIED` table) | done: 81e0055 + 8426a73, critic SATISFIED round 2; TEX roles None until T8a (fallbacks only) |
 | T6 | Inventory side of the home page: 8 category icon tabs, icon grid, detail pane with Equipped badge, hold and drag to a refused use | T4v | done: f59ee90 + 3e11daa + 1a10f15, critic SATISFIED round 3; touch feel untested (T8) |
 | T5 | Abilities page: 7 large tiles with the game's icons, owned/locked, battery, refused select | T4v | done: c6e99f3, critic SATISFIED round 1; ability icon paths UNVERIFIED (T8a) |
-| T7 | Map page: Surface/Sky/Depths tiles as `romfs:` paths, the game's layer icons and player icon, pan/zoom | T4v, T3a' | doing |
+| T7 | Map page: Surface/Sky/Depths tiles as `romfs:` paths, the game's layer icons and player icon, pan/zoom | T4v, T3a' | done |
 
 Order after the redesign (user, 2026-11-02): **T3a' -> T4v -> T6 -> T5 -> T7** here; T8a as soon
 as H1c's CI build with patch 0009 runs on the PC; T4v's `TEX` follow-up after T8a.
@@ -918,8 +918,7 @@ Right column, Gear and status (x 640-1232):
 Fuse, Ascend, Recall), row 2 at y 508 x = 169 + 306k (Autobuild, Camera, Travel Medallion). Each:
 `TEX.tile` 9-slice (or `panel`+`edge`), icon `[x+65,y+40,160,160]` (owned / `locked` tint as the
 bar), name `[x+145,y+228,0,34]` centred scale 6, "Locked" scale 4 `dim` when not owned, `on_tap`
-refused. Battery strip `[16,924,1208,72]`: `TEX.battery` icon, `value totk.status.max_battery`,
-"Current ability: needs a live reader" scale 4 `dim`.
+refused. Battery strip `[16,924,1208,72]`: `TEX.battery` icon, `value totk.status.max_battery`.
 
 **Map page** (`map`, T7): `map` widget `[0,76,1240,972]` as old T7 (area, overlays, pan/zoom);
 `marker_src TEX.player_pin` (a `MapIcon...` texture, `UNKNOWN: T8a`; fallback the runtime pin);
@@ -1510,9 +1509,9 @@ out of range. Acceptance: CA1-CA10 and renders (all owned, none owned, `nosave`)
 - Module: `totk.map.tile.{n}` = `romfs:/UI/Map/MainField/<L>_<cc>-<rr>_02<suffix>.bntx.zs` and `.d`
   the `_01` file, for the selected layer only while page 2 is open; the suffix found by raw size
   queries in the order reveal `""`, `_T`, `_TT`, `_TTT`, `_TTTT` x variant `""`, `_A_A`, `_A`
-  (fully revealed only in v1), cached per tile; misses logged once with the path. Depths (`U`)
-  tiles are channel masks [S28 §2]: drawn with `tint` `FF8A8F99` in v1 (`UNVERIFIED` look; a real
-  recolour needs plan B's module decode).
+  (fully revealed only in v1), cached per tile; one log line per layer: found/120 and the first missing tile. Depths (`U`)
+  tiles are channel masks [S28 §2]: untinted, since runtime overlays have no tint (`opacity`
+  only); the Depths masks show raw until plan B's recolour.
 - Layer pills (Sky, Surface, Depths top to bottom, `totk.map.layer` 1, 0, 2), Centre
   (`view_reset`), position line; marker on every layer (no layer in the save).
 Tests: `totk_module_test`: tile keys for each layer equal the expected strings for (0,0), (11,9),
