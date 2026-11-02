@@ -1,0 +1,71 @@
+From 86d5d8203776ce0eda3dbf02fb303e214ba97f18 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Mon, 2 Nov 2026 07:12:32 +0000
+Subject: [PATCH] DSMod: draw an Image widget whose src_bind text is a romfs:
+ path
+
+An Image widget's src_bind text had to be a sprite_map key or a
+module: key; any other text drew nothing. A module that publishes the
+game's own picture as a romfs: path (TotK's item icons,
+romfs:/UI/Tex/Icon/<id>.bntx.zs) therefore never showed.
+
+Accept a romfs: text the same way as module:. It goes through the same
+images() provider as a static romfs: src: read-only, and bounded by
+Locate's caps. Other unmapped texts still draw nothing.
+
+Test: image_fallback.cpp, src_bind with module:, romfs: and file:
+texts.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01XgyuSR8o8AbzxuWHYqLwsv
+---
+ src/core/mods/mod_ui.cpp               |  5 +++--
+ src/tests/core/mods/image_fallback.cpp | 19 +++++++++++++++++++
+ 2 files changed, 22 insertions(+), 2 deletions(-)
+
+diff --git a/src/core/mods/mod_ui.cpp b/src/core/mods/mod_ui.cpp
+index 711c42a8..c6f7eac6 100644
+--- a/src/core/mods/mod_ui.cpp
++++ b/src/core/mods/mod_ui.cpp
+@@ -182,8 +182,9 @@ void DrawImage(const WidgetDrawContext& ctx) {
+         }
+         const auto mapped = manifest.sprite_map.find(text->second);
+         if (mapped == manifest.sprite_map.end()) {
+-            // Module-owned images use logical keys, validated by that module's decoder.
+-            if (!text->second.starts_with("module:")) {
++            // Module-owned images use logical keys, validated by that module's decoder. A romfs:
++            // path is read like a static romfs: src (read-only, bounded by Locate's caps).
++            if (!text->second.starts_with("module:") && !text->second.starts_with("romfs:")) {
+                 return;
+             }
+             source = &text->second;
+diff --git a/src/tests/core/mods/image_fallback.cpp b/src/tests/core/mods/image_fallback.cpp
+index 5d8f984f..ac0768a6 100644
+--- a/src/tests/core/mods/image_fallback.cpp
++++ b/src/tests/core/mods/image_fallback.cpp
+@@ -194,3 +194,22 @@ TEST_CASE("DSMod image fallback: src_fade_ms/src_fade_bind parse, clamp and expa
+     REQUIRE(expanded[0].src_fade_bind == "scene_0");
+     REQUIRE(expanded[1].src_fade_bind == "scene_1");
+ }
++
++TEST_CASE("DSMod image: src_bind accepts module: and romfs: texts, nothing else unmapped",
++          "[dsmod][image_fallback]") {
++    const Widget w = ImageWidget();
++    const ImageProvider images = Provide({{"module:g:a", Solid(Blue)},
++                                          {"romfs:/UI/Tex/Icon/Obj_Arrow.bntx.zs", Solid(Green)},
++                                          {"file:a.png", Solid(Red)}});
++    const auto draw = [&](const std::string& text) {
++        ImageFallbackState fallback;
++        StateSnapshot s;
++        s.texts["pic"] = text;
++        return PixelAt(Draw(w, images, s, fallback), 5, 5);
++    };
++    REQUIRE(draw("module:g:a") == Blue);
++    // A game-published romfs: path loads like a static romfs: src.
++    REQUIRE(draw("romfs:/UI/Tex/Icon/Obj_Arrow.bntx.zs") == Green);
++    // Any other text that is not a sprite_map key still draws nothing.
++    REQUIRE(draw("file:a.png") == Black);
++}
+-- 
+2.43.0
+
