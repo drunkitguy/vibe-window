@@ -13,6 +13,12 @@ on:
       - '.github/workflows/tv-release.yml'
       - 'host/**'
       - '.github/workflows/eden-duo-windows.yml'
+      - '.github/workflows/totk-companion.yml'
+      - 'native/**'
+      - 'packages/**'
+      - 'tools/totk/**'
+      - 'docs/PLAN.md'
+      - '.claude/**'
 
 permissions: {}
 

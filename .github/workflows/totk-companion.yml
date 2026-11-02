@@ -1,0 +1,78 @@
+name: TotK companion
+
+# Builds the TotK companion package (0100F2C0115B6000.dsmod.zip, linux-x86_64 + windows-x86_64 modules)
+# the same way the acceptance scripts do. Unzip it into %APPDATA%\eden\load\0100F2C0115B6000\<name>\.
+on:
+  push:
+    branches:
+      - claude/practical-mccarthy-f7wf2f
+    paths:
+      - 'native/**'
+      - 'packages/**'
+      - 'tools/totk/**'
+      - 'host/eden-duo-companions/**'
+      - '.github/workflows/totk-companion.yml'
+  workflow_dispatch:
+
+permissions: {}
+
+env:
+  EDEN_DUO_REF: v1.3.2.2
+  COMPANIONS_COMMIT: 383d2d4
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          path: vibe-window
+
+      - name: Install the toolchains
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends g++ g++-mingw-w64-x86-64-posix cmake ninja-build llvm
+
+      - name: Fetch the Eden Duo SDK headers and the companions builder
+        run: |
+          git clone --depth 1 --branch "$EDEN_DUO_REF" https://github.com/igawa6/eden-duo.git eden-duo
+          git clone https://github.com/igawa6/eden-duo-companions.git companions
+          cd companions
+          git checkout --detach "$COMPANIONS_COMMIT"
+          git -c user.name=ci -c user.email=ci@localhost am ../vibe-window/host/eden-duo-companions/0001-*.patch
+
+      - name: Build and test
+        working-directory: vibe-window
+        run: |
+          cmake -S native -B ../build/gcc -G Ninja -DEDEN_SOURCE_ROOT="$GITHUB_WORKSPACE/eden-duo" \
+            -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
+          cmake --build ../build/gcc
+          cmake -S native -B ../build/win -G Ninja -DEDEN_SOURCE_ROOT="$GITHUB_WORKSPACE/eden-duo" \
+            -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON -DCMAKE_TOOLCHAIN_FILE="$PWD/native/mingw-w64.cmake"
+          cmake --build ../build/win
+          (cd ../build/gcc && LC_ALL=C.UTF-8 ctest --output-on-failure)
+          python3 -I tools/totk/gen_manifest.py --check
+
+      - name: Package
+        working-directory: vibe-window
+        run: |
+          B=$(sed -n 's/^ *"\([0-9A-F]\{64\}\)";$/\1/p' native/modules/totk_build.h)
+          test ${#B} -eq 64
+          D=../dist
+          mkdir -p $D/mod/linux $D/mod/win
+          llvm-strip --strip-all -o $D/mod/linux/0100F2C0115B6000.so ../build/gcc/0100F2C0115B6000.so
+          x86_64-w64-mingw32-strip --strip-all -o $D/mod/win/0100F2C0115B6000.so ../build/win/0100F2C0115B6000.dll
+          python3 -I ../companions/tools/build_dualscreen_package.py --package packages/TearsOfTheKingdom \
+            --output $D --version 0.1.0 --min-runtime 22 \
+            --module linux-x86_64=$D/mod/linux/0100F2C0115B6000.so \
+            --module windows-x86_64=$D/mod/win/0100F2C0115B6000.so --build-id $B
+          unzip -l $D/0100F2C0115B6000.dsmod.zip
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: totk-companion
+          path: dist/0100F2C0115B6000.dsmod.zip
+          if-no-files-found: error
