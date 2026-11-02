@@ -45,7 +45,7 @@ Everything below is blocked on you, in this order. Send logs, `.shot` files and 
 5. **T2.** You play **1.2.0** (D2, answered). Send `xxd -s 0x40 -l 32 -p main` from
    `eden-cli --dump-romfs` of base + update, so T2 confirms the 1.2.0 build id T2a sets.
 6. **Approve vendoring `stb_truetype.h` (T3a').** TotK's fonts are CFF outlines (`.bfotf`), so
-   the module rasterizes them. The file is `native/modules/third_party/stb_truetype.h` v1.26
+   the module rasterizes them. The file is `native/third_party/stb_truetype.h` v1.26
    (public domain) from the companions clone [S2], copied to `native/third_party/`; the ACNH module already does the same with it.
    The session's classifier refused compiling outside code once (zstd, T3a), so the coder asks you
    first. The zstd vendoring you approved is **no longer needed in the module** (patch 0009 below
@@ -320,11 +320,11 @@ Doable in this Linux container now (no game, no Windows, no Thor):
 | T2a | Retarget the skeleton to 1.2.0 (`kTargetBuild`, data file name, tests) | T1 | done: `d175a18`; 1.2.0 build id and data file; critic SATISFIED (with T3s) |
 | T3a'.1 | Eden Duo patch 0009 (zstd + `ZsDic` in the runtime's romfs reader, §T3a' A) + icon keys as `romfs:` paths (§T3a' B2) | T4 | done: 64a646e, critic SATISFIED round 1, Windows CI run 41379288233 green (198 cases); real romfs untested (T8a) |
 | T3a'.2 | Item names from MSBT (B1) + the one-shot texture dump for T8a (B5) | T3a'.1 | done: 2bdcb00 (patches 0010-0011), critic SATISFIED round 4, Eden CI 41396378620 + companion CI green; real romfs untested (T8a) |
-| T3a'.3 | Game font through the module (`.bfotf` + stb_truetype, B4) | T3a'.1 (stb_truetype approved by the user) | doing |
+| T3a'.3 | Game font through the module (`.bfotf` + stb_truetype, B4) | T3a'.1 (stb_truetype approved by the user) | done: 671bb6f, critic SATISFIED round 2; real base: font untested (T8a) |
 | T3s | Save reader: newest `slot_0N`, `progress.sav` GameData by murmur3 hash, domain snapshots (status, gear, pouches, abilities, position); save extension export; module worker thread | T2a | done: `6edf1ef`, `f4b1527`, `b535fca`; two-read stability gate, unknowns published as absent, gives up after 8 reads; 3 toolchains + wine + TSan/ASan + fuzz pass; real saves untested (T8); critic SATISFIED round 3 |
 | T4 | Shell + Gear page, tab bar, notice overlay, base extensions, manifest generator + checker | T3s | done: `3be5876`..`7e9ab94`; shell, tab bar, notice, base extensions + action table (refusals logged once), Gear page with 4 cards and 3 states, generator + checker with runtime-faithful visibility tests; critic SATISFIED round 3 (7 -> 1 -> 0 findings). Its look is superseded by T4v |
-| T4r | Render tool `tools/totk/render/` moved from the critic's harness + fixtures (§T4v item 4) | T4 | doing |
-| T4v | Restyle (the reference look): game font, TotK textures, header page tabs, home page = Gear + status right column + ability bar (inventory side framed, filled by T6) | T3a'.1, T4r (T8a names the textures; starts with the `UNVERIFIED` table) | todo |
+| T4r | Render tool `tools/totk/render/` moved from the critic's harness + fixtures (§T4v item 4) | T4 | done: 05aec2d + dcd41fc (with patch 0012 for romfs: icon binds), critic SATISFIED; no game-font rendering (built-in font only) |
+| T4v | Restyle (the reference look): game font, TotK textures, header page tabs, home page = Gear + status right column + ability bar (inventory side framed, filled by T6) | T3a'.1, T4r (T8a names the textures; starts with the `UNVERIFIED` table) | doing |
 | T6 | Inventory side of the home page: 8 category icon tabs, icon grid, detail pane with Equipped badge, hold and drag to a refused use | T4v | todo |
 | T5 | Abilities page: 7 large tiles with the game's icons, owned/locked, battery, refused select | T4v | todo |
 | T7 | Map page: Surface/Sky/Depths tiles as `romfs:` paths, the game's layer icons and player icon, pan/zoom | T4v, T3a' | todo |
@@ -1178,10 +1178,13 @@ module) is **not built**; it stays plan B (summary at the end of this packet).
 3. *(cut: `totk.assets.valid`, see the cut list above.)*
 4. `totk_font.h` + export `eden_dsmod_get_font_extensions` (by hand, version/hash checks as the
    other getters; `.def` and version script): spec bytes from the package file
-   `dualscreen/totk_font.txt` = `body:48`; `decode_font` reads `Font/Font.Nin_NX_NVN.bfarc.zs#scft/
-   nintendo_NTLG-DB_DH_002.bfotf` and `#scft/External.bfotf` through the `read_romfs` saved in
-   `create` (decode_font gets no host [S2 `010055D009F78000.cpp:151`]), removes the XOR (key = word
-   0 ^ `0x18029a7f`, size = word 1 ^ key, big-endian, size ≤ file − 8 [S32]), rasterizes with
+   `dualscreen/totk_font.txt` = `body:48`; `decode_font` reads `base:Font/Font.Nin_NX_NVN.bfarc.zs#scft/
+   nintendo_NTLG-DB_DH_002.bfotf` and `#scft/External.bfotf` (shipped base romfs only, gated on
+   `EDEN_DSMOD_CAP_SOURCE_BASE`: stb_truetype does not bounds-check table contents, so a LayeredFS
+   font mod must never reach it; font mods do not show in the companion) through the `read_romfs` saved in
+   `create` (decode_font gets no host [S2 `010055D009F78000.cpp:151`]), removes the XOR (bytes 0-3 are
+   `7F 9A 02 18` XOR key, i.e. S32's little-endian `0x18029a7f`; the size is word 1 ^ key read
+   big-endian; size ≤ file − 8 [S32]); cap height = the top of 'H' (no fallback: no 'H', no atlas), rasterizes with
    stb_truetype at cap 48 px: U+0020-U+017F, U+2013/2014/2018-201D/2026 from the text face and
    U+E040-U+E068 from External, shelf-packed into one atlas ≤ 2048x2048 (RGB `FF`, A = coverage);
    reports a dense glyph run U+0020..U+E068 (missing slots are empty glyphs advancing like a space,
@@ -1543,7 +1546,7 @@ numbers and the widget-drawn fallbacks in the built-in font.
 | D2 target version | T2a, T2 | Answered: 1.2.0 |
 | D2b | T3 only | Answered: stay on 1.2.0 |
 | Approve vendoring zstd | T3a | Answered: approved. No longer vendored in the module (§R2); the same files build patch 0009's test outside the repo (hashes in §T3a') |
-| Approve vendoring stb_truetype | T3a' | `native/modules/third_party/stb_truetype.h` v1.26 (public domain) from the companions clone, for the game font (§R2) |
+| Approve vendoring stb_truetype | T3a' | `native/third_party/stb_truetype.h` v1.26 (public domain) from the companions clone, for the game font (§R2) |
 | T8a dump | T8a, T4v | The `totk-dump` file, one start of TotK 1.2.0 with the CI-built eden-cli (patches 0001-0011) and companion package, the `totk`/`DSMod` log lines and the `imgdump` PNGs the coder lists (PowerShell steps in §T8a) |
 | Reference look decisions | T4v | Accepted by the user: pages Map / Inventory (home) / Abilities with Gear in the home page's right column; no 3D Link figure (§R3), the equipped weapon at 256 px instead; English only |
 | T8 run | T8 | Package installed in the CI-built eden-cli, one save loaded, `.shot` pictures per page, `totk`/`DSMod` log lines, values compared with the game |
