@@ -342,6 +342,7 @@ Needs the user, a Windows PC, the Thor or another repo:
 | T8a | Texture dump on the PC: `totk dump` log lines (archive versions, texture list, layout panes, Mals members) and `imgdump` PNGs; turns the `UNVERIFIED` texture table into names | T3a', H1c | blocked: user |
 | T8 | First real run on the PC (romfs paths, save keys, pictures, sample cost), then end-to-end on the Thor through apollo2-vibe | T4v-T7, T8a, H1c (H2, H3 for the Thor part) | blocked: user |
 | T3 | Memory discovery on the user's build (Windows dev-tools eden-cli, gdbstub): live GameData object (replaces the save as source), player position + layer, current stamina, current ability, scene/menu state; sentinel test, second boot [S3 PORTING_A_GAME §2-3] | T2, H1c, D2b | blocked: user |
+| T3L | Live 3D Link figure on the companion (user wants it later): hook TotK's pause-menu Link render to a second target, or `mirror` the menu while paused as a stopgap; deferred by the user until memory work | T3 | later (user) |
 | T9 | Release: `windows-x86_64` module (plus `android-arm64-v8a` only if path A is wanted) | T8 | todo |
 | T10+ | Extensions, one packet each: live readers behind the T4-T7 keys (T3), actions (guest call on Windows, quick-menu steering with readback, or load-plan helper), map reveal from Skyview Towers, stamps and pins, travel, compass, quests, recipes, item-name language | T9 | todo |
 
