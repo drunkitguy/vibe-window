@@ -235,7 +235,7 @@ def detail_pane(derived):
     widgets += [
         {"type": "label", "rect": [554, 744, 0, 20], "text": "Equipped", "text_scale": 4,
          "align": "center", "color": SELECT, "wrap_width": 128, "max_lines": 1,
-         "fit_text": True, "text_min_scale": 4, "need_bind": f"{sel}.equipped"},
+         "need_bind": f"{sel}.equipped"},
         {"type": "value", "rect": [164, 778, 280, 26], "bind": f"{sel}.value",
          "text": "Durability ", "text_scale": 5, "color": VALUE, **kind_is(f"{sel}.kind", 1)},
         {"type": "value", "rect": [164, 778, 280, 26], "bind": f"{sel}.value", "text": "x",
@@ -246,8 +246,8 @@ def detail_pane(derived):
          "need_bind": has(derived, f"{sel}.hearts")},
         # Fuse left, effect right: 220 px each, so "Durability Up+" fits in the built-in font.
         {"type": "label", "rect": [164, 808, 220, 24], "bind_text": f"{sel}.fuse_name",
-         "text_scale": 4, "color": DIM, "wrap_width": 220, "max_lines": 1, "fit_text": True,
-         "text_min_scale": 4, "need_bind": picked},
+         "text_scale": 4, "color": DIM, "wrap_width": 220, "max_lines": 1,
+         "need_bind": picked},
         {"type": "label", "rect": [620, 808, 0, 24], "bind_text": f"{sel}.effect",
          "text_scale": 4, "align": "right", "color": DIM, "need_bind": picked},
         {"type": "label", "rect": [164, 836, 456, 84], "bind_text": f"{sel}.caption",
@@ -364,7 +364,7 @@ def equipment(derived, actions):
          "need_bind": f"{w}.present"},
         {"type": "label", "rect": [936, 768, 0, 26], "bind_text": f"{w}.effect",
          "text_scale": 4, "align": "center", "color": VALUE, "wrap_width": 256, "max_lines": 1,
-         "fit_text": True, "text_min_scale": 4, "need_bind": f"{w}.present"},
+         "need_bind": f"{w}.present"},
         {"type": "label", "rect": [936, 800, 0, 24], "bind_text": f"{w}.fuse_name",
          "text_scale": 4, "align": "center", "color": DIM, "wrap_width": 256, "max_lines": 1,
          "need_bind": f"{w}.fuse"},

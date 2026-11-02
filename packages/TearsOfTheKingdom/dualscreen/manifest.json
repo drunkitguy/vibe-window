@@ -903,8 +903,6 @@
      "color": "#FF6FF0C0",
      "wrap_width": 128,
      "max_lines": 1,
-     "fit_text": true,
-     "text_min_scale": 4,
      "need_bind": "totk.inv.sel.equipped"
     },
     {
@@ -967,8 +965,6 @@
      "color": "#FF8F907F",
      "wrap_width": 220,
      "max_lines": 1,
-     "fit_text": true,
-     "text_min_scale": 4,
      "need_bind": "ui.has.inv.sel.kind"
     },
     {
@@ -1332,8 +1328,6 @@
      "color": "#FFE9C46A",
      "wrap_width": 256,
      "max_lines": 1,
-     "fit_text": true,
-     "text_min_scale": 4,
      "need_bind": "totk.gear.weapon.present"
     },
     {

@@ -1053,7 +1053,7 @@ known; the manifest gates on `.valid` and `need_bind`.
 | `totk.ability.current` | int | Live only, offset UNKNOWN: never published in T5 |
 | `totk.inv.valid`, `.source`, `.count` | int | Current tab only |
 | `totk.inv.tab{k}.count` | int | k = 0-7, for the tab chips |
-| `totk.inv.{i}.icon`, `.name` | text | Item `i` of the current tab |
+| `totk.inv.{i}.icon` | text | Item `i` of the current tab (names only for the selection, `totk.inv.sel.name`; `{i}.name` dropped in T6 as unbound) |
 | `totk.inv.sel.equipped` | int | The selected slot equals its pouch's `EquipIndex[0]` (T4v; the detail pane's Equipped badge) |
 | `totk.inv.{i}.value`, `.kind` | int | kind 1 durability (`Life`), 2 count (`StockNum`), 0 none (armor) |
 | `totk.inv.{i}.equipped` | int | Slot equals that pouch's `EquipIndex[0]` |
@@ -1480,7 +1480,7 @@ and any BFLYT reference values, in one commit; the critic re-renders with `--ass
 BotW manifest `inventory`]: template `image` `repeat 400`, `repeat_bind totk.inv.count`,
 `repeat_cols 5`, `repeat_dx 124`, `repeat_row_dy 124`, `scroll inv_grid`), the detail pane with
 the Equipped badge, caption (`totk.inv.sel.caption`, new text key from T3a's names) and the
-refused use by hold and drop. Module unchanged except `.caption`.
+refused use by hold and drop. Module unchanged except `.caption`, empty optional text lines published as "", and `{i}.name` no longer published.
 Tests: `totk_module_test`: each tab's published count and order from a fixture save with all nine
 pouches (arrows after bows), equipped flags and `sel.equipped`, `totk.inv.select` bounds, tab change
 resets the selection, `tab_next` wraps, only the current tab's `{i}` keys are published (page 0
