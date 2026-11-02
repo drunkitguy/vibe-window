@@ -26,7 +26,7 @@ run, then the game-dependent companion pages, smallest first.
 
 Everything below is blocked on you, in this order. Send logs, `.shot` files and screenshots back.
 1. **H1c, eden-cli on Windows.** Fork igawa6/eden-duo at `v1.3.2.2`, then
-   `git am host/eden-duo/000*.patch`. Run `tools/windows/load-msvc-env.ps1`, then
+   `git am host/eden-duo/00*.patch`. Run `tools/windows/load-msvc-env.ps1`, then
    `cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DYUZU_TESTS=ON -DEDEN_DSMOD_BUILD_DEV_TOOLS=ON`
    and `cmake --build build`. Then run the five checks in §H1c (stage and rect tests,
    `tests.exe "[dsmod][module]"`, smoke run, rect minimums, `tools/duo/duo-touched-ledger.sh --check`).
@@ -771,7 +771,7 @@ Facts:
   textures are BC and R8, not only ASTC [S32 `make_button_icons.py:411`][S28 §2 format list]),
   cannot feed composites, and duplicates what the runtime has. The patch is smaller and decodes
   every format correctly. Cost: the art needs the patched eden-cli, which path C already requires
-  (patches 0001-0008, CI applies `000*.patch`); an unpatched runtime shows the pages without game
+  (patches 0001-0008, CI applies `00*.patch`); an unpatched runtime shows the pages without game
   art (fallbacks only, no notice: cut). If path A (stock Android Eden Duo) is ever
   wanted without the patch, old T3a's module pipeline is plan B behind the same published keys.
 - *Item names and captions*: still published by the module (names change with the save, fact 16);
@@ -1132,7 +1132,7 @@ Decision and evidence: §R2. Old T3a's module pipeline (vendored zstd, SARC, BNT
 module) is **not built**; it stays plan B (summary at the end of this packet).
 
 **A. Eden Duo patch `host/eden-duo/0009-DSMod-read-zstd-romfs-files-with-ZsDic.patch`** (on top of
-0001-0008, `git format-patch` like them, CI applies `000*.patch`):
+0001-0008, `git format-patch` like them, CI applies `00*.patch`):
 1. New pure files `src/core/mods/mod_zstd.h/.cpp` (namespace `Core::Mods::Zstd`, no runtime, no
    logging; precedent `mod_yaz0.h`): `class Dicts { bool Add(std::span<const u8> zsdic); bool
    Decode(std::span<const u8> frame, u64 cap, std::vector<u8>& out, std::string& error) const; }`.
@@ -1406,15 +1406,23 @@ textures and font (T8a/T8).
 
 ### T8a (user, after T3a' and H1c): name the game's UI textures
 
-1. CI-built eden-cli with patches 0001-0009 (`.github/workflows/eden-duo-windows.yml`), dev tools
-   on. Package installed as §T8 step 1. Create `<Eden data dir>/dualscreen/user/0100F2C0115B6000/
-   totk-dump` containing `1` [S1 `mod_user_source.h`].
+1. CI-built eden-cli with patches 0001-0010 (`.github/workflows/eden-duo-windows.yml`; dev tools
+   are on by default, `EDEN_DSMOD_BUILD_DEV_TOOLS`). Package installed as §T8 step 1. Create
+   `<Eden data dir>/dualscreen/user/0100F2C0115B6000/totk-dump` containing `1` [S1
+   `mod_user_source.h`]. (The dump lists archive members through patch 0010's `read_romfs
+   ("<archive>#")`, the whole decoded SARC.)
 2. Start TotK 1.2.0, load a save, wait 10 s, quit. Send every log line containing `totk dump`,
    `totk` and `DSMod` (font, Mals n, misses).
-3. In the dev-tools console, `imgdump <src> <out.png>` [S3 PORTING_A_GAME §6 table] for the textures
-   the coder picks from the dump (one line each, listed in the coder's T8a request), plus
-   `imgdump module:totk:font/body:48 font-atlas.png`. Send the PNGs; they are used only in the
-   scratch render (`--assets`), never committed.
+3. The dev-tools console is a file: before starting eden-cli again set `EDEN_DSMOD_CMD` to a file
+   path (PowerShell: `$env:EDEN_DSMOD_CMD = "$PWD\dsmod-cmd.txt"`) [S1 `mod_console.cpp:72-90`].
+   Load a save, then for each texture the coder picks from the dump (one line each, listed in the
+   coder's T8a request) write that one line, `imgdump <src> <out.png>` [S3 PORTING_A_GAME §6
+   table], into the file and wait for its `DSMod imgdump ok` (or `FAILED`) line in
+   `dsmod-cmd.txt.out` before the next (the runtime takes one command per write and empties the
+   file; `<out.png>` may not contain spaces; a relative path lands in eden-cli's working
+   directory). After T3a'.3 also
+   `imgdump module:totk:font/body:48 font-atlas.png`. Send the PNGs and `dsmod-cmd.txt.out`; the
+   PNGs are used only in the scratch render (`--assets`), never committed.
 4. Delete the `totk-dump` file.
 Result: the coder fills `TEX`, the tints (BFLYT material colours), `Common.Product.<n>`, the Mals n
 and any BFLYT reference values, in one commit; the critic re-renders with `--assets`.

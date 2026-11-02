@@ -192,6 +192,7 @@ inline const char* EffectLabel(std::uint32_t hash) {
 struct Item {
     std::string id, icon;           // icon = IconKey(id): a romfs path, empty for a bad id
     std::string fuse_id, fuse_icon; // empty when nothing is fused
+    std::string name, fuse_name;    // from PouchContent.msbt; empty: the id is shown instead
     const char* effect = nullptr;   // EffectLabel; null when unknown or not a gear pouch
     int kind = 0;                   // 1 durability (Life), 2 count (StockNum), 0 none
     std::int32_t value = 0;

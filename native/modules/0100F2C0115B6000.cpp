@@ -3,7 +3,9 @@
 // Three build gates: the loader's build_ids prefix, supports_build and create (all 32 bytes).
 // Every callback catches all exceptions: nothing may unwind into the host.
 // Data: the last save through the save extension (a worker thread polls it every 2 s) and the
-// live status reader, whose offsets stay UNKNOWN (0) so it never touches guest memory yet.
+// live status reader, whose offsets stay UNKNOWN (0) so it never touches guest memory yet. The
+// worker also loads the item names from the game's romfs (totk_msbt.h) and, once per session
+// when the player asks for it, logs T8a's texture dump (totk_dump.h).
 // Base extensions: module actions drive the UI state (page, tab, selection, map layer); game
 // actions are refused; load_image refuses every key (icons are romfs: paths the runtime reads).
 
@@ -22,7 +24,9 @@
 
 #include "core/mods/modules/dsmod_module_sdk.h"
 #include "totk_build.h"
+#include "totk_dump.h"
 #include "totk_keys.h"
+#include "totk_msbt.h"
 #include "totk_offsets.h"
 #include "totk_save.h"
 #include "totk_status.h"
@@ -59,6 +63,9 @@ struct Keys {
 
 struct Instance {
     totk::Offsets offsets; // all 0 (UNKNOWN) until T3
+    // The create host, for the worker's read_romfs and log (runtime 16: usable from create on
+    // [S1 dsmod_module_abi.h:215-217]; the worker is joined before destroy returns).
+    EdenDsmodHostApi host{};
     Keys keys;
     // UI state, set by on_action. on_action "runs serialized with sample/tick on the timing
     // thread" [S1 dsmod_module_extensions.h:75]: ModRuntime::Tick runs sample, the module tick,
@@ -80,6 +87,7 @@ struct Instance {
     // The snapshot replaced last time: kept one more poll so the worker, not a sample still
     // holding its copy, frees it.
     std::shared_ptr<const totk::Snapshot> retired;
+    bool names = false; // the item names loaded (totk.names.valid)
     std::thread worker; // started last in Create, joined in Destroy
 };
 
@@ -95,13 +103,78 @@ struct Watch {
 // its progress.sav size changes (8 reads = 16 s).
 constexpr int kMaxReads = 8;
 
+// The worker's item names: one attempt per poll until they load or kNameTries pass (the romfs
+// may not be open yet early in a session), then one log line either way.
+struct Names {
+    int tries = 0;
+    bool done = false;
+    int mals = 0; // Mals/USen.Product.<n>, 0 = not found
+    totk::msbt::Labels labels;
+};
+constexpr int kNameTries = 30;
+
+// Ids become names where PouchContent.msbt has an <id>_Name label; otherwise the id stays.
+void ApplyNames(totk::Snapshot& s, const totk::msbt::Labels& labels) {
+    const auto name = [&](const std::string& id) {
+        const auto it = id.empty() ? labels.end() : labels.find(id + "_Name");
+        return it == labels.end() ? std::string{} : it->second;
+    };
+    const auto apply = [&](totk::Item& it) {
+        it.name = name(it.id);
+        it.fuse_name = name(it.fuse_id);
+    };
+    for (auto& gear : s.gear)
+        if (gear)
+            apply(*gear);
+    for (auto& tab : s.tabs)
+        for (auto& it : tab)
+            apply(it);
+}
+
+// Publishes `next`. The replaced snapshot is kept one more swap so the worker, not a sample still
+// holding its copy, frees it.
+void Replace(Instance& in, std::shared_ptr<const totk::Snapshot> next) {
+    std::shared_ptr<const totk::Snapshot> freed; // released below, after the lock
+    std::scoped_lock lock{in.mutex};
+    freed = std::move(in.retired);
+    in.retired = std::move(in.snapshot);
+    in.snapshot = std::move(next);
+}
+
+// True when the names have just loaded.
+bool TryNames(const EdenDsmodHostApi& h, Names& n) {
+    if (n.done)
+        return false;
+    if (!h.read_romfs) {
+        n.done = true;
+        return false;
+    }
+    const char* why = "no Mals/USen.Product.<100-200>.sarc.zs";
+    n.mals = totk::msbt::FindMals(h);
+    const bool ok = n.mals && totk::msbt::LoadNames(h, n.mals, n.labels, why);
+    if (!ok && ++n.tries < kNameTries)
+        return false;
+    n.done = true;
+    if (h.log) {
+        char line[200];
+        if (ok)
+            std::snprintf(line, sizeof line, "totk: item names from Mals/USen.Product.%d (%u labels)",
+                          n.mals, unsigned(n.labels.size()));
+        else
+            std::snprintf(line, sizeof line, "totk: item names unavailable: %s", why);
+        h.log(h.userdata, EDEN_DSMOD_LOG_INFO, line);
+    }
+    return ok;
+}
+
 // One poll. progress.sav is re-read only while the newest (slot, date) differs from the shown
 // one. Eden writes saves in place (no commit), and progress.sav has a fixed size, so a read can
 // catch a half-written file: a save is taken only when two consecutive reads match and it parses.
 // Until then the previous snapshot stays.
 // shortcut: a progress.sav that stays old for a whole poll (2 s) after its caption is newer is
 // taken as is; T8 checks the game's write order.
-void Poll(Instance& in, const EdenDsmodHostSaveApi& api, Watch& w) {
+void Poll(Instance& in, const EdenDsmodHostSaveApi& api, Watch& w,
+          const totk::msbt::Labels& labels) {
     const auto newest = totk::NewestSlot(api);
     if (!newest || newest == w.shown)
         return;
@@ -124,27 +197,41 @@ void Poll(Instance& in, const EdenDsmodHostSaveApi& api, Watch& w) {
     const auto data = totk::GameData::Parse(std::move(*bytes));
     if (!data)
         return;
-    auto next = std::make_shared<const totk::Snapshot>(totk::BuildSnapshot(*data));
-    std::shared_ptr<const totk::Snapshot> freed; // released below, after the lock
-    {
-        std::scoped_lock lock{in.mutex};
-        freed = std::move(in.retired);
-        in.retired = std::move(in.snapshot);
-        in.snapshot = std::move(next);
-    }
+    auto next = std::make_shared<totk::Snapshot>(totk::BuildSnapshot(*data));
+    ApplyNames(*next, labels);
+    Replace(in, std::move(next));
     w = Watch{newest, {}, 0, std::nullopt, 0};
 }
 
 void Worker(Instance& in) {
     Watch watch;
+    Names names;
+    bool dumped = false;
     std::unique_lock lock{in.mutex};
     while (!in.stop) {
         const std::uint64_t generation = in.requested;
         const auto api = in.save;
         lock.unlock();
         try {
+            if (TryNames(in.host, names)) {
+                std::shared_ptr<const totk::Snapshot> shown;
+                {
+                    std::scoped_lock names_lock{in.mutex};
+                    in.names = true;
+                    shown = in.snapshot;
+                }
+                if (shown) { // a save read before the names: name it now
+                    auto next = std::make_shared<totk::Snapshot>(*shown);
+                    ApplyNames(*next, names.labels);
+                    Replace(in, std::move(next));
+                }
+            }
+            if (names.done && !dumped) {
+                dumped = true;
+                totk::dump::Run(in.host, names.mals);
+            }
             if (api)
-                Poll(in, *api, watch);
+                Poll(in, *api, watch, names.labels);
         } catch (...) {
         }
         lock.lock();
@@ -170,6 +257,7 @@ void* Create(const EdenDsmodHostApi* host, const char*) {
         auto* in = new (std::nothrow) Instance;
         if (!in)
             return nullptr;
+        in->host = *host;
         try {
             in->worker = std::thread(Worker, std::ref(*in));
         } catch (...) {
@@ -240,6 +328,11 @@ struct Out {
     }
 };
 
+// The game's name when PouchContent.msbt has one, else the id.
+const std::string& Shown(const std::string& name, const std::string& id) {
+    return name.empty() ? id : name;
+}
+
 void PublishStatus(const Out& o, const totk::Status& live, const totk::Snapshot* s) {
     // A valid live value beats the save; with every offset 0 the save is the only source.
     if (live.valid) {
@@ -280,7 +373,7 @@ void PublishGear(const Out& o, const Keys& k, const totk::Snapshot& s) {
         if (!item)
             continue;
         o.T(key[pub::kId], item->id);
-        o.T(key[pub::kName], item->id); // the name table is T3a; until then the id
+        o.T(key[pub::kName], Shown(item->name, item->id));
         o.T(key[pub::kIcon], item->icon);
         if (item->kind == 1)
             o.I(key[pub::kLife].c_str(), item->value);
@@ -289,7 +382,7 @@ void PublishGear(const Out& o, const Keys& k, const totk::Snapshot& s) {
         if (i == 0 || i == 2) { // only weapons and shields fuse
             o.I(key[pub::kFuse].c_str(), item->fuse_id.empty() ? 0 : 1);
             if (!item->fuse_id.empty()) {
-                o.T(key[pub::kFuseName], item->fuse_id);
+                o.T(key[pub::kFuseName], Shown(item->fuse_name, item->fuse_id));
                 o.T(key[pub::kFuseIcon], item->fuse_icon);
             }
         }
@@ -312,7 +405,7 @@ void PublishInventory(const Out& o, const Instance& in, const totk::Snapshot& s)
         const auto& key = in.keys.items[i];
         const auto& it = items[i];
         o.T(key[pub::kItemIcon], it.icon);
-        o.T(key[pub::kItemName], it.id);
+        o.T(key[pub::kItemName], Shown(it.name, it.id));
         o.I(key[pub::kItemKind].c_str(), it.kind);
         if (it.kind)
             o.I(key[pub::kItemValue].c_str(), it.value);
@@ -325,12 +418,12 @@ void PublishInventory(const Out& o, const Instance& in, const totk::Snapshot& s)
         return;
     const auto& it = items[std::size_t(in.sel)];
     o.T(pub::kInvSelIcon, it.icon.c_str());
-    o.T(pub::kInvSelName, it.id.c_str());
+    o.T(pub::kInvSelName, Shown(it.name, it.id).c_str());
     o.I(pub::kInvSelKind, it.kind);
     if (it.kind)
         o.I(pub::kInvSelValue, it.value);
     if (!it.fuse_id.empty())
-        o.T(pub::kInvSelFuseName, it.fuse_id.c_str());
+        o.T(pub::kInvSelFuseName, Shown(it.fuse_name, it.fuse_id).c_str());
     o.T(pub::kInvSelEffect, it.effect);
     if (it.hearts)
         o.I(pub::kInvSelHearts, *it.hearts);
@@ -343,12 +436,15 @@ void Sample(void* instance, const EdenDsmodHostApi* host) {
         auto& in = *static_cast<Instance*>(instance);
         const totk::Status live = totk::ReadStatus(*host, in.offsets);
         std::shared_ptr<const totk::Snapshot> snap;
+        bool names;
         {
             std::scoped_lock lock{in.mutex};
             snap = in.snapshot;
+            names = in.names;
         }
         const Out o{*host};
         o.I(pub::kReady, 1);
+        o.I(pub::kNamesValid, names ? 1 : 0);
         o.I(pub::kUiPage, in.page);
         o.I(pub::kInvTab, in.tab);
         o.I(pub::kInvSel, in.sel);

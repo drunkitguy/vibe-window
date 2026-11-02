@@ -48,13 +48,14 @@ int main() {
     for (const char* a : pub::kAbilityNames)
         assert(pub::Listed(pub::Expand(pub::kAbilityOwned, a)));
     assert(pub::Listed("totk.inv.0.icon") && pub::Listed("totk.inv.399.fuse_icon"));
+    assert(pub::Listed("totk.names.valid"));
     assert(pub::Listed("totk.inv.tab0.count") && pub::Listed("totk.inv.tab7.count"));
     for (const char* bad :
          {"totk.gear.head.present", "totk.gear..present", "totk.gear.weapon.colour",
           "totk.gear.<s>.present", "totk.ability.dash.owned", "totk.ability.fuse.name",
           "totk.inv.01.icon", "totk.inv.x.icon", "totk.inv..icon", "totk.inv.{i}.icon",
           "totk.inv.-1.icon", "totk.inv.tab8.count", "totk.inv.tab10.count",
-          "totk.inv.tab.count", "totk.names.valid", "totk.map.tile.0", "totk.gear.swap",
+          "totk.inv.tab.count", "totk.names.valid.x", "totk.map.tile.0", "totk.gear.swap",
           "totk.ready.", "totk.ready ", "", "totk"})
         assert(!pub::Listed(bad));
 

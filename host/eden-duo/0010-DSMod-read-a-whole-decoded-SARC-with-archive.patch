@@ -1,0 +1,61 @@
+From 6a3e7403ea7f334c837c0672823d5244a772b5c1 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Mon, 2 Nov 2026 03:28:41 +0000
+Subject: [PATCH] DSMod: read a whole decoded SARC with "<archive>#"
+
+A module's read_romfs can name a SARC member ("<archive>#<member>"),
+but it cannot list the members of a compressed archive: without a '#'
+it gets the raw zstd bytes, which it has no decoder for. TotK's layout
+and message archives are such files.
+
+ReadNxMember now answers "<archive>#" (nothing after the '#') with the
+decoded SARC itself (the container Locate already decoded for the
+member lookup). Every other path reads as before: "<archive>#" used to
+fail with "archive has no member ''".
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01XgyuSR8o8AbzxuWHYqLwsv
+---
+ src/core/mods/mod_nx_runtime.cpp | 9 +++++++++
+ src/core/mods/mod_runtime.h      | 5 +++--
+ 2 files changed, 12 insertions(+), 2 deletions(-)
+
+diff --git a/src/core/mods/mod_nx_runtime.cpp b/src/core/mods/mod_nx_runtime.cpp
+index 34700c3..f86d1f4 100644
+--- a/src/core/mods/mod_nx_runtime.cpp
++++ b/src/core/mods/mod_nx_runtime.cpp
+@@ -1836,6 +1836,15 @@ bool ModRuntime::ReadNxMember(const std::string& src, std::vector<u8>& out) {
+         return false;
+     }
+     out.clear();
++    // "<archive>#" (nothing after the '#'): the decoded archive itself, so a module can list
++    // the members of a compressed archive whose raw bytes it cannot unpack.
++    if (hash + 1 == src.size()) {
++        if (!s.ReadAll(at, out, error)) {
++            LOG_WARNING(Core, "DSMod: '{}': {}", src, error);
++            out.clear();
++        }
++        return true;
++    }
+     if (s.Locate(src, asset_sources, at, error) != LocateStatus::Ok) {
+         LOG_WARNING(Core, "DSMod: '{}': {}", src, error);
+         return true;
+diff --git a/src/core/mods/mod_runtime.h b/src/core/mods/mod_runtime.h
+index 22f8cd5..c54f38f 100644
+--- a/src/core/mods/mod_runtime.h
++++ b/src/core/mods/mod_runtime.h
+@@ -1029,8 +1029,9 @@ private:
+     [[nodiscard]] bool IsNxAssetSource(const std::string& src) const;
+     std::shared_ptr<const Image> GetNxImage(const std::string& src);
+     std::shared_ptr<const Image> GetCompositeImage(const std::string& name);
+-    /// Sync: the bytes of a SARC member ("<file>#<member>[#...]"); false when `src` does not
+-    /// start with a SARC (the caller then tries the other archive kinds).
++    /// Sync: the bytes of a SARC member ("<file>#<member>[#...]"), or of the decoded SARC itself
++    /// ("<file>#"); false when `src` does not start with a SARC (the caller then tries the other
++    /// archive kinds).
+     bool ReadNxMember(const std::string& src, std::vector<u8>& out);
+     /// Once per tick before drawing: land finished decodes, drive composites and their fades.
+     void PumpNxAssets(const StateSnapshot& snapshot);
+-- 
+2.43.0
+

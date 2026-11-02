@@ -32,7 +32,7 @@ jobs:
         run: |
           git clone --depth 1 --branch "$EDEN_DUO_REF" https://github.com/igawa6/eden-duo.git eden-duo
           cd eden-duo
-          git -c user.name=ci -c user.email=ci@localhost am ../vibe-window/host/eden-duo/000*.patch
+          git -c user.name=ci -c user.email=ci@localhost am ../vibe-window/host/eden-duo/00*.patch
 
       - name: Install the Vulkan SDK
         shell: pwsh

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Fake EdenDsmodHostApi for the totk_*_test programs: byte-map guest memory, call counters and
-// recorded publishes; a fake save directory (EdenDsmodHostSaveApi) and a GameData save builder.
+// Fake EdenDsmodHostApi for the totk_*_test programs: byte-map guest memory, call counters,
+// recorded publishes and logs, an in-memory romfs; a fake save directory (EdenDsmodHostSaveApi), a
+// GameData save builder and SARC/MSBT builders.
 // Test-only; never part of the module.
 #pragma once
 
@@ -43,7 +44,13 @@ struct Host {
     Ints ints;
     Texts texts;
     Floats floats;
-    std::vector<std::string> logs;
+    std::vector<std::string> logs; // read it only while the module's worker is idle
+    std::mutex log_mutex;           // the worker logs too
+    // read_romfs: path (with any "<prefix>:" and "#member" part) -> bytes, the runtime's
+    // semantics [S1 mod_module_host.cpp:406-445]: null output -> size; past the end -> 0.
+    std::mutex romfs_mutex;
+    std::map<std::string, std::vector<std::uint8_t>, std::less<>> romfs;
+    unsigned romfs_calls = 0;
     EdenDsmodHostApi api{};
 
     Host() {
@@ -93,8 +100,30 @@ struct Host {
             Set(static_cast<Host*>(u)->floats, name, value);
         };
         api.log = [](void* u, std::uint32_t, const char* message) {
-            static_cast<Host*>(u)->logs.emplace_back(message);
+            auto& h = *static_cast<Host*>(u);
+            std::scoped_lock lock{h.log_mutex};
+            h.logs.emplace_back(message);
         };
+        api.read_romfs = [](void* u, const char* path, std::uint64_t offset, void* out,
+                            std::size_t size) -> std::size_t {
+            auto& h = *static_cast<Host*>(u);
+            std::scoped_lock lock{h.romfs_mutex};
+            ++h.romfs_calls;
+            const auto it = h.romfs.find(std::string_view(path));
+            if (it == h.romfs.end())
+                return 0;
+            if (!out)
+                return it->second.size();
+            if (offset >= it->second.size())
+                return 0;
+            const std::size_t n = std::min<std::size_t>(size, it->second.size() - offset);
+            std::memcpy(out, it->second.data() + offset, n);
+            return n;
+        };
+    }
+    void PutRomfs(const std::string& path, std::vector<std::uint8_t> bytes) {
+        std::scoped_lock lock{romfs_mutex};
+        romfs[path] = std::move(bytes);
     }
     template <class Map, class V>
     static void Set(Map& map, std::string_view name, const V& value) {
@@ -204,6 +233,84 @@ inline std::uint32_t GetU32(const std::vector<std::uint8_t>& b, std::size_t at) 
     std::uint32_t v;
     std::memcpy(&v, b.data() + at, 4);
     return v;
+}
+
+inline void PutU16(std::vector<std::uint8_t>& b, std::size_t at, std::uint16_t v) {
+    if (b.size() < at + 2)
+        b.resize(at + 2);
+    std::memcpy(b.data() + at, &v, 2);
+}
+
+// A little-endian SARC of `members` (name, bytes) in order; names 4-byte aligned in SFNT.
+inline std::vector<std::uint8_t> Sarc(
+    const std::vector<std::pair<std::string, std::vector<std::uint8_t>>>& members) {
+    std::vector<std::uint8_t> names, data;
+    std::vector<std::uint8_t> b(0x14 + 0xC + 16 * members.size() + 8);
+    for (std::size_t i = 0; i < members.size(); ++i) {
+        const auto& [name, bytes] = members[i];
+        const std::size_t node = 0x20 + 16 * i;
+        PutU32(b, node, 0);
+        PutU32(b, node + 4, 0x01000000u | std::uint32_t(names.size() / 4));
+        PutU32(b, node + 8, std::uint32_t(data.size()));
+        data.insert(data.end(), bytes.begin(), bytes.end());
+        PutU32(b, node + 12, std::uint32_t(data.size()));
+        names.insert(names.end(), name.begin(), name.end());
+        names.resize((names.size() + 4) & ~std::size_t(3)); // NUL, then pad to 4
+    }
+    std::memcpy(b.data(), "SARC", 4);
+    PutU16(b, 4, 0x14);
+    PutU16(b, 6, 0xFEFF);
+    std::memcpy(b.data() + 0x14, "SFAT", 4);
+    PutU16(b, 0x18, 0xC);
+    PutU16(b, 0x1A, std::uint16_t(members.size()));
+    PutU32(b, 0x1C, 0x65);
+    const std::size_t sfnt = 0x20 + 16 * members.size();
+    std::memcpy(b.data() + sfnt, "SFNT", 4);
+    PutU16(b, sfnt + 4, 8);
+    b.insert(b.end(), names.begin(), names.end());
+    PutU32(b, 0xC, std::uint32_t(b.size()));
+    b.insert(b.end(), data.begin(), data.end());
+    PutU32(b, 8, std::uint32_t(b.size()));
+    return b;
+}
+
+// A little-endian UTF-16 MSBT: one LBL1 bucket with every label (label i -> text i), then TXT2.
+// Texts are UTF-16 code units (tags and surrogates written by the caller), NUL-terminated here.
+inline std::vector<std::uint8_t> Msbt(
+    const std::vector<std::pair<std::string, std::u16string>>& entries) {
+    const auto section = [](std::vector<std::uint8_t>& b, const char* magic,
+                            const std::vector<std::uint8_t>& body) {
+        const std::size_t at = b.size();
+        b.resize(at + 16);
+        std::memcpy(b.data() + at, magic, 4);
+        PutU32(b, at + 4, std::uint32_t(body.size()));
+        b.insert(b.end(), body.begin(), body.end());
+        b.resize((b.size() + 15) & ~std::size_t(15), 0xAB);
+    };
+    std::vector<std::uint8_t> lbl(12), txt(4 + 4 * entries.size());
+    PutU32(lbl, 0, 1);
+    PutU32(lbl, 4, std::uint32_t(entries.size()));
+    PutU32(lbl, 8, 12);
+    PutU32(txt, 0, std::uint32_t(entries.size()));
+    for (std::size_t i = 0; i < entries.size(); ++i) {
+        const auto& [label, text] = entries[i];
+        lbl.push_back(std::uint8_t(label.size()));
+        lbl.insert(lbl.end(), label.begin(), label.end());
+        PutU32(lbl, lbl.size(), std::uint32_t(i));
+        PutU32(txt, 4 + 4 * i, std::uint32_t(txt.size()));
+        for (const char16_t c : text + u'\0')
+            PutU16(txt, txt.size(), std::uint16_t(c));
+    }
+    std::vector<std::uint8_t> b(0x20);
+    std::memcpy(b.data(), "MsgStdBn", 8);
+    b[8] = 0xFF;
+    b[9] = 0xFE;
+    b[12] = 1; // UTF-16
+    PutU16(b, 14, 2);
+    section(b, "LBL1", lbl);
+    section(b, "TXT2", txt);
+    PutU32(b, 18, std::uint32_t(b.size()));
+    return b;
 }
 
 // caption.sav: the date fields and the autosave flag in the key table from 0x28, then filler for

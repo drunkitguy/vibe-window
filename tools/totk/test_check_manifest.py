@@ -76,8 +76,9 @@ class CheckManifestTest(unittest.TestCase):
                     "totk.inv.{i}.icon", "totk.inv.12.icon", "totk.inv.tab7.count"):
             self.assertTrue(listed(key), key)
         for key in ("totk.gear.head.present", "totk.inv.01.icon", "totk.inv.tab8.count",
-                    "totk.gear.swap", "totk.names.valid"):
+                    "totk.gear.swap", "totk.inv.sel.caption"):
             self.assertFalse(listed(key), key)
+        self.assertTrue(listed("totk.names.valid"))
 
     def test_unknown_object_key(self):
         self.fails(lambda m: self.gear(m)[0].update(bogus_key=1), "key 'bogus_key'")
@@ -123,8 +124,8 @@ class CheckManifestTest(unittest.TestCase):
     def test_bind_not_in_keys_header(self):
         self.fails(lambda m: self.gear(m)[0].update(need_bind="totk.gear.helmet.present"),
                    "'totk.gear.helmet.present'")
-        self.fails(lambda m: self.gear(m)[0].update(need_bind="!totk.names.valid"),
-                   "'totk.names.valid'")
+        self.fails(lambda m: self.gear(m)[0].update(need_bind="!totk.inv.sel.caption"),
+                   "'totk.inv.sel.caption'")
         self.fails(lambda m: m["derived"].append({"name": "x", "expr": "totk.bogus * 2"}),
                    "'totk.bogus'")
 

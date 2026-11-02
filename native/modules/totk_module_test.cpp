@@ -14,6 +14,7 @@
 using totk::test::Caption;
 using totk::test::FixtureSave;
 using totk::test::Host;
+using totk::test::Msbt;
 using totk::test::SaveBuilder;
 using totk::test::SaveDir;
 
@@ -196,7 +197,7 @@ int main() {
     const Host::Ints empty{
         {"totk.ready", 1},        {"totk.ui.page", 0},       {"totk.inv.tab", 0},
         {"totk.inv.sel", 0},      {"totk.map.layer", 0},     {"totk.status.valid", 0},
-        {"totk.map.valid", 0},
+        {"totk.map.valid", 0},    {"totk.names.valid", 0},
         {"totk.gear.valid", 0},   {"totk.ability.valid", 0}, {"totk.inv.valid", 0}};
     assert(h.ints == empty && h.texts.empty() && h.floats.empty());
 
@@ -243,6 +244,7 @@ int main() {
         {"totk.inv.tab", 0},
         {"totk.inv.sel", 0},
         {"totk.map.layer", 0},
+        {"totk.names.valid", 0},
         {"totk.status.valid", 1},
         {"totk.status.source", 1},
         {"totk.status.hearts", 12},
@@ -671,6 +673,103 @@ int main() {
 
     m->destroy(instance);
     assert(g_nothrow_live == nullptr); // destroy freed the instance
+
+    // Item names from a fake Mals/USen.Product.<n> PouchContent.msbt. They load after the save
+    // here (the shown snapshot is renamed), then name every newer save; an id without a label
+    // stays the id; .id keys keep the id.
+    {
+        Host hn;
+        SaveDir nd;
+        PutFixture(nd);
+        void* named = m->create(&hn.api, "{}");
+        assert(named);
+        auto& ni = *static_cast<Instance*>(named);
+        Configure(se, named, nd);
+        PollNow(named);
+        SampleClean(m, named, hn);
+        assert(hn.ints.at("totk.names.valid") == 0 &&
+               hn.texts.at("totk.gear.weapon.name") == "Weapon_Spear_002");
+        hn.PutRomfs("romfs:Mals/USen.Product.121.sarc.zs", {0x28, 0xB5, 0x2F, 0xFD});
+        hn.PutRomfs("romfs:Mals/USen.Product.121.sarc.zs#ActorMsg/PouchContent.msbt",
+                    Msbt({{"Weapon_Spear_002_Name", u"Traveler's Spear"},
+                          {"Weapon_Spear_002_Caption", u"A spear."},
+                          {"Weapon_Sword_001_Name", u"Traveler's Sword"},
+                          {"Item_Ruby_Name", u"Ruby"},
+                          {"NormalArrow_Name", u"Arrow"},
+                          {"FireArrow_Name", u""}})); // empty: the id stays
+        PollNow(named);
+        SampleClean(m, named, hn);
+        assert(hn.ints.at("totk.names.valid") == 1);
+        auto expected = page0_text;
+        expected["totk.gear.weapon.name"] = "Traveler's Spear";
+        expected["totk.gear.weapon.fuse_name"] = "Ruby";
+        assert(hn.texts == expected);
+        {
+            std::scoped_lock lock{hn.log_mutex};
+            assert((hn.logs ==
+                    std::vector<std::string>{"totk: item names from Mals/USen.Product.121 (6 labels)"}));
+        }
+        ni.page = kPageInventory;
+        ni.tab = 1;
+        ni.sel = 1;
+        SampleClean(m, named, hn);
+        assert(hn.texts.at("totk.inv.0.name") == "Weapon_Bow_001" &&
+               hn.texts.at("totk.inv.1.name") == "Arrow" && hn.texts.at("totk.inv.2.name") == "FireArrow" &&
+               hn.texts.at("totk.inv.sel.name") == "Arrow");
+        ni.tab = 0;
+        SampleClean(m, named, hn);
+        assert(hn.texts.at("totk.inv.1.name") == "Traveler's Spear" &&
+               hn.texts.at("totk.inv.sel.name") == "Traveler's Spear" &&
+               hn.texts.at("totk.inv.sel.fuse_name") == "Ruby");
+        // CA10 with names: no allocation in 1000 samples.
+        m->sample(named, &hn.api);
+        const long before = t_news;
+        for (int i = 0; i < 1000; ++i)
+            m->sample(named, &hn.api);
+        assert(t_news == before);
+        // A newer save is built with the names.
+        ni.page = 0;
+        nd.Put(Slot(1, "caption.sav"), Caption(2024, 1, 2, 8, 1, false));
+        nd.Put(Slot(1, "progress.sav"), FixtureSave(0).Build());
+        PollNow(named);
+        PollNow(named);
+        SampleClean(m, named, hn);
+        assert(hn.texts.at("totk.gear.weapon.id") == "Weapon_Sword_001" &&
+               hn.texts.at("totk.gear.weapon.name") == "Traveler's Sword" &&
+               !hn.texts.contains("totk.gear.weapon.fuse_name"));
+        assert(hn.MemoryCalls() == 0);
+        m->destroy(named);
+    }
+    // No names after 30 tries: one line, then no more probes; the dump runs then (here the
+    // player's user:totk-dump exists but the romfs has no layout archive).
+    {
+        Host hf;
+        hf.PutRomfs("user:totk-dump", {'1'});
+        void* unnamed = m->create(&hf.api, "{}");
+        assert(unnamed);
+        const auto logs = [&hf] {
+            std::scoped_lock lock{hf.log_mutex};
+            return hf.logs;
+        };
+        for (int i = 0; i < 40 && logs().empty(); ++i)
+            PollNow(unnamed);
+        const std::vector<std::string> lines{
+            "totk: item names unavailable: no Mals/USen.Product.<100-200>.sarc.zs",
+            "totk dump mals 0", "totk dump failed: no UI/LayoutArchive/Common.Product.<100-200>"};
+        assert(logs() == lines);
+        unsigned calls;
+        {
+            std::scoped_lock lock{hf.romfs_mutex};
+            calls = hf.romfs_calls;
+        }
+        assert(calls == 30 * 101 + 1 + 101); // 30 Mals probes, the user file, the Common probe
+        for (int i = 0; i < 5; ++i)
+            PollNow(unnamed);
+        SampleClean(m, unnamed, hf);
+        assert(logs() == lines && hf.romfs_calls == calls && hf.ints.at("totk.names.valid") == 0);
+        assert(hf.MemoryCalls() == 0);
+        m->destroy(unnamed);
+    }
 
     // 100 create/destroy cycles with a save to read: no hang, no leak. Some destroys land while
     // the worker is mid-read. Cycle -1 warms up the save dir's counters before the leak count.
