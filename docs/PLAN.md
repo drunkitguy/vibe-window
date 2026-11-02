@@ -1407,50 +1407,65 @@ textures and font (T8a/T8).
 
 ### T8a (user, after T3a' and H1c): name the game's UI textures
 
-PowerShell on the Windows PC. The Eden data dir `$d` is `$env:APPDATA\eden`, or `<eden-cli
-folder>\user` when that folder exists (portable) [S1 `src/common/fs/path_util.cpp:115-118`]; the
-log is `$d\log\eden_log.txt` [S1 `src/common/logging.cpp:403`, `fs_paths.h:42`].
-1. From this branch's GitHub Actions runs download two artifacts and unzip them: `eden-duo-windows-x64`
-   (workflow "Eden Duo Windows": eden-cli with patches 0001-0011; dev tools are on by default,
-   `EDEN_DSMOD_BUILD_DEV_TOOLS`) and `totk-companion` (workflow "TotK companion":
-   `0100F2C0115B6000.dsmod.zip`). Then:
+PowerShell on the Windows PC. Start every PowerShell window with `cd C:\duo` and
+`$d = "$env:APPDATA\eden"`: `$d` is the Eden data dir, or use `C:\duo\user` instead when that
+folder exists (portable) [S1 `src/common/fs/path_util.cpp:115-118`]. The log is
+`$d\log\eden_log.txt` [S1 `src/common/logging.cpp:403`, `fs_paths.h:42`]; it is written in 4 KiB
+chunks and completed when eden-cli quits (`flush_line` is off by default) [S1
+`src/common/logging.cpp:276-279`, `src/common/settings.h:927`], so read it after quitting. eden-cli
+keeps the window it was started from; where a step says "in a second window", open another one.
+Keys and the TotK 1.2.0 update are set up as for H1c's smoke run: keys in `$d\keys\`, the update
+installed once with `.\eden-cli.exe --install <TotK 1.2.0 update.nsp>` [S1
+`src/yuzu_cmd/dsmod_harness.cpp:232,831`].
+1. From this branch's GitHub Actions runs (signed in to GitHub, which artifact downloads need)
+   download `eden-duo-windows-x64` (workflow "Eden Duo Windows": eden-cli with patches 0001-0011;
+   dev tools are on by default, `EDEN_DSMOD_BUILD_DEV_TOOLS`) and `totk-companion` (workflow "TotK
+   companion"). Unzip both into `C:\duo`; `totk-companion.zip` holds `0100F2C0115B6000.dsmod.zip`,
+   which stays zipped. Then:
    ```
-   $d = "$env:APPDATA\eden"
+   cd C:\duo; $d = "$env:APPDATA\eden"
    Expand-Archive -Force 0100F2C0115B6000.dsmod.zip "$d\load\0100F2C0115B6000\TotKDuo"
    New-Item -Force -ItemType File "$d\dualscreen\user\0100F2C0115B6000\totk-dump" -Value 1
    ```
    `dualscreen\manifest.json` must end up directly in `TotKDuo` (§T8 step 1; any folder name
    works). The `totk-dump` file is read through the runtime's `user:` source, `$d\dualscreen\user\
    <TITLEID>\` [S1 `mod_user_source.cpp:22-28`]; any non-empty content turns the dump on.
-2. Start `.\eden-cli.exe -g <TotK 1.2.0>`, load a save, and wait until this prints a line (seconds;
-   up to about a minute when the Mals archive is not found):
-   `Select-String -Path "$d\log\eden_log.txt" -Pattern 'totk dump (done|failed)'`. Quit eden-cli
-   (the next start rewrites the log), then save what to send:
+2. `.\eden-cli.exe -g <TotK 1.2.0>`, load a save, wait 2 minutes, quit eden-cli (quitting completes
+   the log; the next start rewrites it). In the same window, check that the dump finished:
+   `Select-String -Path "$d\log\eden_log.txt" -Pattern 'totk dump (done|failed)'` prints a line.
+   Then save what to send:
    `Select-String -Path "$d\log\eden_log.txt" -Pattern 'totk|DSMod' | ForEach-Object Line | Set-Content -Encoding utf8 totk-log.txt`.
-   Send `totk-log.txt` (the dump, the Mals n, the item-name line, missing romfs paths).
+   Send `C:\duo\totk-log.txt` (the dump, the Mals n, the item-name line, missing romfs paths).
 3. Texture PNGs. The dev console is a file [S1 `mod_console.cpp:72-90`]: the runtime reads one
    command per write and empties the file, and mirrors its answers to `<file>.out`. It reads
    plain 8-bit text: PowerShell 5.1's `>` writes UTF-16, which it cannot parse, so always use
-   `Set-Content -Encoding ascii`. Save the coder's list as `imgdump.txt` (one
-   `imgdump <src> <out.png>` per line; `<out.png>` has no spaces and lands in the folder eden-cli
-   was started in). In one PowerShell window:
-   `$env:EDEN_DSMOD_CMD = "$env:USERPROFILE\dsmod-cmd.txt"; .\eden-cli.exe -g <TotK 1.2.0>`, and
-   load a save. In a second window:
+   `Set-Content -Encoding ascii`. Save the coder's list as `C:\duo\imgdump.txt` (one
+   `imgdump <src> <out.png>` per line; `<out.png>` has no spaces and lands in `C:\duo`). In the
+   first window: `$env:EDEN_DSMOD_CMD = "C:\duo\dsmod-cmd.txt"; .\eden-cli.exe -g <TotK 1.2.0>`,
+   and load a save. In a second window (`cd C:\duo` first):
    ```
-   $cmd = "$env:USERPROFILE\dsmod-cmd.txt"; $end = 'DSMod imgdump (ok|write-failed|FAILED)'
+   $cmd = "C:\duo\dsmod-cmd.txt"; $end = 'DSMod imgdump (ok|write-failed|FAILED|usage)'
    foreach ($line in Get-Content imgdump.txt) {
+     if (-not $line.Trim()) { continue }
      $n = @(Select-String -Path "$cmd.out" -Pattern $end -ErrorAction SilentlyContinue).Count
      Set-Content -Encoding ascii $cmd $line
-     while (@(Select-String -Path "$cmd.out" -Pattern $end -ErrorAction SilentlyContinue).Count -le $n) { Start-Sleep 1 }
+     $give_up = (Get-Date).AddSeconds(90)
+     while (@(Select-String -Path "$cmd.out" -Pattern $end -ErrorAction SilentlyContinue).Count -le $n) {
+       if ((Get-Date) -gt $give_up) { "no answer: $line"; break }
+       Start-Sleep 1
+     }
    }
    ```
    One line by hand is `Set-Content -Encoding ascii $cmd 'imgdump <src> <out.png>'` (single quotes
-   keep `$`, `#` and `^` as typed). Each command ends in one of: `DSMod imgdump ok '<src>' WxH ->
+   keep `$`, `#` and `^` as typed). A blank line gets no answer at all (the runtime skips it [S1
+   `mod_console.cpp:296-300`]); a line without an output path gets `DSMod imgdump usage: ...` [S1
+   `mod_nx_runtime.cpp:2247`]. Every other command ends in one of: `DSMod imgdump ok '<src>' WxH ->
    <out.png>` (written), `DSMod imgdump write-failed ...` (decoded, but the PNG path could not be
    written), or `DSMod imgdump queued '<src>'` (still decoding) followed later by `ok`,
-   `write-failed` or `FAILED '<src>' (not decodable|timeout)` (60 s) [S1 `mod_nx_runtime.cpp:2171-2197`,
-   `2236-2280`, line numbers with 0001-0011]. After T3a'.3 also `imgdump module:totk:font/body:48 font-atlas.png`. Send the
-   PNGs and `dsmod-cmd.txt.out`; the PNGs are used only in the scratch render (`--assets`), never
+   `write-failed` or `FAILED '<src>' (not decodable|timeout)` (60 s) [S1
+   `mod_nx_runtime.cpp:2171-2197`, `2236-2280`, line numbers with 0001-0011]. After T3a'.3 also
+   `imgdump module:totk:font/body:48 font-atlas.png`. Quit eden-cli, then send the PNGs and
+   `C:\duo\dsmod-cmd.txt.out`; the PNGs are used only in the scratch render (`--assets`), never
    committed.
 4. `Remove-Item "$d\dualscreen\user\0100F2C0115B6000\totk-dump"`.
 Result: the coder fills `TEX`, the tints (BFLYT material colours), `Common.Product.<n>`, the Mals n

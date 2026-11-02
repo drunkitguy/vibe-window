@@ -361,6 +361,18 @@ int main() {
         assert((Logs(h) == std::vector<std::string>{"totk dump tex #0: no BRTI",
                                                     "totk dump tex ? 48x48 fmt=0201 ch=2221"}));
     }
+    // A texture count past the pointer table: entries are read only while they lie in the file
+    // (the BRTIs and names after the table read as bad pointers), never past it.
+    {
+        Host h;
+        Bytes b = bntx;
+        PutU32(b, 0x24, 1000);
+        assert(totk::dump::Textures(h.api, b));
+        const auto logs = Logs(h);
+        assert(logs.size() == (b.size() - 0x40) / 8 && logs[0].starts_with("totk dump tex Btn_Frame^w"));
+        for (std::size_t i = 2; i < logs.size(); ++i)
+            assert(logs[i] == "totk dump tex #" + std::to_string(i) + ": no BRTI");
+    }
 
     // BFLYT bounds: a pic1 cut before its material index, a 24-character name without a NUL, a
     // material flag above the texmap-count bits, a wnd1 frame entry cut by the section end (its
@@ -379,8 +391,9 @@ int main() {
         PutU32(frame, 4, std::uint32_t(frame.size()));
         const Bytes f = Flyt({Txl1({"Btn_Frame^w", "Heart_00^r"}),
                               Mat1({{"M_Heart", {0, 0, 0, 0}, {1, 2, 3, 4}, {1}, 4},
-                                    {"M_Frame", {0, 0, 0, 0}, {0, 0, 0, 0}, {}}}),
-                              cut, long_name, frame});
+                                    {"M_Frame", {0, 0, 0, 0}, {0, 0, 0, 0}, {}},
+                                    {"M_Bad", {0, 0, 0, 0}, {0, 0, 0, 0}, {7}}}), // no texture 7
+                              cut, long_name, frame, Pic1("P_Bad", 0, 0, 1, 1, 2)});
         assert(totk::dump::Panes(h.api, "L", f));
         assert((Logs(h) ==
                 std::vector<std::string>{
@@ -389,7 +402,9 @@ int main() {
                     "tex=Heart_00^r white=01020304 black=00000000",
                     "totk dump pane L wnd1 W_Cut t=10,-20 s=300x60 mat=M_Frame tex= "
                     "white=00000000 black=00000000",
-                    "totk dump frame L W_Cut 0 mat=?"}));
+                    "totk dump frame L W_Cut 0 mat=?",
+                    "totk dump pane L pic1 P_Bad t=0,0 s=1x1 mat=M_Bad tex=? white=00000000 "
+                    "black=00000000"}));
         Bytes zero = Flyt({Txl1({"a"})});
         PutU32(zero, 0x14 + 4, 0);
         assert(!totk::dump::Panes(h.api, "L", zero));

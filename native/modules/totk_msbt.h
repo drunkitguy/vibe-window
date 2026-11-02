@@ -114,7 +114,7 @@ inline bool Parse(std::span<const std::uint8_t> d, Labels& out) {
         at += 16 + ((size + 15) & ~std::uint64_t(15));
     }
     const std::uint64_t count = txt.U32(0), txt_size = txt.d.size();
-    if (txt_size < 4 || labels.empty() || 4 + 4 * count > txt_size)
+    if (labels.empty() || 4 + 4 * count > txt_size)
         return false;
     for (auto& [index, name] : labels) {
         if (index >= count)

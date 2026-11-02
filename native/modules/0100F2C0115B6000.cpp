@@ -144,11 +144,9 @@ void Replace(Instance& in, std::shared_ptr<const totk::Snapshot> next) {
 // True when the names have just loaded. The try is counted first, so a try that throws still
 // counts towards kNameTries.
 bool TryNames(const EdenDsmodHostApi& h, Names& n) {
-    if (n.done)
+    if (n.done || !h.read_romfs)
         return false;
-    n.done = !h.read_romfs || ++n.tries >= kNameTries;
-    if (!h.read_romfs)
-        return false;
+    n.done = ++n.tries >= kNameTries;
     const char* why = "no Mals/USen.Product.<100-200>.sarc.zs";
     n.mals = totk::msbt::FindMals(h);
     const bool ok = n.mals && totk::msbt::LoadNames(h, n.mals, n.labels, why);
