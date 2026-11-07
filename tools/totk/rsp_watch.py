@@ -10,11 +10,14 @@ py -3 rsp_watch.py <host:port> <addr> <len> <hash>
     At each stop, if one of x0-x15 holds <hash> in its low 32 bits, print pc, lr, x0-x7 and 16
     frames of the x29 chain as main+X and finish; else print a skip line, step past the store
     with the watchpoint removed, set it again and continue. Finishes after the match or 200
-    stops: removes the watchpoint, continues and closes while the game runs.
+    stops: removes the watchpoint, continues and closes while the game runs. After an error past
+    the Z2 it still tries to remove the watchpoint and continue: Eden keeps a watchpoint after
+    the client is gone, and its next hit would freeze the game with nobody to continue it.
 shortcut: the hash filter assumes the push still holds the hash in a register (UNVERIFIED),
 print every stop's frames if no row matches.
-Exit 0 after a match or go, 1 otherwise.
+Exit 0 after a match or go, 2 for bad arguments, 1 otherwise.
 """
+import contextlib
 import socket
 import sys
 import time
@@ -108,6 +111,24 @@ def watch(stub, addr, length, want):
 
     z = "%x,%x" % (addr, length)
     stub.ok("Z2," + z)
+    done = False
+    try:
+        code = stops(stub, z, want, rel)
+        stub.ok("z2," + z)
+        stub.send("c")
+        done = True
+        return code
+    finally:
+        if not done:  # best effort; z2 answers E01 when a step had already removed it
+            with contextlib.suppress(OSError, ValueError):
+                stub.ask("z2," + z)
+            with contextlib.suppress(OSError, ValueError):
+                stub.send("c")
+
+
+def stops(stub, z, want, rel):
+    """Continues from the armed watchpoint until the match (0) or MAX_STOPS stops (1); returns
+    with the game stopped and the watchpoint armed."""
     stub.send("c")
     for n in range(1, MAX_STOPS + 1):
         stub.recv()  # the stop reply
@@ -124,18 +145,15 @@ def watch(stub, addr, length, want):
                 fp, ret = (int.from_bytes(bytes.fromhex(mem[j:j + 16]), "little") for j in (0, 16))
                 print("frame %d: %s" % (i, rel(ret)))
             sys.stdout.flush()
-            stub.ok("z2," + z)
-            stub.send("c")
             return 0
         print("skip pc=%s lr=%s" % (rel(r[32]), rel(r[30])), flush=True)
-        stub.ok("z2," + z)
         if n == MAX_STOPS:
             break
+        stub.ok("z2," + z)
         stub.send("s")
         stub.recv()  # the step's stop reply
         stub.ok("Z2," + z)
         stub.send("c")
-    stub.send("c")
     print("no match after %d stops" % MAX_STOPS)
     return 1
 
@@ -162,7 +180,8 @@ def main(argv):
         try:
             return watch(stub, *args)
         except (ConnectionError, ValueError) as e:
-            print("error: %s; if the game stays frozen, run the go line" % e)
+            print("error: %s; if the game stays frozen, run the go line; if it freezes again, quit "
+                  "eden-cli and relaunch" % e)
             return 1
 
 

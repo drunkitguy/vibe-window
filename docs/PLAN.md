@@ -2683,7 +2683,9 @@ queue their writes go through (step 1 says why not the arrays), then call them f
      of x0-x15 holds `<hash>` in its low 32 bits, print pc, lr, x0-x7 and 16 frames of the x29
      chain as `main+X` and finish; else print `skip pc=main+X lr=main+Y`, remove the watchpoint,
      single-step, set it again, `c`. It finishes after the match or 200 stops: remove the
-     watchpoint, `c`, and close only while running (gotchas [S3 PORTING_A_GAME §2.3]).
+     watchpoint, `c`, and close only while running (gotchas [S3 PORTING_A_GAME §2.3]); after an
+     error past the `Z2` it still sends a best-effort `z2` and `c` (Eden keeps a watchpoint in its
+     KProcess slots after the client is gone, so its next hit would freeze the game with no client).
      `shortcut: the hash filter assumes the push still holds the hash in a register (UNVERIFIED),
      print every stop's frames if no row matches`. Tests: a fake RSP server feeds two stops, the
      first without the hash (one `skip` line, then `z2`, `s`, `Z2`, `c` in that order) and the
@@ -2715,7 +2717,9 @@ queue their writes go through (step 1 says why not the arrays), then call them f
    every row of one boot). Each row in this order: (1) in game, get to the last button press
    (for the + menu rows: menu open, cursor on the item); (2) in the second window run
    `py -3 C:\duo\rsp_watch.py 127.0.0.1:6543 <addr> 4 <hash> | Tee-Object C:\duo\watch-<row>.txt`
-   with that row's hash; (3) do the action; (4) wait until the script ends. Rows: (a) equip
+   with that row's hash; (3) do the action; (4) wait until the script ends; if the script prints
+   nothing 30 s after the action, close its window, write down the row, quit eden-cli and relaunch
+   (a closed script leaves its watchpoint armed until eden-cli exits). Rows: (a) equip
    another weapon from the + menu (hash `Pouch.Weapon.EquipIndex`); (b) the same from the D-pad
    quick menu (hold right, flick the stick, let go); (c) a shield (`Pouch.Shield.EquipIndex`);
    (d) a bow (`Pouch.Bow.EquipIndex`); (e) eat one food from the + menu
@@ -2724,8 +2728,9 @@ queue their writes go through (step 1 says why not the arrays), then call them f
    sends `c` (`AcceptConnection` calls `PauseEmulation` [S1 `src/core/debugger/debugger.cpp:159-167`]),
    and the stub takes a new connection after each close (`AsyncAccept` re-arms after every
    accept [S1 `debugger.cpp:49-56`]). If the game stays frozen after a script ended, run the `go`
-   line once. Last, `Set-Content -Encoding ascii C:\duo\dsmod-cmd.txt 'chain 0'`
-   (its bracketed address is the main base), quit eden-cli, and
+   line once; if it freezes again, quit eden-cli and relaunch. Last,
+   `Set-Content -Encoding ascii C:\duo\dsmod-cmd.txt 'chain 0'` (its bracketed address is the main
+   base), quit eden-cli, and
    `Remove-Item "$d\dualscreen\user\0100F2C0115B6000\totk-re"`.
    Send: every `watch-*.txt`, `dsmod-cmd.txt.out`,
    `Select-String -Path "$d\log\eden_log.txt" -Pattern 'totk|DSMod|Patching NSO|Applying IP|LayeredExeFS' |

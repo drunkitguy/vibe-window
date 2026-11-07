@@ -914,16 +914,10 @@ void Step(Instance& in, const EdenDsmodHostApi& h) {
     req == Instance::Req::go ? Go(in, h, w) : Restore(in, h, w);
 }
 
-// Pouch.Weapon/Shield/Bow.EquipIndex and Pouch.Food.Content.StockNum, the IntArrays A3's watch
-// rows filter on [S38 GMDHash_InfoList.mjs:162082,162070,162053,162059].
-constexpr std::uint32_t kReHashes[] = {0xb80e3dbb, 0x350ad90e, 0x2cf18d2b, 0x2a952a60};
-static_assert(totk::Murmur3("Pouch.Weapon.EquipIndex") == kReHashes[0] &&
-              totk::Murmur3("Pouch.Shield.EquipIndex") == kReHashes[1] &&
-              totk::Murmur3("Pouch.Bow.EquipIndex") == kReHashes[2] &&
-              totk::Murmur3("Pouch.Food.Content.StockNum") == kReHashes[3]);
-
 // A3 step 1's line for the watch sessions (host reads only): the IntArray queue's control word
-// (the watch address), the store's capacity and buffer, and the four hashes.
+// (the watch address), the store's capacity and buffer, and the four hashes: Pouch.Weapon/Shield/
+// Bow.EquipIndex and Pouch.Food.Content.StockNum, the IntArrays A3's watch rows filter on
+// [S38 GMDHash_InfoList.mjs:162082,162070,162053,162059].
 void QueueReport(const EdenDsmodHostApi& h, std::uint64_t mgr, const totk::Offsets& o) {
     const std::uint64_t store = mgr + o.ia_queue;
     std::int32_t capacity = 0;
@@ -938,8 +932,10 @@ void QueueReport(const EdenDsmodHostApi& h, std::uint64_t mgr, const totk::Offse
               "0x%08x Pouch.Shield.EquipIndex 0x%08x Pouch.Bow.EquipIndex 0x%08x "
               "Pouch.Food.Content.StockNum 0x%08x",
               static_cast<unsigned long long>(store + totk::kQueueControl), what,
-              unsigned(kReHashes[0]), unsigned(kReHashes[1]), unsigned(kReHashes[2]),
-              unsigned(kReHashes[3]));
+              unsigned(totk::Murmur3("Pouch.Weapon.EquipIndex")),
+              unsigned(totk::Murmur3("Pouch.Shield.EquipIndex")),
+              unsigned(totk::Murmur3("Pouch.Bow.EquipIndex")),
+              unsigned(totk::Murmur3("Pouch.Food.Content.StockNum")));
 }
 
 void Travel(Instance& in, const EdenDsmodHostApi& h) {

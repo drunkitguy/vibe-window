@@ -8,6 +8,7 @@ import socket
 import threading
 import time
 import unittest
+from unittest import mock
 
 import rsp_watch
 
@@ -29,13 +30,15 @@ def g_reply(x, pc, lr, fp):
 
 
 class FakeStub(threading.Thread):
-    """Listens (after `delay` s), takes one client, acks every packet and answers it from
-    `script`, a list of (expected packet, reply or None). Records every packet in `got`, then
-    whether the client closed (`closed`)."""
+    """Listens (after `delay` s), takes one client, acks every packet (`ack`; anything else
+    closes after it) and answers it from `script`, a list of (expected packet, reply or None[,
+    seconds to wait before the reply]). Records every packet in `got`, then whether the client
+    closed (`closed`)."""
 
-    def __init__(self, script, delay=0.0, port=0):
+    def __init__(self, script, delay=0.0, port=0, ack=b"+"):
         super().__init__(daemon=True)
         self.script, self.delay, self.got, self.closed = list(script), delay, [], False
+        self.ack = ack
         if not port:
             with socket.socket() as s:
                 s.bind(("127.0.0.1", 0))
@@ -59,10 +62,11 @@ class FakeStub(threading.Thread):
                 start, end = buf.index(b"$"), buf.index(b"#")
                 packet, buf = buf[start + 1:end].decode(), buf[end + 3:]
                 self.got.append(packet)
-                conn.sendall(b"+")
-                want, reply = self.script.pop(0) if self.script else (None, None)
-                if packet != want:  # the close fails the client; `got` shows the packet
+                conn.sendall(self.ack)
+                want, reply, wait = (self.script.pop(0) + (0,))[:3] if self.script else (0, 0, 0)
+                if packet != want or self.ack != b"+":  # the close fails the client
                     return
+                time.sleep(wait)
                 if reply is not None:
                     body = reply.encode()
                     conn.sendall(b"$%s#%02x" % (body, sum(body) & 0xFF))
@@ -70,29 +74,31 @@ class FakeStub(threading.Thread):
 
 def run(argv):
     out = io.StringIO()
-    with contextlib.redirect_stdout(out):
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
         code = rsp_watch.main(argv)
     return code, out.getvalue()
 
 
 class RspWatch(unittest.TestCase):
+    @mock.patch.object(rsp_watch, "ACK_TIMEOUT", 0.5)
     def test_watch_skips_then_matches(self):
         z = "%x,4" % ADDR
         stop = "T0520:%s;1f:%s;1e:%s;thread:5a;watch:%x;" % (le(0), le(0), le(0), ADDR)
-        frames = [(0x10F000, MAIN + 0x3E59A4), (0, MAIN + 0x20A1128)]
+        frames = [(0x10F000, MAIN + 0x3E59A4), (0x110000, 0x7100001234)]  # then outside main
         script = [
             ("qRcmd," + b"info".hex(), INFO.encode().hex()),
             ("Z2," + z, "OK"),
             ("c", stop),  # stop 1: the flush, no hash in x0-x15
-            ("g", g_reply([1, 2, 3], MAIN + 0x74240, MAIN + 0x3E5DFC, 0)),
+            ("g", g_reply([1, 2, 3], MAIN + 0x74240, 0x85FFFFFF, 0)),  # lr: main's last byte
             ("z2," + z, "OK"),
             ("s", "T05thread:5a;"),
             ("Z2," + z, "OK"),
-            ("c", stop),  # stop 2: the push, the hash in x5's low 32 bits
-            ("g", g_reply([7, 0, 0, 0, 0, 0xFFFF0000_00000000 | HASH], MAIN + 0x100, MAIN + 0x200,
-                          0x10E000)),
+            ("c", stop, 1.0),  # stop 2, past ACK_TIMEOUT: the push, the hash in x12's low 32 bits
+            ("g", g_reply([7] + [0] * 11 + [0xFFFF0000_00000000 | HASH], MAIN + 0x100,
+                          MAIN + 0x200, 0x10E000)),
             ("m10e000,10", le(frames[0][0]) + le(frames[0][1])),
             ("m10f000,10", le(frames[1][0]) + le(frames[1][1])),
+            ("m110000,10", "E01"),  # unreadable: the walk stops
             ("z2," + z, "OK"),
             ("c", None),
         ]
@@ -100,15 +106,15 @@ class RspWatch(unittest.TestCase):
         code, out = run(["127.0.0.1:%d" % stub.port, hex(ADDR), "4", hex(HASH)])
         stub.join(5)
         self.assertEqual(code, 0)
-        self.assertEqual(stub.got, [p for p, _ in script])
+        self.assertEqual(stub.got, [p[0] for p in script])
         self.assertTrue(stub.closed)
         self.assertEqual(out.splitlines(), [
             "main base 0x80004000 (main)",
-            "skip pc=main+74240 lr=main+3E5DFC",
-            "match stop 2: pc=main+100 lr=main+200 hash in x5",
-            "x0=0x7 x1=0x0 x2=0x0 x3=0x0 x4=0x0 x5=0xffff0000b80e3dbb x6=0x0 x7=0x0",
+            "skip pc=main+74240 lr=main+5FFBFFF",
+            "match stop 2: pc=main+100 lr=main+200 hash in x12",
+            "x0=0x7 x1=0x0 x2=0x0 x3=0x0 x4=0x0 x5=0x0 x6=0x0 x7=0x0",
             "frame 0: main+3E59A4",
-            "frame 1: main+20A1128",
+            "frame 1: 0x7100001234",
         ])
 
     def test_gives_up_after_max_stops(self):
@@ -125,9 +131,46 @@ class RspWatch(unittest.TestCase):
         finally:
             rsp_watch.MAX_STOPS = saved
         stub.join(5)
-        self.assertEqual((code, stub.got, stub.closed), (1, [p for p, _ in script], True))
+        self.assertEqual((code, stub.got, stub.closed), (1, [p[0] for p in script], True))
         self.assertEqual(out.splitlines()[1:], ["skip pc=main+10 lr=main+20"] * 2 +
                          ["no match after 2 stops"])
+
+    def test_errors(self):
+        z = "%x,4" % ADDR
+        info = ("qRcmd," + b"info".hex(), INFO.encode().hex())
+        g = ("g", g_reply([HASH], MAIN + 0x10, MAIN + 0x20, 0x10E000))
+        for script in (
+            [("qRcmd," + b"info".hex(), b"Process: 0x51\nModules:\n".hex())],  # no module
+            [info, ("Z2," + z, "E01")],  # Eden refuses the range: nothing armed
+            # an error past the Z2 (a refused z2): the best-effort z2 and c still go out; the
+            # walk stops at a misaligned fp without reading it
+            [info, ("Z2," + z, "OK"), ("c", "T05thread:5a;"), g,
+             ("m10e000,10", le(0x10E004) + le(MAIN + 0x30)), ("z2," + z, "E01"),
+             ("z2," + z, "OK"), ("c", None)],
+        ):
+            stub = FakeStub(script)
+            code, out = run(["127.0.0.1:%d" % stub.port, hex(ADDR), "4", hex(HASH)])
+            stub.join(5)
+            self.assertEqual((code, stub.got, stub.closed), (1, [p[0] for p in script], True))
+            self.assertIn("; if the game stays frozen, run the go line;", out.splitlines()[-1])
+
+    def test_nack_and_dead_stub(self):
+        # a nack (Eden's answer to a bad checksum) fails the packet
+        stub = FakeStub([], ack=b"-")
+        code, out = run(["127.0.0.1:%d" % stub.port, hex(ADDR), "4", hex(HASH)])
+        stub.join(5)
+        self.assertEqual((code, stub.got), (1, ["qRcmd," + b"info".hex()]))
+        self.assertIn("error: gdbstub refused qRcmd,", out)
+        # a bad g reply, and the stub gone at the best-effort z2: the c fails silently, the
+        # first error is the one printed
+        z = "%x,4" % ADDR
+        script = [("qRcmd," + b"info".hex(), INFO.encode().hex()), ("Z2," + z, "OK"),
+                  ("c", "T05thread:5a;"), ("g", "E01")]
+        stub = FakeStub(script)
+        code, out = run(["127.0.0.1:%d" % stub.port, hex(ADDR), "4", hex(HASH)])
+        stub.join(5)
+        self.assertEqual((code, stub.got), (1, [p[0] for p in script] + ["z2," + z]))
+        self.assertIn("fromhex", out.splitlines()[-1])
 
     def test_go_sends_one_c_then_closes(self):
         for delay in (0.0, 2.0):  # also when the stub starts listening 2 s late
@@ -150,6 +193,10 @@ class RspWatch(unittest.TestCase):
             rsp_watch.CONNECT_TIMEOUT = saved
         self.assertEqual(code, 1)
         self.assertEqual(out, "no gdbstub at 127.0.0.1:%d after 1 s; is --debug set?\n" % port)
+
+    def test_bad_args(self):  # exit 2 before any connect
+        for argv in (["127.0.0.1:1", "goo"], ["127.0.0.1:1", "zz", "4", "1"], ["127.0.0.1:1"]):
+            self.assertEqual(run(argv), (2, ""))
 
 
 if __name__ == "__main__":
