@@ -1,4 +1,4 @@
-From c622c3d5398434713ea9c4e2504a5e8e0012d031 Mon Sep 17 00:00:00 2001
+From 53a9d48c3bbb73dbbf44f4443a629edc43e993d6 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Sat, 7 Nov 2026 17:56:52 +0000
 Subject: [PATCH] yuzu_cmd: run eden-cli with Eden Qt's config for the game
@@ -7,22 +7,24 @@ eden-cli read only its own sdl2-config.ini, so a game launched from it
 ran with its defaults (keyboard controls, stock graphics) instead of the
 settings tuned in Eden Qt.
 
-When <config dir>/qt-config.ini exists, eden-cli now saves its own
-config first (so no Qt value lands in it), then reads qt-config.ini as a
-global config and the game's custom/<program id>.ini as a per-game
-config into Settings, through the shared Config readers and SdlConfig's
-player reader: every section frontend_common reads, the player
-mappings, debug pad, ring controller and Qt's external_content_dirs
-(kept under [UI] as Paths\external_content_dirs, as QtConfig reads it),
-with each per-game value applied by its use_global flag as Eden Qt's
-BootGame does. Qt's DisabledAddOns list replaces sdl2-config.ini's
-instead of merging with it. The launch params are applied after both
-files, so a command-line flag always wins. The reader never gets a file
-path, so no save path can write the Qt files, and an absent, empty or
-unreadable file, or one without the [Controls] section Eden Qt always
-writes, leaves Settings as they were.
+When <config dir>/qt-config.ini exists and no -c names a config,
+eden-cli now saves its own config first (so no Qt value lands in it),
+then reads qt-config.ini as a global config and the game's
+custom/<program id>.ini as a per-game config into Settings, through the
+shared Config readers and SdlConfig's player reader: every section
+frontend_common reads, the player mappings, debug pad, ring controller
+and Qt's external_content_dirs (kept under [UI] as
+Paths\external_content_dirs, as QtConfig reads it), with each per-game
+value applied by its use_global flag as Eden Qt's BootGame does. Qt's
+DisabledAddOns list replaces sdl2-config.ini's instead of merging with
+it. The launch params are applied after both files, so a command-line
+flag always wins. The reader never gets a file path, so no save path
+can write the Qt files, and an absent, empty or unreadable file, or one
+without the [Controls] section Eden Qt always writes, leaves Settings
+as they were.
 One log line names what was applied, e.g.
-"Duo config: qt-config.ini + custom/0100F2C0115B6000.ini".
+"Duo config: qt-config.ini + custom/0100F2C0115B6000.ini", or
+"Duo config: eden-cli's own config only (-c given)".
 
 The program id needs a loader, so the content provider, filesystem and
 factories are set up before System::Initialize instead of after the
@@ -43,26 +45,26 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01XgyuSR8o8AbzxuWHYqLwsv
 ---
  .upstream/duo-touched.tsv   |  2 ++
- src/yuzu_cmd/sdl_config.cpp | 54 ++++++++++++++++++++++++++++++++++++-
+ src/yuzu_cmd/sdl_config.cpp | 53 ++++++++++++++++++++++++++++++++++++-
  src/yuzu_cmd/sdl_config.h   | 12 ++++++++-
- src/yuzu_cmd/yuzu.cpp       | 46 +++++++++++++++++++++++++++----
- 4 files changed, 107 insertions(+), 7 deletions(-)
+ src/yuzu_cmd/yuzu.cpp       | 48 +++++++++++++++++++++++++++++----
+ 4 files changed, 108 insertions(+), 7 deletions(-)
 
 diff --git a/.upstream/duo-touched.tsv b/.upstream/duo-touched.tsv
-index 303de36d..0700de8e 100644
+index 303de36d..c2688bf4 100644
 --- a/.upstream/duo-touched.tsv
 +++ b/.upstream/duo-touched.tsv
 @@ -391,6 +391,8 @@ upstream-hook	M	4	8	1	src/core/hle/service/ipc_helpers.h
  upstream-hook	M	4	8	1	src/video_core/renderer_vulkan/renderer_vulkan.h
  upstream-hook	M	4	9	6	src/video_core/renderer_opengl/renderer_opengl.cpp
  upstream-hook	M	4	7	1	src/yuzu_cmd/emu_window/emu_window_sdl3_gl.cpp
-+upstream-hook	M	4	53	1	src/yuzu_cmd/sdl_config.cpp
++upstream-hook	M	4	52	1	src/yuzu_cmd/sdl_config.cpp
 +upstream-hook	M	4	11	1	src/yuzu_cmd/sdl_config.h
  upstream-hook	M	3	10	0	src/input_common/drivers/android.cpp
  upstream-hook	M	3	13	3	src/common/fs/file.cpp
  upstream-hook	M	3	14	0	src/core/file_sys/romfs_factory.h
 diff --git a/src/yuzu_cmd/sdl_config.cpp b/src/yuzu_cmd/sdl_config.cpp
-index b06a5a69..f0cc1d7b 100644
+index b06a5a69..357a6c61 100644
 --- a/src/yuzu_cmd/sdl_config.cpp
 +++ b/src/yuzu_cmd/sdl_config.cpp
 @@ -8,6 +8,7 @@
@@ -73,7 +75,7 @@ index b06a5a69..f0cc1d7b 100644
  #include "common/logging.h"
  #include "input_common/main.h"
  #include "sdl_config.h"
-@@ -55,8 +56,38 @@ SdlConfig::SdlConfig(const std::optional<std::string> config_path) {
+@@ -55,8 +56,37 @@ SdlConfig::SdlConfig(const std::optional<std::string> config_path) {
      SaveSdlValues();
  }
  
@@ -97,10 +99,9 @@ index b06a5a69..f0cc1d7b 100644
 +    const std::string data = Common::FS::ReadStringFromFile(path, Common::FS::FileType::BinaryFile);
 +    auto ini = std::make_unique<CSimpleIniA>();
 +    ini->SetUnicode(true);
-+    ini->SetSpaces(false);
 +    // Eden Qt always writes [Controls] (global and per-game), so a file without it is missing,
 +    // unreadable or not an Eden Qt config.
-+    if (data.empty() || ini->LoadData(data) < 0 ||
++    if (ini->LoadData(data) < 0 ||
 +        ini->GetSectionSize(Settings::TranslateCategory(Settings::Category::Controls)) < 0) {
 +        return false;
 +    }
@@ -113,7 +114,7 @@ index b06a5a69..f0cc1d7b 100644
          SdlConfig::SaveAllValues();
      }
  }
-@@ -170,6 +201,27 @@ void SdlConfig::ReadDebugControlValues() {
+@@ -170,6 +200,27 @@ void SdlConfig::ReadDebugControlValues() {
      }
  }
  
@@ -185,7 +186,7 @@ index 1fd1c692..391cce7a 100644
      static const std::array<int, Settings::NativeButton::NumButtons> default_buttons;
      static const std::array<int, Settings::NativeMotion::NumMotions> default_motions;
 diff --git a/src/yuzu_cmd/yuzu.cpp b/src/yuzu_cmd/yuzu.cpp
-index 6ba95b0e..7def0d64 100644
+index 6ba95b0e..1035035a 100644
 --- a/src/yuzu_cmd/yuzu.cpp
 +++ b/src/yuzu_cmd/yuzu.cpp
 @@ -7,6 +7,7 @@
@@ -205,7 +206,7 @@ index 6ba95b0e..7def0d64 100644
  #include "common/logging.h"
  #include "common/scm_rev.h"
  #include "common/settings.h"
-@@ -199,18 +202,54 @@ extern "C" SDL_AppResult SDL_AppInit(void **appstate, int argc, char **argv) {
+@@ -199,18 +202,56 @@ extern "C" SDL_AppResult SDL_AppInit(void **appstate, int argc, char **argv) {
  #ifdef _WIN32
      LocalFree(argv_w);
  #endif
@@ -217,11 +218,12 @@ index 6ba95b0e..7def0d64 100644
  
 -    Core::ApplyLaunchParams(lp);
 +    // Duo: run with the settings Eden Qt uses, read-only: qt-config.ini, then the game's
-+    // custom/<program id>.ini below. eden-cli's own config is saved first so no Qt value lands in
-+    // it; the launch params are applied after both, so a command-line flag always wins.
++    // custom/<program id>.ini below, unless -c names a config. eden-cli's own config is saved first
++    // so no Qt value lands in it; the launch params are applied after both, so a command-line flag
++    // always wins.
 +    const auto config_dir = Common::FS::GetEdenPath(Common::FS::EdenPath::ConfigDir);
 +    bool qt_config = false;
-+    if (Common::FS::IsFile(config_dir / "qt-config.ini")) {
++    if (!lp.config_path && Common::FS::IsFile(config_dir / "qt-config.ini")) {
 +        config.reset();
 +        qt_config = SdlConfig::ReadQtConfig(config_dir / "qt-config.ini",
 +                                            Config::ConfigType::GlobalConfig);
@@ -254,7 +256,8 @@ index 6ba95b0e..7def0d64 100644
 +        }
 +        LOG_INFO(Frontend, "Duo config: qt-config.ini{}{}", custom.empty() ? "" : " + ", custom);
 +    } else {
-+        LOG_INFO(Frontend, "Duo config: eden-cli's own config only (no readable qt-config.ini)");
++        LOG_INFO(Frontend, "Duo config: eden-cli's own config only ({})",
++                 lp.config_path ? "-c given" : "no readable qt-config.ini");
 +    }
 +
 +    Core::ApplyLaunchParams(lp);
@@ -262,7 +265,7 @@ index 6ba95b0e..7def0d64 100644
      state->system.Initialize();
  
      // Apply the command line arguments
-@@ -241,9 +280,6 @@ extern "C" SDL_AppResult SDL_AppInit(void **appstate, int argc, char **argv) {
+@@ -241,9 +282,6 @@ extern "C" SDL_AppResult SDL_AppInit(void **appstate, int argc, char **argv) {
  #endif
  
      state->system.SetInputSubsystem(&state->input_subsystem);
