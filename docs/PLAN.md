@@ -1892,7 +1892,7 @@ the parser's bounds checks apply to live data too.
      text NUL within 64 bytes; an array longer than `kMaxItems` (400, `totk_save.h:23`) is not
      rejected: read min(length, `kMaxItems`) elements of every parallel array of that pouch, as
      the save path publishes at most `kMaxItems` [`totk_save.h:268`] (the real 1.2.1 lengths are
-     `UNKNOWN: T8d's totk-log.txt`);
+     `UNKNOWN: the ok line's lengths in T8d's totk-live.txt`);
    - read the arrays into the buffer, twice, and compare.
 3. Self-check every poll, before publishing: the seven `Pouch.*.Content.Name` indices must
    equal §L2's, else log `totk live gamedata: index check FAILED <key> <got>` (`<got>` the index or
@@ -1909,7 +1909,9 @@ the parser's bounds checks apply to live data too.
    as an id suffix (`on_Sword_001`), and an empty text tests nothing. Any failure logs
    `totk live gamedata: index check FAILED layout` once and drops the live inventory for that poll
    (the next passing poll shows it again; a probe failure other than "hash missing" counts as
-   layout, a missing key is absent as in the save path). On a pass, log `totk live gamedata: ok` once (T8d step 1).
+   layout, a missing key is absent as in the save path). On a pass, log `totk live gamedata: ok lengths=W,B,S,A,R,M,F,Z,K` once (T8d step 1): each
+   pouch's `Content.Name` length as the game holds it, before the `kMaxItems` cut (0 when missing),
+   in `Pouch` order, so T8d decides the 400-element shortcut.
 4. Module: tabs and gear come from the live snapshot (`totk.inv.source` and `totk.gear.source` 2).
    Abilities stay from the save (Bool layout UNKNOWN). Effect labels (EnumArray layout UNKNOWN) are
    copied from the save's item at the same pouch index when the ids match, else absent.
@@ -1923,7 +1925,11 @@ read counts and `corrupt_read` stay deterministic; `corrupt_worker_read` tears a
   its self-pointer at +0x10 with zeros at +0xC (layout check), a block vtable outside main;
 - a pouch array of 401 names publishes 400 items, as the save path;
 - `Offsets{}` with a fake GameDataMgr in memory makes zero host calls and publishes the save;
-- a torn second pass keeps the previous snapshot.
+- a torn second pass keeps the previous snapshot;
+- an empty IntArray and String64Array (data pointer 0) give ok and match the save;
+- the IntArray values below 0x10000, values wrapping past 2^64 onto mapped memory, an entry, a
+  block or the manager not 8-aligned (everything else readable) give layout;
+- names loaded while the gate reads loading rename the live inventory shown.
 Acceptance: CA1-CA10; a live fixture and its matching save fixture publish identical keys.
 
 ### T3d (after T8d): current ability
@@ -1991,7 +1997,20 @@ Once A1 and A2 are in CI, run §A3 "T8c additions" (Next steps 11) in their own 
 
 ### T8d (user, PC, after T3c is in CI): GameData check and ability scan
 
-1. Start as T8c step 3, open the inventory once, quit, and send the `totk live gamedata` log lines.
+1. Live inventory (T3c), PowerShell as §T8c:
+   (a) start as T8c step 3 and load a save that has at least one material and an equipped weapon,
+       bow and shield; on the companion's home page write down one material's count (Materials
+       tab) and the weapon, bow and shield gear cards;
+   (b) in the game pick up one more of that material, then equip another weapon;
+   (c) within 5 s (the live read runs every 2 s) write down that material's count, the three gear
+       cards and the source line ("Live" or "Save") on the home page;
+   (d) quit, then `Select-String -Path "$d\log\eden_log.txt" -Pattern 'totk live gamedata' |
+       ForEach-Object Line | Set-Content -Encoding utf8 totk-live.txt`, and send `totk-live.txt`
+       and your notes from (a) and (c).
+   Result: with `ok lengths=...` in the file and (c) showing the new count, the new weapon and
+   "Live", the coder drops `UNVERIFIED until T8d` from `s64a_table`, `pouch_index`,
+   `kTableToBlock`, `kBlockBytes` and `kS64*`; a length above 400 means reading more than
+   `kMaxItems`; an `index check FAILED` line or a wrong (c) leaves the inventory on the save.
 2. Ability scan (for T3d), one console line at a time:
    - `chain 4721B98 0x258`, and note the last pointer `P`;
    - `cscan P 65536` (256 KiB of ints: the index of `PlayerStatus.CurrentSpecialPower` and the

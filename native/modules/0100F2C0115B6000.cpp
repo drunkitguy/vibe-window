@@ -303,6 +303,7 @@ struct LiveInv {
 // the session. One line per outcome kind per session.
 // shortcut: needs a save read first (its effects and abilities), so a new game shows no inventory
 // until its first save; read without one if T8d shows that matters.
+// shortcut: 2 s lag (the worker poll), poll faster if T8d finds it laggy.
 void PollLive(Instance& in, const totk::Offsets& o, const totk::GameData* save, LiveInv& s,
               const totk::msbt::Labels& labels) {
     using totk::live::Result;
@@ -310,17 +311,17 @@ void PollLive(Instance& in, const totk::Offsets& o, const totk::GameData* save, 
         return;
     std::vector<std::uint8_t> bytes;
     std::string why;
-    Result r = totk::live::ReadGameData(in.host, o, save, bytes, why);
+    const Result r = totk::live::ReadGameData(in.host, o, save, bytes, why);
     if (r == Result::off || r == Result::loading || r == Result::torn)
         return;
     if (r == Result::ok) {
-        if (const auto g = totk::GameData::Parse(std::move(bytes))) {
-            auto next = std::make_shared<totk::Snapshot>(totk::BuildSnapshot(*g));
-            ApplyNames(*next, labels);
-            Replace(in, std::move(next), true);
-        } else {
-            r = Result::layout;
-        }
+        // Parse cannot refuse the builder's buffer: at most 9 pouches of 7 arrays of kMaxItems
+        // 64-byte elements (value() would throw into the worker's catch, nothing published).
+        static_assert(9 * 7 * (16 + 64 * totk::kMaxItems) < totk::GameData::kMaxBytes);
+        auto next = std::make_shared<totk::Snapshot>(
+            totk::BuildSnapshot(totk::GameData::Parse(std::move(bytes)).value()));
+        ApplyNames(*next, labels);
+        Replace(in, std::move(next), true);
     }
     s.failed = r == Result::index;
     if (r != Result::ok)
@@ -329,7 +330,7 @@ void PollLive(Instance& in, const totk::Offsets& o, const totk::GameData* save, 
         return;
     s.logged |= 1u << unsigned(r);
     if (r == Result::ok)
-        totk::Say(in.host, EDEN_DSMOD_LOG_INFO, "totk live gamedata: ok");
+        totk::Say(in.host, EDEN_DSMOD_LOG_INFO, "totk live gamedata: ok %s", why.c_str());
     else if (r == Result::gate_unknown)
         totk::Say(in.host, EDEN_DSMOD_LOG_INFO, "totk live gamedata: gate unknown");
     else
@@ -352,17 +353,19 @@ void Worker(Instance& in, const totk::Offsets offsets) {
         lock.unlock();
         try {
             if (TryNames(in.host, names)) {
-                std::shared_ptr<const totk::Snapshot> shown;
-                {
-                    std::scoped_lock names_lock{in.mutex};
-                    shown = in.snapshot;
+                for (const bool live : {false, true}) { // a save or live read before the names
+                    std::shared_ptr<const totk::Snapshot> shown;
+                    {
+                        std::scoped_lock names_lock{in.mutex};
+                        shown = live ? in.live_inv : in.snapshot;
+                    }
+                    if (shown) { // name it now
+                        auto next = std::make_shared<totk::Snapshot>(*shown);
+                        ApplyNames(*next, names.labels);
+                        Replace(in, std::move(next), live);
+                    }
                 }
-                if (shown) { // a save read before the names: name it now
-                    auto next = std::make_shared<totk::Snapshot>(*shown);
-                    ApplyNames(*next, names.labels);
-                    Replace(in, std::move(next));
-                }
-                std::scoped_lock names_lock{in.mutex}; // after the renamed snapshot is shown
+                std::scoped_lock names_lock{in.mutex}; // after the renamed snapshots are shown
                 in.names = true;
             }
             // The dump needs only the Mals n: it runs once the romfs answered the Mals probe, or

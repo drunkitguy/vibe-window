@@ -105,8 +105,24 @@ V& Of(std::vector<std::pair<std::string, V>>& list, std::string_view key) {
     return list[0].second;
 }
 
+// The IntArray block's values moved to `to` with every IntArray entry's bytes (indices kept, the
+// address arithmetic mod 2^64).
+void MoveValues(Host& h, const Gmd& g, const totk::Offsets& o, std::uint64_t to) {
+    const std::uint64_t slot = g.mgr + o.int_table - totk::kTableToValues,
+                        values = h.Get<std::uint64_t>(slot);
+    std::vector<std::pair<std::uint64_t, std::array<std::uint8_t, totk::kIntArrayEntry>>> moved;
+    for (const auto& [key, e] : g.entry)
+        if (e - values < 0x100000) // in the values block (1 MiB): an IntArray entry
+            moved.emplace_back(to + (e - values),
+                               h.Get<std::array<std::uint8_t, totk::kIntArrayEntry>>(e));
+    for (const auto& [at, bytes] : moved) // read all first: the new range may overlap the old
+        h.Put(at, bytes);
+    h.Put(slot, to);
+}
+
 // A module over `h` with the fixture save shown; without `names` read_romfs is off (the worker
-// only polls), with it the romfs holds only PouchContent.msbt naming Item_Fruit_A.
+// only polls), with it the romfs holds the Mals archive and PutNames adds PouchContent.msbt
+// naming Item_Fruit_A.
 struct Module {
     Host h;
     SaveDir d;
@@ -123,8 +139,6 @@ struct Module {
             std::memcpy(h.api.build_id, totk::kBuild121Bytes.data(), 32);
         if (names) {
             h.PutRomfs("romfs:Mals/USen.Product.121.sarc.zs", {0x28, 0xB5, 0x2F, 0xFD});
-            h.PutRomfs("romfs:Mals/USen.Product.121.sarc.zs#ActorMsg/PouchContent.msbt",
-                       Msbt({{"Item_Fruit_A_Name", u"Apple"}}));
         } else {
             h.api.read_romfs = nullptr;
         }
@@ -141,6 +155,10 @@ struct Module {
     }
     ~Module() {
         m->destroy(instance);
+    }
+    void PutNames() {
+        h.PutRomfs("romfs:Mals/USen.Product.121.sarc.zs#ActorMsg/PouchContent.msbt",
+                   Msbt({{"Item_Fruit_A_Name", u"Apple"}}));
     }
     Instance& In() {
         return *static_cast<Instance*>(instance);
@@ -249,12 +267,63 @@ int main() {
         const Got got = Read(h);
         assert(got.r == Result::ok && got.s->tabs[5].empty());
     }
-    const auto broken = [&](const std::function<void(Host&, const Gmd&)>& change) {
+    { // an empty IntArray and String64Array, their data pointers null: ok, as the save reads them
+        GmdKeys k = keys;
+        Of(k.ints, "Pouch.Food.Content.LifeRecover").clear();
+        Of(k.texts, "Pouch.Shield.Content.Combined.Name").clear();
+        totk::SaveBuilder b;
+        for (const auto& [key, v] : k.texts)
+            b.String64Array(key, v);
+        for (const auto& [key, v] : k.ints)
+            b.IntArray(key, v);
+        const auto same = totk::GameData::Parse(b.Build());
         Host h;
-        const Gmd g = PutGameData(h, keys);
+        const Gmd g = PutGameData(h, k);
+        h.Put<std::uint64_t>(g.entry.at("Pouch.Food.Content.LifeRecover") + totk::kIntArrayData, 0);
+        h.Put<std::uint64_t>(g.entry.at("Pouch.Shield.Content.Combined.Name") + totk::kS64aData, 0);
+        const Got got = Read(h, &*same);
+        assert(got.r == Result::ok && SameInv(*got.s, totk::BuildSnapshot(*same)) &&
+               got.why == "lengths=3,1,1,2,2,1,1,1,1");
+    }
+    const auto broken = [&](const std::function<void(Host&, const Gmd&)>& change,
+                            const totk::Offsets& o = kO) {
+        Host h;
+        const Gmd g = PutGameData(h, keys, o);
         change(h, g);
-        return Read(h).r;
+        return Read(h, &Save(), o).r;
     };
+    const auto none = [](Host&, const Gmd&) {};
+    // The IntArray values below 0x10000, wrapping past 2^64 (index 1 on at 0), an entry not
+    // 8-aligned: every entry readable at the moved address.
+    for (const std::uint64_t to : {std::uint64_t(0x8000), 0 - std::uint64_t(totk::kIntArrayEntry)})
+        assert(broken([to](Host& h, const Gmd& g) { MoveValues(h, g, kO, to); }) == Result::layout);
+    assert(broken([](Host& h, const Gmd& g) {
+               MoveValues(h, g, kO, h.Get<std::uint64_t>(g.mgr + kO.int_table -
+                                                         totk::kTableToValues) + 4);
+           }) == Result::layout);
+    { // the IntArray block not 8-aligned (its table 4 on)
+        totk::Offsets o = kO;
+        o.int_table += 4;
+        assert(broken(none, o) == Result::layout);
+    }
+    { // the manager not 8-aligned, the gate, both blocks and both tables aligned
+        totk::Offsets o = kO;
+        o.int_table += 4;
+        o.s64a_table += 4;
+        o.gmd_loading.hop[1] += 4;
+        Host h;
+        h.Put<std::uint64_t>(Host::kMainBase + o.gmd_mgr.hop[0], 0xA0000004);
+        PutGameData(h, keys, o);
+        assert(Read(h, &Save(), o).r == Result::layout);
+    }
+    { // manager + s64a_table wraps past 2^64 onto a mapped low address
+        totk::Offsets o = kO;
+        o.s64a_table = 0x2000 - std::uint64_t(0xA0000000);
+        Host h;
+        h.Put<std::uint64_t>(Host::kMainBase + o.gmd_mgr.hop[0], 0xA0000000);
+        PutGameData(h, keys, o);
+        assert(Read(h, &Save(), o).r == Result::layout);
+    }
     const auto element = [](const Gmd& g, const char* key, std::uint64_t i) {
         return g.data.at(key) + i * totk::kS64Element;
     };
@@ -344,7 +413,8 @@ int main() {
     // memory call with the same GameData in memory), with sources 2; no allocation in sample.
     {
         Module live(true, &keys), saved(false, &keys);
-        assert(live.Lines() == std::vector<std::string>{"totk live gamedata: ok"});
+        assert(live.Lines() ==
+               std::vector<std::string>{"totk live gamedata: ok lengths=3,1,1,2,2,1,1,1,1"});
         assert(live.Act("totk.ui.page", 0) && saved.Act("totk.ui.page", 0));
         for (int t = 0; t < totk::kTabs; ++t) {
             assert(live.Act("totk.inv.tab", t) && saved.Act("totk.inv.tab", t));
@@ -418,16 +488,25 @@ int main() {
         w.h.Put(w.h.Get<std::uint64_t>(Host::kMainBase + kO.gmd_holder.hop[0]), w.g.mgr + 8);
         w.Poll();
         assert(w.Source() == 1);
-        const std::vector<std::string> lines{"totk live gamedata: ok",
+        const std::vector<std::string> lines{"totk live gamedata: ok lengths=3,1,1,2,2,2,1,1,1",
                                              "totk live gamedata: index check FAILED layout",
                                              "totk live gamedata: gate unknown"};
         assert(w.Lines() == lines);
     }
-    // The live items get the game's names too.
+    // The live items get the game's names too: names loaded after the live inventory and while
+    // the gate reads loading rename it, then the next live read is named.
     {
         Module w(true, &keys, kO, true);
         assert(w.Act("totk.inv.tab", 4) && w.Source() == 2 &&
-               w.h.texts.at("totk.inv.sel.name") == "Apple");
+               w.h.texts.at("totk.inv.sel.name") != "Apple");
+        w.h.Put<std::uint8_t>(w.g.flags, 2);
+        w.PutNames();
+        w.Poll();
+        assert(w.Source() == 2 && w.h.texts.at("totk.inv.sel.name") == "Apple" &&
+               w.h.ints.at("totk.names.valid") == 1);
+        w.h.Put<std::uint8_t>(w.g.flags, 0);
+        w.Poll();
+        assert(w.Source() == 2 && w.h.texts.at("totk.inv.sel.name") == "Apple");
     }
     // A failed index check: the save, one line, and no more reads this session.
     {
