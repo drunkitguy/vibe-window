@@ -339,9 +339,9 @@ Doable in this Linux container now (no game, no Windows, no Thor):
 | T6 | Inventory side of the home page: 8 category icon tabs, icon grid, detail pane with Equipped badge, hold and drag to a refused use | T4v | done: f59ee90 + 3e11daa + 1a10f15, critic SATISFIED round 3; touch feel untested (T8) |
 | T5 | Abilities page: 7 large tiles with the game's icons, owned/locked, battery, refused select | T4v | done: c6e99f3, critic SATISFIED round 1; ability icon paths UNVERIFIED (T8a) |
 | T7 | Map page: Surface/Sky/Depths tiles as `romfs:` paths, the game's layer icons and player icon, pan/zoom | T4v, T3a' | done: 7d17331 + 3ad54b0, critic SATISFIED round 2 |
-| T2b | One package for 1.2.0 (save only) and 1.2.1 (live): two-row build table, both ids in `module.build_ids`, `data.json`, CI | T2a, D2b | todo |
-| T3a | Live status on 1.2.1: chain walker in `ReadStatus`, hearts, stamina, rupees, battery; save fallback | T2b | todo |
-| T3b | Live position and layer: player actor chain with name check, map marker, layer follows Link | T3a | todo |
+| T2b | One package for 1.2.0 (save only) and 1.2.1 (live): two-row build table, both ids in `module.build_ids`, `data.json`, CI | T2a, D2b | done: 9bfe3a7, critic SATISFIED round 1 |
+| T3a | Live status on 1.2.1: chain walker in `ReadStatus`, hearts, stamina, rupees, battery; save fallback | T2b | done: dc01a3d..6ce1927, critic SATISFIED round 4; chains UNVERIFIED until T8c |
+| T3b | Live position and layer: player actor chain with name check, map marker, layer follows Link | T3a | done: c3119bd..63585db, critic SATISFIED round 3; chains UNVERIFIED until T8c |
 | T3c | Live inventory and equipped items from the GameData tables, through the existing save parser; index self-check | T3a, T8c | todo |
 | T3d | Current ability, one chain from T8d's scan | T8d | blocked: user |
 
