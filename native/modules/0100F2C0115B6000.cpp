@@ -5,8 +5,9 @@
 // Every callback catches all exceptions: nothing may unwind into the host.
 // Data: the last save through the save extension (a worker thread polls it every 2 s) and, on
 // 1.2.1 only, the live status and position read in sample through kOffsets121's chains
-// (read-only; on 1.2.0 every chain is empty and guest memory is never touched), and there the
-// GameData loading gate that permits the manifest's wheel buttons (totk.loading, §A1). The
+// (read-only; on 1.2.0 every chain is empty and guest memory is never touched), there the
+// GameData loading gate that permits the manifest's wheel buttons (totk.loading, §A1), and the
+// live inventory and gear the worker reads after each save poll (totk_live.h, §T3c). The
 // worker also loads the item names from the game's romfs (totk_msbt.h) and, once per session
 // when the player asks for it, logs T8a's texture dump (totk_dump.h), and finds the map's tile
 // files and the travel destinations once (totk_map.h, totk_travel.h).
@@ -38,6 +39,7 @@
 #include "totk_dump.h"
 #include "totk_font.h"
 #include "totk_keys.h"
+#include "totk_live.h"
 #include "totk_map.h"
 #include "totk_msbt.h"
 #include "totk_offsets.h"
@@ -157,6 +159,8 @@ struct Instance {
     // The snapshot replaced last time: kept one more poll so the worker, not a sample still
     // holding its copy, frees it.
     std::shared_ptr<const totk::Snapshot> retired;
+    // The live inventory and gear (T3c; null: the save's are shown) and its retired one.
+    std::shared_ptr<const totk::Snapshot> live_inv, live_retired;
     bool names = false; // the item names loaded (totk.names.valid)
     bool re = false;    // user:totk-re exists and is non-empty (the A2 and A3 read-only reports)
     std::shared_ptr<const totk::map::Tiles> tiles; // set once by the worker
@@ -211,14 +215,16 @@ void ApplyNames(totk::Snapshot& s, const totk::msbt::Labels& labels) {
             apply(it);
 }
 
-// Publishes `next`. The replaced snapshot is kept one more swap so the worker, not a sample still
-// holding its copy, frees it.
-void Replace(Instance& in, std::shared_ptr<const totk::Snapshot> next) {
+// Publishes `next` as the save snapshot, or with `live` as the live inventory. The replaced one is
+// kept one more swap so the worker, not a sample still holding its copy, frees it.
+void Replace(Instance& in, std::shared_ptr<const totk::Snapshot> next, bool live = false) {
     std::shared_ptr<const totk::Snapshot> freed; // released below, after the lock
     std::scoped_lock lock{in.mutex};
-    freed = std::move(in.retired);
-    in.retired = std::move(in.snapshot);
-    in.snapshot = std::move(next);
+    auto& shown = live ? in.live_inv : in.snapshot;
+    auto& retired = live ? in.live_retired : in.retired;
+    freed = std::move(retired);
+    retired = std::move(shown);
+    shown = std::move(next);
 }
 
 // True when the names have just loaded. The try is counted first, so a try that throws still
@@ -251,8 +257,10 @@ bool TryNames(const EdenDsmodHostApi& h, Names& n) {
 // Until then the previous snapshot stays.
 // shortcut: a progress.sav that stays old for a whole poll (2 s) after its caption is newer is
 // taken as is; T8 checks the game's write order.
+// `kept` receives the parsed save shown (the live reader's effects).
 void Poll(Instance& in, const EdenDsmodHostSaveApi& api, Watch& w,
-          const totk::msbt::Labels& labels, const std::vector<totk::travel::Dest>& places) {
+          const totk::msbt::Labels& labels, const std::vector<totk::travel::Dest>& places,
+          std::optional<totk::GameData>& kept) {
     const auto newest = totk::NewestSlot(api);
     if (!newest || newest == w.shown)
         return;
@@ -272,7 +280,7 @@ void Poll(Instance& in, const EdenDsmodHostSaveApi& api, Watch& w,
         w.last = hash;
         return;
     }
-    const auto data = totk::GameData::Parse(std::move(*bytes));
+    auto data = totk::GameData::Parse(std::move(*bytes));
     if (!data)
         return;
     auto next = std::make_shared<totk::Snapshot>(totk::BuildSnapshot(*data));
@@ -280,11 +288,61 @@ void Poll(Instance& in, const EdenDsmodHostSaveApi& api, Watch& w,
     next->travel = totk::travel::Apply(places, *data);
     Replace(in, std::move(next));
     w = Watch{newest, {}, 0, std::nullopt, 0};
+    kept = std::move(data);
 }
 
-void Worker(Instance& in) {
+// The live reader's once-per-session state: the index check failed (the save for the rest of the
+// session) and the lines logged (bit 1 << Result).
+struct LiveInv {
+    bool failed = false;
+    unsigned logged = 0;
+};
+
+// One live GameData read (§T3c) after the save poll: ok replaces the live inventory; loading and a
+// torn read keep it; anything else drops it (the save shows), and a failed index check drops it for
+// the session. One line per outcome kind per session.
+// shortcut: needs a save read first (its effects and abilities), so a new game shows no inventory
+// until its first save; read without one if T8d shows that matters.
+void PollLive(Instance& in, const totk::Offsets& o, const totk::GameData* save, LiveInv& s,
+              const totk::msbt::Labels& labels) {
+    using totk::live::Result;
+    if (s.failed || !save)
+        return;
+    std::vector<std::uint8_t> bytes;
+    std::string why;
+    Result r = totk::live::ReadGameData(in.host, o, save, bytes, why);
+    if (r == Result::off || r == Result::loading || r == Result::torn)
+        return;
+    if (r == Result::ok) {
+        if (const auto g = totk::GameData::Parse(std::move(bytes))) {
+            auto next = std::make_shared<totk::Snapshot>(totk::BuildSnapshot(*g));
+            ApplyNames(*next, labels);
+            Replace(in, std::move(next), true);
+        } else {
+            r = Result::layout;
+        }
+    }
+    s.failed = r == Result::index;
+    if (r != Result::ok)
+        Replace(in, nullptr, true);
+    if (s.logged & 1u << unsigned(r))
+        return;
+    s.logged |= 1u << unsigned(r);
+    if (r == Result::ok)
+        totk::Say(in.host, EDEN_DSMOD_LOG_INFO, "totk live gamedata: ok");
+    else if (r == Result::gate_unknown)
+        totk::Say(in.host, EDEN_DSMOD_LOG_INFO, "totk live gamedata: gate unknown");
+    else
+        totk::Say(in.host, EDEN_DSMOD_LOG_INFO, "totk live gamedata: index check FAILED %s",
+                  r == Result::index ? why.c_str() : "layout");
+}
+
+// `offsets` is the worker's own copy of the instance's, taken in create.
+void Worker(Instance& in, const totk::Offsets offsets) {
     Watch watch;
     Names names;
+    std::optional<totk::GameData> save;
+    LiveInv live;
     bool dumped = false, probed = false, placed = false;
     std::vector<totk::travel::Dest> places;
     std::unique_lock lock{in.mutex};
@@ -333,7 +391,8 @@ void Worker(Instance& in) {
                     watch = Watch{};
             }
             if (api)
-                Poll(in, *api, watch, names.labels, places);
+                Poll(in, *api, watch, names.labels, places, save);
+            PollLive(in, offsets, save ? &*save : nullptr, live, names.labels);
         } catch (...) {
         }
         lock.lock();
@@ -363,7 +422,7 @@ void* Create(const EdenDsmodHostApi* host, const char*) {
         in->v121 = totk::Is121(host->build_id);
         in->offsets = in->v121 ? totk::kOffsets121 : totk::Offsets{};
         try {
-            in->worker = std::thread(Worker, std::ref(*in));
+            in->worker = std::thread(Worker, std::ref(*in), in->offsets);
         } catch (...) {
             delete in;
             return nullptr;
@@ -590,9 +649,9 @@ void PublishMap(const Out& o, const Instance& in, const totk::Position* live,
                 o.T(in.keys.tiles[n][l], (*tiles)[in.layer][n][l]);
 }
 
-void PublishGear(const Out& o, const Keys& k, const totk::Snapshot& s) {
+void PublishGear(const Out& o, const Keys& k, const totk::Snapshot& s, int source) {
     o.I(pub::kGearValid, 1);
-    o.I(pub::kGearSource, 1);
+    o.I(pub::kGearSource, source);
     for (int i = 0; i < totk::kGearSlots; ++i) {
         const auto& key = k.gear[i];
         const auto& item = s.gear[i];
@@ -619,9 +678,9 @@ void PublishGear(const Out& o, const Keys& k, const totk::Snapshot& s) {
     }
 }
 
-void PublishInventory(const Out& o, const Instance& in, const totk::Snapshot& s) {
+void PublishInventory(const Out& o, const Instance& in, const totk::Snapshot& s, int source) {
     o.I(pub::kInvValid, 1);
-    o.I(pub::kInvSource, 1);
+    o.I(pub::kInvSource, source);
     for (int t = 0; t < totk::kTabs; ++t)
         o.I(in.keys.tab_count[t].c_str(), std::int64_t(s.tabs[t].size()));
     if (in.tab < 0 || in.tab >= totk::kTabs)
@@ -696,12 +755,13 @@ void Sample(void* instance, const EdenDsmodHostApi* host) {
         if (!instance || !host || !host->publish_i64)
             return;
         auto& in = *static_cast<Instance*>(instance);
-        std::shared_ptr<const totk::Snapshot> snap;
+        std::shared_ptr<const totk::Snapshot> snap, live;
         std::shared_ptr<const totk::map::Tiles> tiles;
         bool names;
         {
             std::scoped_lock lock{in.mutex};
             snap = in.snapshot;
+            live = in.live_inv;
             tiles = in.tiles;
             names = in.names;
             in.report = in.re;
@@ -729,12 +789,14 @@ void Sample(void* instance, const EdenDsmodHostApi* host) {
             o.I(pub::kInvValid, 0);
             return;
         }
-        PublishGear(o, in.keys, *snap);
+        // The live inventory and gear (source 2) when the worker has them, else the save's.
+        const totk::Snapshot& inv = live ? *live : *snap;
+        PublishGear(o, in.keys, inv, live ? 2 : 1);
         o.I(pub::kAbilityValid, 1);
         o.I(pub::kAbilitySource, 1);
         for (int a = 0; a < totk::kAbilities; ++a)
             o.I(in.keys.owned[a].c_str(), snap->owned[a] ? 1 : 0);
-        PublishInventory(o, in, *snap);
+        PublishInventory(o, in, inv, live ? 2 : 1);
     } catch (...) {
     }
 }
@@ -783,6 +845,12 @@ const totk::travel::Dest* Selected(const Instance& in, const totk::Snapshot* s) 
 std::shared_ptr<const totk::Snapshot> Snap(Instance& in) {
     std::scoped_lock lock{in.mutex};
     return in.snapshot;
+}
+
+// The shown inventory: the live one, else the save's.
+std::shared_ptr<const totk::Snapshot> Inv(Instance& in) {
+    std::scoped_lock lock{in.mutex};
+    return in.live_inv ? in.live_inv : in.snapshot;
 }
 
 // Preconditions 1-4 of §A2 (host reads only): null when they hold, else the message.
@@ -1042,7 +1110,7 @@ EdenDsmodBool OnAction(void* instance, const char* action, std::int64_t arg) {
             in->sel = 0;
             return true;
         case pub::kActInvSelect: {
-            const auto snap = Snap(*in);
+            const auto snap = Inv(*in);
             if (!snap || in->tab < 0 || in->tab >= totk::kTabs || arg < 0 ||
                 std::uint64_t(arg) >= snap->tabs[in->tab].size()) // < totk.inv.count
                 break;

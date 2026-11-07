@@ -391,7 +391,7 @@ Doable in this Linux container now (no game, no Windows, no Thor):
 | T2b | One package for 1.2.0 (save only) and 1.2.1 (live): two-row build table, both ids in `module.build_ids`, `data.json`, CI | T2a, D2b | done: 9bfe3a7, critic SATISFIED round 1 |
 | T3a | Live status on 1.2.1: chain walker in `ReadStatus`, hearts, stamina, rupees, battery; save fallback | T2b | done: dc01a3d..6ce1927, critic SATISFIED round 4; chains UNVERIFIED until T8c |
 | T3b | Live position and layer: player actor chain with name check, map marker, layer follows Link | T3a | done: c3119bd..63585db, critic SATISFIED round 3; chains UNVERIFIED until T8c |
-| T3c | Live inventory and equipped items from the GameData tables, through the existing save parser; index self-check | T3a, A1 (gate chains, `ReadLoading`), A2 (probe, `int_table`, `kMaxTable`), T8c | todo |
+| T3c | Live inventory and equipped items from the GameData tables, through the existing save parser; index self-check | T3a, A1 (gate chains, `ReadLoading`), A2 (probe, `int_table`, `kMaxTable`), T8c | coded (critic pending): `totk_live.h`, `totk_live_test.cpp`; chains UNVERIFIED until T8c, String64Array layout and indices until T8d |
 | T3d | Current ability, one chain from T8d's scan | T8d | blocked: user |
 | A1 | Ability select through the game's wheel: six `button` actions `L+RStick(x,y)` behind `owned && !totk.loading`; `totk.loading` from the GameData loading gate; Travel Medallion tile refused with a reason (§A1) | T3a (chain walker), D3 | todo |
 | A2 | Travel: (a) read-only destination markers on the Map page from the player's romfs and save; (b) the Travel Medallion trigger, one 4-op expect-checked `write_batch`, build-gated to 1.2.1, refusing until T8c fills its `UNKNOWN` fields; tap-to-restore (§A2) | A1 (`totk.loading`), T3b, D3 | todo |
@@ -1209,8 +1209,9 @@ Tabs in game order (user's list): 0 Weapons (`Pouch.Weapon`), 1 Bows (`Pouch.Bow
   cheat N`, [S7], [S38]) and carries `UNVERIFIED until T8c` until T8c passes that field. The
   layout constants in `totk_offsets.h` follow the same rule: from A2 `kTableCount`,
   `kTableSize`, `kTableToValues`, `kIntArrayEntry`, `kIntArrayLen`, `kIntArrayData` (§A2), from
-  A3 `kQueue*` (`UNVERIFIED until A3 step 2`); the probe and the entry reads use only these
-  names, never a literal.
+  A3 `kQueue*` (`UNVERIFIED until A3 step 2`), from T3c `kTableToBlock`, `kBlockBytes` and
+  `kS64*` (`UNVERIFIED until T8d`); the probe and the entry reads use only these names, never a
+  literal (`totk_live.h` has no hex literal).
 - CA9. `git status --porcelain` shows no build output; `packages/` holds only generated files;
   no file over 64 KiB is added except `native/third_party/stb_truetype.h` (T3a') and the generated
   `manifest.json` (checked by `gen_manifest.py --check`, so its size is not hand-maintained); no zstd source
@@ -1862,16 +1863,22 @@ Reuse the save path. The live reader writes a `progress.sav`-format buffer, and 
 `GameData::Parse` + `BuildSnapshot` turn it into tabs and gear. There is no new snapshot code, and
 the parser's bounds checks apply to live data too.
 1. Move the test save writer (`totk_test_host.h`, "progress.sav writer") into `totk_gamedata.h`
-   unchanged; the tests keep using it.
+   unchanged but for `Words` made public (the EnumArray copy); the tests keep using it.
 2. `totk_live.h`, run on the existing 2 s worker poll (`shortcut: 2 s lag, poll faster if T8d finds it
-   laggy`):
+   laggy`), right after the save poll, with the worker's own copy of the offsets (taken in
+   `create`), and only once a save is shown (it gives the effects; `shortcut: a new game shows no
+   inventory until its first save`). The worker reads through the create host (reads are safe
+   from any thread [S1 `mod_module_host.cpp:446-451`]; its `main_base` is the session's):
    - every address and offset below is an `Offsets` field (`totk_offsets.h`), never a literal in
      `totk_live.h`. Reuse A1's four chains `gmd_mgr {0x4721B98, 0x0}`, `gmd_holder {0x462E3D8,
      0x0, 0x0}`, `gmd_count {0x4721B98, 0xCC0}` and `gmd_loading {0x4721B98, 0xCC8, 0x78}`, and A2's
      mgr-relative table offsets in the `v3a_table` form (the block's hash table; values at -8,
      count at +8, size at +0xC): A2's `int_table` = 0x140 for IntArray (type 3; `UNVERIFIED until
      T8c`, as in §A2) and one new `s64a_table` = 8 + 0x11*0x60 + 0x18 = 0x680 for String64Array
-     (type 0x11; its §L2 source, `UNVERIFIED until T8d`). All are empty or 0 in `Offsets{}` and set only in
+     (type 0x11; its §L2 source, `UNVERIFIED until T8d`), and `pouch_index` (the seven §L2 indices in
+     `Pouch` order, 0 for Arrow and Food: not checked). The block is read from table −
+     `kTableToBlock` (0x18), `kBlockBytes` (0x28); String64Array `kS64aEntry` 0x90, `kS64aLen` 0x70,
+     `kS64aData` 0x78, `kS64Element` 0x50, `kS64Text` 0xC (§L2, `UNVERIFIED until T8d`). All are empty or 0 in `Offsets{}` and set only in
      `kOffsets121`. When `gmd_mgr` is empty the poll is skipped (zero host calls) and the save
      stays the source, so 1.2.0 and unknown builds never read these addresses (CA8);
    - the gate is A1's `ReadLoading` (mgr == holder, 1 ≤ n ≤ 16, file walk, mask 0x02 clear):
@@ -1887,8 +1894,9 @@ the parser's bounds checks apply to live data too.
      the save path publishes at most `kMaxItems` [`totk_save.h:268`] (the real 1.2.1 lengths are
      `UNKNOWN: T8d's totk-log.txt`);
    - read the arrays into the buffer, twice, and compare.
-3. Self-check once per session, before publishing: the seven `Pouch.*.Content.Name` indices must
-   equal §L2's, else log `totk live gamedata: index check FAILED <key> <got>` and stay on the save.
+3. Self-check every poll, before publishing: the seven `Pouch.*.Content.Name` indices must
+   equal §L2's, else log `totk live gamedata: index check FAILED <key> <got>` (`<got>` the index or
+   the probe's failure text) and stay on the save for the rest of the session (no more reads).
    Then the structural check, every poll, with one extra u64 read at mgr+0 and block and entry each read from +0 in one bulk read
    (block 0x28 bytes, entry its full size) so their vtables come with the fields (no 1.2.1 vtable
    address needed): u64 `[mgr]`, `[block]` and `[entry]` of each key used must be InMain (they
@@ -1899,11 +1907,16 @@ the parser's bounds checks apply to live data too.
    64-byte text at +0xc" [`gamedata_live.c:10`]; that the pointer targets its own +0xC is
    `UNVERIFIED until T8d`, and if wrong the check fails safe with the log line below). A content check cannot do this: a text 4 bytes off still reads
    as an id suffix (`on_Sword_001`), and an empty text tests nothing. Any failure logs
-   `totk live gamedata: index check FAILED layout` once and stays on the save. On a pass, log `totk live gamedata: ok` once (T8d step 1).
+   `totk live gamedata: index check FAILED layout` once and drops the live inventory for that poll
+   (the next passing poll shows it again; a probe failure other than "hash missing" counts as
+   layout, a missing key is absent as in the save path). On a pass, log `totk live gamedata: ok` once (T8d step 1).
 4. Module: tabs and gear come from the live snapshot (`totk.inv.source` and `totk.gear.source` 2).
    Abilities stay from the save (Bool layout UNKNOWN). Effect labels (EnumArray layout UNKNOWN) are
    copied from the save's item at the same pouch index when the ids match, else absent.
-Tests: a fake GameDataMgr with hash tables in `totk_test_host.h`:
+   `totk.inv.select` checks the shown (live) tab.
+Tests: a fake GameDataMgr with hash tables in `totk_test_host.h` (`PutGameData`; its memory is
+locked and the worker's calls are counted apart from the tick thread's, so the existing exact
+read counts and `corrupt_read` stay deterministic; `corrupt_worker_read` tears a worker read):
 - two pouches give the same tabs as the matching save;
 - each of these keeps the save: index check failed, hash missing, text without
   NUL, loading bit set, `[[main+gmd_holder]]` different from `[main+gmd_mgr]`, element text and

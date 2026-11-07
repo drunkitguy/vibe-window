@@ -6,9 +6,11 @@
 // absolute file offset (arrays: u32 count, then the elements).
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstring>
+#include <map>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -224,6 +226,111 @@ private:
 
     std::vector<std::uint8_t> bytes_;
     std::unordered_map<std::uint32_t, Entry> entries_;
+};
+
+inline void PutU32(std::vector<std::uint8_t>& b, std::size_t at, std::uint32_t v) {
+    if (b.size() < at + 4)
+        b.resize(at + 4);
+    std::memcpy(b.data() + at, &v, 4);
+}
+// progress.sav writer for every type the module reads (the tests' fixtures and T3c's live
+// buffer, docs/PLAN.md §T3c). Sections in type order; array and Vector3
+// data after the entry table at the offsets the entries name.
+class SaveBuilder {
+public:
+    SaveBuilder& Bool(std::string_view key, bool v) { return Scalar(GdType::Bool, key, v); }
+    SaveBuilder& Int(std::string_view key, std::int32_t v) {
+        return Scalar(GdType::Int, key, std::uint32_t(v));
+    }
+    SaveBuilder& UInt(std::string_view key, std::uint32_t v) { return Scalar(GdType::UInt, key, v); }
+    SaveBuilder& Float(std::string_view key, float v) {
+        std::uint32_t bits;
+        std::memcpy(&bits, &v, 4);
+        return Scalar(GdType::Float, key, bits);
+    }
+    SaveBuilder& Enum(std::string_view key, std::string_view value) {
+        return Scalar(GdType::Enum, key, Murmur3(value));
+    }
+    SaveBuilder& Vector3(std::string_view key, float x, float y, float z) {
+        std::vector<std::uint8_t> d(12);
+        std::memcpy(d.data(), &x, 4);
+        std::memcpy(d.data() + 4, &y, 4);
+        std::memcpy(d.data() + 8, &z, 4);
+        return Data(GdType::Vector3, key, std::move(d));
+    }
+    SaveBuilder& IntArray(std::string_view key, const std::vector<std::int32_t>& v) {
+        return Words(GdType::IntArray, key, {v.begin(), v.end()});
+    }
+    SaveBuilder& EnumArray(std::string_view key, const std::vector<std::string_view>& v) {
+        std::vector<std::uint32_t> words;
+        for (auto s : v)
+            words.push_back(Murmur3(s));
+        return Words(GdType::EnumArray, key, words);
+    }
+    SaveBuilder& String64Array(std::string_view key, const std::vector<std::string>& v) {
+        std::vector<std::uint8_t> d(4 + 64 * v.size());
+        PutU32(d, 0, std::uint32_t(v.size()));
+        for (std::size_t i = 0; i < v.size(); ++i)
+            std::memcpy(d.data() + 4 + 64 * i, v[i].data(), std::min<std::size_t>(v[i].size(), 64));
+        return Data(GdType::String64Array, key, std::move(d));
+    }
+    // An entry in a section of any type, with a raw value (types the module does not read).
+    SaveBuilder& Unread(std::uint32_t type, std::string_view key, std::uint32_t value) {
+        sections_[type].push_back({Murmur3(key), value, {}});
+        return *this;
+    }
+
+    // An array of 4-byte words of type `t` (the live reader's EnumArray copy, totk_live.h).
+    SaveBuilder& Words(GdType t, std::string_view key, const std::vector<std::uint32_t>& w) {
+        std::vector<std::uint8_t> d(4 + 4 * w.size());
+        PutU32(d, 0, std::uint32_t(w.size()));
+        if (!w.empty())
+            std::memcpy(d.data() + 4, w.data(), 4 * w.size());
+        return Data(t, key, std::move(d));
+    }
+
+    std::vector<std::uint8_t> Build() const {
+        std::size_t entries = 0;
+        for (const auto& [type, list] : sections_)
+            entries += 1 + list.size();
+        const std::uint32_t data_offset = std::uint32_t(GameData::kEntriesBegin + 8 * entries);
+        std::vector<std::uint8_t> b(data_offset);
+        PutU32(b, 0, GameData::kMagic);
+        PutU32(b, 4, 0x47e6a2c7); // format version: not checked
+        PutU32(b, 8, data_offset);
+        std::size_t at = GameData::kEntriesBegin;
+        for (const auto& [type, list] : sections_) {
+            PutU32(b, at, 0);
+            PutU32(b, at + 4, type);
+            at += 8;
+            for (const auto& e : list) {
+                PutU32(b, at, e.hash);
+                std::uint32_t value = e.value;
+                if (!e.data.empty()) {
+                    value = std::uint32_t(b.size());
+                    b.insert(b.end(), e.data.begin(), e.data.end());
+                }
+                PutU32(b, at + 4, value);
+                at += 8;
+            }
+        }
+        return b;
+    }
+
+private:
+    struct E {
+        std::uint32_t hash, value;
+        std::vector<std::uint8_t> data;
+    };
+    SaveBuilder& Scalar(GdType t, std::string_view key, std::uint32_t v) {
+        sections_[std::uint32_t(t)].push_back({Murmur3(key), v, {}});
+        return *this;
+    }
+    SaveBuilder& Data(GdType t, std::string_view key, std::vector<std::uint8_t> d) {
+        sections_[std::uint32_t(t)].push_back({Murmur3(key), 0, std::move(d)});
+        return *this;
+    }
+    std::map<std::uint32_t, std::vector<E>> sections_;
 };
 
 } // namespace totk

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Named pointer chains for the live status (docs/PLAN.md §L2, §T3a), the loading gate (§A1) and the
-// Travel Medallion trigger (§A2), the GameData table layout the A2 probe reads and the IntArray
-// write queue the A3 watch sessions watch (§A3 step 1).
+// Travel Medallion trigger (§A2), the GameData table layout the A2 probe and the T3c live
+// inventory read and the IntArray write queue the A3 watch sessions watch (§A3 step 1).
 // Offsets{} (1.2.0 and any other build) is all empty: every chain UNKNOWN, so ReadStatus reads
 // nothing. kOffsets121 holds the 1.2.1 leads, each UNVERIFIED until T8c checks it with the
 // console's `chain` command.
@@ -68,6 +68,12 @@ struct Offsets {
     } medallion_index_placed;
     // UNKNOWN: mgr-relative offset of the IntArray write-queue store (A3's `totk re:` line).
     std::uint64_t ia_queue = 0;
+    // The live inventory (docs/PLAN.md §T3c, totk_live.h).
+    // UNKNOWN: mgr-relative offset of the String64Array type block's hash table pointer.
+    std::uint64_t s64a_table = 0;
+    // UNKNOWN: String64Array index of each Pouch.<P>.Content.Name, in totk::Pouch order (the
+    // index self-check); 0 = not checked.
+    std::array<std::uint32_t, 9> pouch_index{};
 };
 
 // GameData type block layout (docs/PLAN.md §A2, §L2), the same on every build. A table is
@@ -86,6 +92,24 @@ inline constexpr std::uint64_t kIntArrayEntry = 0x40;
 inline constexpr std::uint64_t kIntArrayLen = 0x20;
 // UNVERIFIED until T8c [S28 gamedata_live.c:49-50].
 inline constexpr std::uint64_t kIntArrayData = 0x28;
+// The type block's start before its table pointer, and the bytes read from it in one read (vtable
+// at +0, values pointer, table pointer, count and size) [S28 gamedata_live.c:4-7,36-46] (1.4.3).
+// UNVERIFIED until T8d.
+inline constexpr std::uint64_t kTableToBlock = 0x18;
+// UNVERIFIED until T8d [S28 gamedata_live.c:4-7,36-46].
+inline constexpr std::uint64_t kBlockBytes = 0x28;
+// String64Array entry size, its u32 live length and its element array pointer; an element is
+// {char* text, u32 capacity, char[64] text at +kS64Text} [S28 gamedata_live.c:10,24-27] (the
+// 0x90, 0x78 and 0x50 fit every 1.2.1 pouch cheat [S9]). UNVERIFIED until T8d.
+inline constexpr std::uint64_t kS64aEntry = 0x90;
+// UNVERIFIED until T8d [S28 gamedata_live.c:24-27].
+inline constexpr std::uint64_t kS64aLen = 0x70;
+// UNVERIFIED until T8d [S28 gamedata_live.c:24-27].
+inline constexpr std::uint64_t kS64aData = 0x78;
+// UNVERIFIED until T8d [S28 gamedata_live.c:10].
+inline constexpr std::uint64_t kS64Element = 0x50;
+// UNVERIFIED until T8d [S28 gamedata_live.c:10] (1.4.3 only; the self-pointer check tests it).
+inline constexpr std::uint64_t kS64Text = 0xC;
 // GameData write-queue store: s32 capacity, buffer pointer, u32 control (write index in the low
 // 20 bits) [S7 runtime-support/include/totk/engine/Totk121Offsets.hpp:81-87,
 // GameDataQueue.hpp:39-45] (1.2.1). UNVERIFIED until A3 step 2.
@@ -152,6 +176,13 @@ inline constexpr Offsets kOffsets121{
     // [S7 runtime-support/include/totk/engine/KeyItemGrant.hpp:43-44] mgr+296 = 8 + 3 * 0x60, the
     // IntArray block on §L2's grid. UNVERIFIED until A3 step 2.
     .ia_queue = 0x128,
+    // [S28 gamedata_live.c:4-7] String64Array (type 0x11) block 8 + 0x11 * 0x60 = 0x668, + 0x18
+    // (§L2 grid). UNVERIFIED until T8d.
+    .s64a_table = 0x680,
+    // [S9 cheats 8, 10-13, 32, 42-58] (cheat offset - 0x78) / 0x90, the planner's match of cheat
+    // names to keys (§L2): Weapon 22, Bow 12, Shield 18, Armor 9, Material 16, SpecialParts 19,
+    // KeyItem 15; Arrow and Food have no cheat (0, not checked). UNVERIFIED until T8d.
+    .pouch_index = {22, 12, 18, 9, 0, 16, 0, 19, 15},
 };
 
 } // namespace totk

@@ -131,10 +131,13 @@ consteval PouchKeys MakePouchKeys(std::string_view p) {
             Key("Pouch.", p, ".Content.Effect.Type"), Key("Pouch.", p, ".EquipIndex"),
             Key("Pouch.", p, ".Content.LifeRecover")};
 }
+// <P> in Pouch order (T3c's live reader names the keys from it).
+inline constexpr std::string_view kPouchNames[9] = {
+    "Weapon", "Bow", "Shield", "Armor", "Arrow", "Material", "Food", "SpecialParts", "KeyItem"};
 inline constexpr std::array<PouchKeys, 9> kPouchKeys = {
-    MakePouchKeys("Weapon"),   MakePouchKeys("Bow"),  MakePouchKeys("Shield"),
-    MakePouchKeys("Armor"),    MakePouchKeys("Arrow"), MakePouchKeys("Material"),
-    MakePouchKeys("Food"),     MakePouchKeys("SpecialParts"), MakePouchKeys("KeyItem")};
+    MakePouchKeys(kPouchNames[0]), MakePouchKeys(kPouchNames[1]), MakePouchKeys(kPouchNames[2]),
+    MakePouchKeys(kPouchNames[3]), MakePouchKeys(kPouchNames[4]), MakePouchKeys(kPouchNames[5]),
+    MakePouchKeys(kPouchNames[6]), MakePouchKeys(kPouchNames[7]), MakePouchKeys(kPouchNames[8])};
 static_assert(kPouchKeys[kWeapon].name == 0x65efd0be && kPouchKeys[kMaterial].name == 0xd96ebf12);
 
 namespace keys {

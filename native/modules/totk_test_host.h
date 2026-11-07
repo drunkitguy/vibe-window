@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Fake EdenDsmodHostApi for the totk_*_test programs: byte-map guest memory, call counters,
+// Fake EdenDsmodHostApi for the totk_*_test programs: byte-map guest memory (locked: the module's
+// worker reads it too, T3c; its calls are counted apart so the tick thread's counts stay exact),
+// call counters,
 // recorded publishes and logs (with their levels), an in-memory romfs, a write_batch
 // (EdenDsmodHostWriteApi) over the same memory; a fake save directory (EdenDsmodHostSaveApi), a
 // GameData save builder, SARC/MSBT/BYML/.bfotf builders and system font files for the font tests.
@@ -25,6 +27,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <vector>
 
 #include "core/mods/dsmod_module_abi.h"
@@ -33,18 +36,30 @@
 #include "totk_byml.h"
 #include "totk_gamedata.h"
 #include "totk_offsets.h"
+#include "totk_save.h"
 #include "totk_travel.h"
 
 namespace totk::test {
+
+using totk::PutU32;      // moved to totk_gamedata.h with the save writer (T3c)
+using totk::SaveBuilder;
 
 struct Host {
     static constexpr std::uint64_t kMainBase = 0x80000000ULL;
     static constexpr std::uint64_t kMainSize = 0x5000000ULL; // holds kOffsets121's main slots
 
     std::map<std::uint64_t, std::uint8_t> memory;
+    // Guards `memory` and the worker counters. Calls on the thread that built the Host (the tick
+    // thread in the tests) count in is_mapped_calls/read_calls; any other thread's (the module's
+    // worker) in worker_mapped_calls/worker_read_calls. Lock it around a direct `memory` access
+    // while a module instance whose worker reads memory is alive.
+    std::recursive_mutex memory_mutex;
+    const std::thread::id tick_thread = std::this_thread::get_id();
     unsigned is_mapped_calls = 0, read_calls = 0, write_calls = 0;
-    // When non-zero: flip a bit in the bytes returned by the Nth read_memory call (torn read).
-    unsigned corrupt_read = 0;
+    unsigned worker_mapped_calls = 0, worker_read_calls = 0;
+    // When non-zero: flip a bit in the bytes returned by the Nth read_memory call (torn read), of
+    // the tick thread's and of the worker's.
+    unsigned corrupt_read = 0, corrupt_worker_read = 0;
     bool throw_on_publish = false;
     // Transparent maps: re-publishing a known key allocates nothing (the sample allocation test).
     using Ints = std::map<std::string, std::int64_t, std::less<>>;
@@ -85,7 +100,8 @@ struct Host {
         api.main_size = kMainSize;
         api.is_mapped = [](void* u, std::uint64_t at, std::uint64_t n) -> EdenDsmodBool {
             auto& h = *static_cast<Host*>(u);
-            ++h.is_mapped_calls;
+            std::scoped_lock lock{h.memory_mutex};
+            ++(h.Tick() ? h.is_mapped_calls : h.worker_mapped_calls);
             for (std::uint64_t i = 0; i < n; ++i)
                 if (!h.memory.contains(at + i))
                     return false;
@@ -93,14 +109,16 @@ struct Host {
         };
         api.read_memory = [](void* u, std::uint64_t at, void* out, std::size_t n) -> EdenDsmodBool {
             auto& h = *static_cast<Host*>(u);
-            ++h.read_calls;
+            std::scoped_lock lock{h.memory_mutex};
+            const bool tick = h.Tick();
+            const unsigned call = tick ? ++h.read_calls : ++h.worker_read_calls;
             for (std::size_t i = 0; i < n; ++i) {
                 const auto it = h.memory.find(at + i);
                 if (it == h.memory.end())
                     return false;
                 static_cast<std::uint8_t*>(out)[i] = it->second;
             }
-            if (n && h.read_calls == h.corrupt_read)
+            if (n && call == (tick ? h.corrupt_read : h.corrupt_worker_read))
                 static_cast<std::uint8_t*>(out)[0] ^= 1;
             return true;
         };
@@ -133,6 +151,7 @@ struct Host {
         write.write_batch = [](void* u, const EdenDsmodWriteOp* ops,
                                std::uint32_t count) -> EdenDsmodBool {
             auto& h = *static_cast<Host*>(u);
+            std::scoped_lock lock{h.memory_mutex};
             ++h.batch_calls;
             auto& batch = h.batches.emplace_back();
             for (std::uint32_t i = 0; i < count; ++i) {
@@ -187,8 +206,19 @@ struct Host {
     Host(const Host&) = delete; // api.userdata points at this object
     Host& operator=(const Host&) = delete;
 
+    // Replaces the whole memory under the lock and returns the old one.
+    std::map<std::uint64_t, std::uint8_t> Swap(std::map<std::uint64_t, std::uint8_t> m) {
+        std::scoped_lock lock{memory_mutex};
+        memory.swap(m);
+        return m;
+    }
+    bool Tick() const {
+        return std::this_thread::get_id() == tick_thread;
+    }
+
     template <class T>
     void Put(std::uint64_t at, T value) {
+        std::scoped_lock lock{memory_mutex};
         std::uint8_t bytes[sizeof value];
         std::memcpy(bytes, &value, sizeof value);
         for (std::size_t i = 0; i < sizeof value; ++i)
@@ -196,7 +226,8 @@ struct Host {
     }
 
     template <class T>
-    T Get(std::uint64_t at) const {
+    T Get(std::uint64_t at) {
+        std::scoped_lock lock{memory_mutex};
         std::uint8_t bytes[sizeof(T)];
         for (std::size_t i = 0; i < sizeof bytes; ++i)
             bytes[i] = memory.at(at + i);
@@ -205,8 +236,10 @@ struct Host {
         return value;
     }
 
-    unsigned MemoryCalls() const {
-        return is_mapped_calls + read_calls + write_calls;
+    // Every memory call, the worker's included.
+    unsigned MemoryCalls() {
+        std::scoped_lock lock{memory_mutex};
+        return is_mapped_calls + read_calls + write_calls + worker_mapped_calls + worker_read_calls;
     }
     void ClearPublished() {
         ints.clear();
@@ -220,6 +253,7 @@ struct Host {
 // fresh 1 MiB heap block. Synthetic addresses; the hops are whatever `c` holds.
 inline std::uint64_t PutChain(Host& h, std::uint64_t base, const Chain& c) {
     static constexpr std::uint64_t kBlock = 0x100000;
+    std::scoped_lock lock{h.memory_mutex};
     std::uint64_t at = base + c.hop[0];
     for (std::size_t i = 1; i < c.n; ++i) {
         if (!h.memory.contains(at)) {
@@ -276,6 +310,113 @@ inline std::uint64_t PutLoading(Host& h, std::uint8_t flags = 0, std::uint32_t n
     const std::uint64_t at = PutChain(h, main, o.gmd_loading);
     h.Put(at, flags);
     return at;
+}
+
+// A fresh 1 MiB heap block (synthetic address), claimed by its first byte.
+inline std::uint64_t Block(Host& h) {
+    std::scoped_lock lock{h.memory_mutex};
+    std::uint64_t at = 0x90000000;
+    while (h.memory.contains(at))
+        at += 0x100000;
+    h.memory[at] = 0;
+    return at;
+}
+
+// A probe table at `at`: {pointer, count, size}, every slot written (empty), then `entries`
+// (hash, index) in probe order. Returns the table pointer.
+inline std::uint64_t PutTable(Host& h, std::uint64_t at, std::uint32_t count, std::uint32_t size,
+                       const std::vector<std::pair<std::uint32_t, std::uint32_t>>& entries) {
+    const std::uint64_t t = Block(h);
+    h.Put(at, t);
+    h.Put(at + totk::kTableCount, count);
+    h.Put(at + totk::kTableSize, size);
+    for (std::uint32_t s = 0; s < size && size <= totk::kMaxTable; ++s) // a refused size: unread
+        h.Put<std::uint64_t>(t + 8 * std::uint64_t(s), 0);
+    for (const auto& [hash, index] : entries) {
+        std::uint32_t s = hash % size;
+        while (h.Get<std::uint32_t>(t + 8 * std::uint64_t(s)))
+            s = (s + 1) % size;
+        h.Put(t + 8 * std::uint64_t(s), hash);
+        h.Put(t + 8 * std::uint64_t(s) + 4, index);
+    }
+    return t;
+}
+
+// A fake 1.2.1 GameDataMgr for the live inventory (totk_live.h, docs/PLAN.md §T3c) at the gate's
+// manager (PutLoading): vtables in main on the manager, both type blocks and every entry; the
+// IntArray and String64Array blocks with their values and probe tables (size 64); each key's
+// entry and element array, every String64 element pointing at its own text. A Content.Name whose
+// pouch has an o.pouch_index sits at that index, every other key at the next free one.
+struct GmdKeys {
+    std::vector<std::pair<std::string, std::vector<std::string>>> texts;
+    std::vector<std::pair<std::string, std::vector<std::int32_t>>> ints;
+};
+struct Gmd {
+    std::uint64_t flags = 0, mgr = 0, vtable = 0;
+    std::map<std::string, std::uint64_t> entry, data; // per key
+};
+inline Gmd PutGameData(Host& h, const GmdKeys& k, const Offsets& o = kOffsets121) {
+    Gmd g;
+    g.flags = PutLoading(h, 0, 1, o);
+    g.mgr = h.Get<std::uint64_t>(h.api.main_base + o.gmd_mgr.hop[0]);
+    g.vtable = h.api.main_base + 0x1000;
+    h.Put(g.mgr, g.vtable);
+    std::set<std::uint32_t> reserved;
+    for (int p = 0; p < 9; ++p)
+        if (o.pouch_index[p])
+            reserved.insert(o.pouch_index[p]);
+    const auto put = [&](std::uint64_t table, std::uint64_t entry_size, std::uint64_t len_at,
+                         std::uint64_t data_at, auto& keys, auto&& elements) {
+        const std::uint64_t at = g.mgr + table, values = Block(h);
+        h.Put(at - kTableToBlock, std::array<std::uint8_t, kBlockBytes>{}); // all readable
+        h.Put(at - kTableToBlock, g.vtable);
+        h.Put(at - kTableToValues, values);
+        std::vector<std::pair<std::uint32_t, std::uint32_t>> slots;
+        std::uint32_t next = 0, count = 0;
+        for (const auto& [key, v] : keys) {
+            std::uint32_t index = 0;
+            const auto p = std::find(std::begin(kPouchNames), std::end(kPouchNames),
+                                     key.substr(6, key.find('.', 6) - 6));
+            if (key.ends_with(".Content.Name") && p != std::end(kPouchNames) &&
+                o.pouch_index[p - std::begin(kPouchNames)]) {
+                index = o.pouch_index[p - std::begin(kPouchNames)];
+            } else {
+                while (reserved.contains(next))
+                    ++next;
+                index = next++;
+            }
+            reserved.insert(index);
+            count = std::max(count, index + 1);
+            slots.emplace_back(Murmur3(key), index);
+            const std::uint64_t entry = values + index * entry_size, data = Block(h);
+            for (std::uint64_t b = 0; b < entry_size; ++b) // all readable
+                h.Put<std::uint8_t>(entry + b, 0);
+            h.Put(entry, g.vtable);
+            h.Put<std::uint32_t>(entry + len_at, std::uint32_t(v.size()));
+            h.Put(entry + data_at, data);
+            elements(data, v);
+            g.entry[key] = entry;
+            g.data[key] = data;
+        }
+        PutTable(h, at, count, 64, slots);
+    };
+    put(o.s64a_table, kS64aEntry, kS64aLen, kS64aData, k.texts,
+        [&](std::uint64_t data, const std::vector<std::string>& v) {
+            for (std::size_t i = 0; i < v.size(); ++i) {
+                const std::uint64_t e = data + i * kS64Element;
+                h.Put(e, std::array<std::uint8_t, kS64Element>{});
+                h.Put(e, e + kS64Text);
+                h.Put<std::uint32_t>(e + 8, 64);
+                for (std::size_t c = 0; c < 64; ++c)
+                    h.Put<char>(e + kS64Text + c, c < v[i].size() ? v[i][c] : '\0');
+            }
+        });
+    put(o.int_table, kIntArrayEntry, kIntArrayLen, kIntArrayData, k.ints,
+        [&](std::uint64_t data, const std::vector<std::int32_t>& v) {
+            for (std::size_t i = 0; i < v.size(); ++i)
+                h.Put(data + 4 * i, v[i]);
+        });
+    return g;
 }
 
 // The log lines of a romfs without the LocationArea files (totk_travel.h Load), after `before`.
@@ -483,11 +624,6 @@ struct SaveDir {
     }
 };
 
-inline void PutU32(std::vector<std::uint8_t>& b, std::size_t at, std::uint32_t v) {
-    if (b.size() < at + 4)
-        b.resize(at + 4);
-    std::memcpy(b.data() + at, &v, 4);
-}
 inline std::uint32_t GetU32(const std::vector<std::uint8_t>& b, std::size_t at) {
     std::uint32_t v;
     std::memcpy(&v, b.data() + at, 4);
@@ -592,103 +728,6 @@ inline std::vector<std::uint8_t> Caption(std::uint32_t year, std::uint32_t month
     }
     return b;
 }
-
-// progress.sav writer for every type the module reads. Sections in type order; array and Vector3
-// data after the entry table at the offsets the entries name.
-class SaveBuilder {
-public:
-    SaveBuilder& Bool(std::string_view key, bool v) { return Scalar(GdType::Bool, key, v); }
-    SaveBuilder& Int(std::string_view key, std::int32_t v) {
-        return Scalar(GdType::Int, key, std::uint32_t(v));
-    }
-    SaveBuilder& UInt(std::string_view key, std::uint32_t v) { return Scalar(GdType::UInt, key, v); }
-    SaveBuilder& Float(std::string_view key, float v) {
-        std::uint32_t bits;
-        std::memcpy(&bits, &v, 4);
-        return Scalar(GdType::Float, key, bits);
-    }
-    SaveBuilder& Enum(std::string_view key, std::string_view value) {
-        return Scalar(GdType::Enum, key, Murmur3(value));
-    }
-    SaveBuilder& Vector3(std::string_view key, float x, float y, float z) {
-        std::vector<std::uint8_t> d(12);
-        std::memcpy(d.data(), &x, 4);
-        std::memcpy(d.data() + 4, &y, 4);
-        std::memcpy(d.data() + 8, &z, 4);
-        return Data(GdType::Vector3, key, std::move(d));
-    }
-    SaveBuilder& IntArray(std::string_view key, const std::vector<std::int32_t>& v) {
-        return Words(GdType::IntArray, key, {v.begin(), v.end()});
-    }
-    SaveBuilder& EnumArray(std::string_view key, const std::vector<std::string_view>& v) {
-        std::vector<std::uint32_t> words;
-        for (auto s : v)
-            words.push_back(Murmur3(s));
-        return Words(GdType::EnumArray, key, words);
-    }
-    SaveBuilder& String64Array(std::string_view key, const std::vector<std::string>& v) {
-        std::vector<std::uint8_t> d(4 + 64 * v.size());
-        PutU32(d, 0, std::uint32_t(v.size()));
-        for (std::size_t i = 0; i < v.size(); ++i)
-            std::memcpy(d.data() + 4 + 64 * i, v[i].data(), std::min<std::size_t>(v[i].size(), 64));
-        return Data(GdType::String64Array, key, std::move(d));
-    }
-    // An entry in a section of any type, with a raw value (types the module does not read).
-    SaveBuilder& Unread(std::uint32_t type, std::string_view key, std::uint32_t value) {
-        sections_[type].push_back({Murmur3(key), value, {}});
-        return *this;
-    }
-
-    std::vector<std::uint8_t> Build() const {
-        std::size_t entries = 0;
-        for (const auto& [type, list] : sections_)
-            entries += 1 + list.size();
-        const std::uint32_t data_offset = std::uint32_t(GameData::kEntriesBegin + 8 * entries);
-        std::vector<std::uint8_t> b(data_offset);
-        PutU32(b, 0, GameData::kMagic);
-        PutU32(b, 4, 0x47e6a2c7); // format version: not checked
-        PutU32(b, 8, data_offset);
-        std::size_t at = GameData::kEntriesBegin;
-        for (const auto& [type, list] : sections_) {
-            PutU32(b, at, 0);
-            PutU32(b, at + 4, type);
-            at += 8;
-            for (const auto& e : list) {
-                PutU32(b, at, e.hash);
-                std::uint32_t value = e.value;
-                if (!e.data.empty()) {
-                    value = std::uint32_t(b.size());
-                    b.insert(b.end(), e.data.begin(), e.data.end());
-                }
-                PutU32(b, at + 4, value);
-                at += 8;
-            }
-        }
-        return b;
-    }
-
-private:
-    struct E {
-        std::uint32_t hash, value;
-        std::vector<std::uint8_t> data;
-    };
-    SaveBuilder& Scalar(GdType t, std::string_view key, std::uint32_t v) {
-        sections_[std::uint32_t(t)].push_back({Murmur3(key), v, {}});
-        return *this;
-    }
-    SaveBuilder& Data(GdType t, std::string_view key, std::vector<std::uint8_t> d) {
-        sections_[std::uint32_t(t)].push_back({Murmur3(key), 0, std::move(d)});
-        return *this;
-    }
-    SaveBuilder& Words(GdType t, std::string_view key, const std::vector<std::uint32_t>& w) {
-        std::vector<std::uint8_t> d(4 + 4 * w.size());
-        PutU32(d, 0, std::uint32_t(w.size()));
-        if (!w.empty())
-            std::memcpy(d.data() + 4, w.data(), 4 * w.size());
-        return Data(t, key, std::move(d));
-    }
-    std::map<std::uint32_t, std::vector<E>> sections_;
-};
 
 // The full fixture save the save and module tests share (see totk_save_test for the expected
 // snapshot). `weapon_equip` is Pouch.Weapon.EquipIndex[0]; nullopt leaves the key out.

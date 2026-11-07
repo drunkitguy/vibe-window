@@ -783,7 +783,7 @@ int main() {
             std::vector<std::string> out;
             std::scoped_lock lock{x.log_mutex};
             for (const auto& l : x.logs)
-                if (l.starts_with("totk live"))
+                if (l.starts_with("totk live status"))
                     out.push_back(l);
             return out;
         };
@@ -859,8 +859,7 @@ int main() {
         assert(status(h1) == live);
         // Then failing samples: the last live status until kLiveGrace misses in a row, then the
         // save (no stamina or battery key) and one line.
-        const auto memory = h1.memory;
-        h1.memory.clear();
+        const auto memory = h1.Swap({});
         for (int i = 1; i < kLiveGrace - 1; ++i) {
             SampleClean(m, i1, h1);
             assert(status(h1) == live);
@@ -874,18 +873,17 @@ int main() {
                       "rupees=4321"};
         assert(live_logs(h1) == lost);
         // Live again: no third line.
-        h1.memory = memory;
+        h1.Swap(memory);
         SampleClean(m, i1, h1);
         live["totk.status.hearts"] = 44;
         assert(status(h1) == live && live_logs(h1) == lost);
         { // Lost again: no second "lost" line, and misses stops at the grace.
-            const auto mem = h1.memory;
-            h1.memory.clear();
+            const auto mem = h1.Swap({});
             for (int i = 0; i < kLiveGrace + 2; ++i)
                 SampleClean(m, i1, h1);
             assert(status(h1) == save && live_logs(h1) == lost);
             assert(static_cast<Instance*>(i1)->misses == kLiveGrace);
-            h1.memory = mem;
+            h1.Swap(mem);
         }
         // Every read goes through ReadGuest<Reject>: without is_mapped nothing is read.
         const unsigned reads = h1.read_calls;

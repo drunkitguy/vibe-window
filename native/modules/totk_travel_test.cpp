@@ -86,34 +86,6 @@ SaveBuilder TravelSave(bool owned = true) {
     return b;
 }
 
-std::uint64_t Block(Host& h) {
-    std::uint64_t at = 0x90000000;
-    while (h.memory.contains(at))
-        at += 0x100000;
-    h.memory[at] = 0;
-    return at;
-}
-
-// A probe table at `at`: {pointer, count, size}, every slot written (empty), then `entries`
-// (hash, index) in probe order. Returns the table pointer.
-std::uint64_t PutTable(Host& h, std::uint64_t at, std::uint32_t count, std::uint32_t size,
-                       const std::vector<std::pair<std::uint32_t, std::uint32_t>>& entries) {
-    const std::uint64_t t = Block(h);
-    h.Put(at, t);
-    h.Put(at + totk::kTableCount, count);
-    h.Put(at + totk::kTableSize, size);
-    for (std::uint32_t s = 0; s < size && size <= totk::kMaxTable; ++s) // a refused size: unread
-        h.Put<std::uint64_t>(t + 8 * std::uint64_t(s), 0);
-    for (const auto& [hash, index] : entries) {
-        std::uint32_t s = hash % size;
-        while (h.Get<std::uint32_t>(t + 8 * std::uint64_t(s)))
-            s = (s + 1) % size;
-        h.Put(t + 8 * std::uint64_t(s), hash);
-        h.Put(t + 8 * std::uint64_t(s) + 4, index);
-    }
-    return t;
-}
-
 const Bits kOld = ToBits(-1234.5f, 150.f, 2345.5f);
 constexpr std::uint64_t kLen = 0x2F8; // the lead for medallion_len (T8c decides)
 constexpr std::int32_t kPlacedIndex = 7;
@@ -708,8 +680,12 @@ int main() {
                             "Medallion not placed: place it, then tap again"));
         assert(tick_refused([](World& w) { w.h.Put<std::uint32_t>(w.base + kLen, 2); },
                             "More than one medallion placed"));
-        assert(tick_refused([](World& w) { w.h.memory.erase(w.base + kLen); },
-                            "Medallion data not found (offsets wrong, T8c)"));
+        assert(tick_refused(
+            [](World& w) {
+                const std::scoped_lock lock{w.h.memory_mutex}; // the worker reads too (T3c)
+                w.h.memory.erase(w.base + kLen);
+            },
+            "Medallion data not found (offsets wrong, T8c)"));
         assert(tick_refused(
             [](World& w) { // 3 hops end at base + 0x300, P's slot (12 readable bytes there)
                 w.In().offsets.medallion = {3, {0x4721B98, 0x438, 0x300}};
@@ -740,8 +716,12 @@ int main() {
                             "Medallion position not readable"));
         assert(tick_refused([](World& w) { w.h.Put(w.p, ToBits(7000, 1, 2)); },
                             "Medallion position not readable"));
-        assert(tick_refused([](World& w) { w.h.memory.erase(w.base + 0x300); },
-                            "Medallion not readable"));
+        assert(tick_refused(
+            [](World& w) {
+                const std::scoped_lock lock{w.h.memory_mutex}; // the worker reads too (T3c)
+                w.h.memory.erase(w.base + 0x300);
+            },
+            "Medallion not readable"));
         assert(tick_refused(
             [](World& w) { // P not 4-aligned
                 w.h.Put<std::uint64_t>(w.base + 0x300, w.p + 2);
