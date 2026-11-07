@@ -691,9 +691,10 @@ User request: eden-cli runs the game with the settings tuned in Eden Qt. Facts [
   when it builds the BIS, SDMC and external content factories [S1
   `src/core/hle/service/filesystem/filesystem.cpp:721-786`], and the later call in `Services`
   passes `overwrite=false` [S1 `src/core/hle/service/services.cpp:79`], so factories built from
-  `sdl2-config.ini`'s dirs would stay. Eden Qt rebuilds them after a config change [S1
-  `src/qt_common/util/content.cpp:149,247`]; 0013 does the same after the Qt reads [0013
-  `src/yuzu_cmd/dsmod_harness.cpp:1059`], so the factories are built twice with the Qt config.
+  `sdl2-config.ini`'s dirs would stay. Eden Qt builds them once, after reading `qt-config.ini`
+  [S1 `src/yuzu/main_window.cpp:365,446`, `src/qt_common/qt_common.cpp:301-305`]; 0013 does the
+  same after the Qt reads [0013 `src/yuzu_cmd/dsmod_harness.cpp:1059`], so the factories are
+  built twice, the second time from the Qt config.
 - The account list is read once, in the `ProfileManager` constructor, from the default NAND with
   the default `current_user` [S1 `src/core/core.cpp:117,549`,
   `src/core/hle/service/acc/profile_manager.cpp:53-72`], before any config is read. Eden Qt
