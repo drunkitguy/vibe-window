@@ -2664,9 +2664,9 @@ queue their writes go through (step 1 says why not the arrays), then call them f
      `UNVERIFIED until A3 step 2`; 0 in `Offsets{}`), and `totk_offsets.h` the store offsets
      `kQueueCapacity` 0x28, `kQueueBuffer` 0x30, `kQueueControl` 0x38 with the same source.
    - Trigger: the worker checks the file `user:totk-re` once per session, after the romfs
-     answered, as it runs `dump::Run` (`0100F2C0115B6000.cpp:266-269`, `totk_dump.h:170`; §T8a),
-     and hands the result to the tick thread in one `std::atomic<bool>`, so `sample` does no file
-     I/O [S3 MODULE_GUIDE §9]. §A2's read-only report uses the same flag. With it set, once per
+     answered, as it runs `dump::Run` (`0100F2C0115B6000.cpp:312-318`, `totk_dump.h:159`; §T8a),
+     and hands the result to the tick thread through the mutex-guarded `re` flag that Sample
+     copies to `report`, so `sample` does no file I/O [S3 MODULE_GUIDE §9]. §A2's read-only report uses the same flag. With it set, once per
      session after `totk.loading` first publishes 0, the module logs (host reads only)
      `totk re: IntArray queue control at 0x<mgr+0x160> (capacity C, buffer 0x<b>); hashes
      Pouch.Weapon.EquipIndex 0x.. Pouch.Shield.EquipIndex 0x.. Pouch.Bow.EquipIndex 0x..
@@ -2728,7 +2728,9 @@ queue their writes go through (step 1 says why not the arrays), then call them f
    `py -3 C:\duo\rsp_watch.py 127.0.0.1:6543 <addr> 4 <hash> | Tee-Object C:\duo\watch-<row>.txt`
    with that row's hash; (3) do the action; (4) wait until the script ends; if the script prints
    no line after `main base ...` within 30 s of the action, close its window, write down the row, quit eden-cli and
-   relaunch as above (a closed script leaves its watchpoint armed until eden-cli exits). Rows: (a) equip
+   relaunch as above (a closed script leaves its watchpoint armed until eden-cli exits). If the script
+   ends with an `error:` line, run the `go` line if the game is frozen, check the address and hash
+   you typed, and run that row once more; if it fails again, write down the row and go on. Rows: (a) equip
    another weapon from the + menu (hash `Pouch.Weapon.EquipIndex`); (b) the same from the D-pad
    quick menu (hold right, flick the stick, let go); (c) a shield (`Pouch.Shield.EquipIndex`);
    (d) a bow (`Pouch.Bow.EquipIndex`); (e) eat one food from the + menu
