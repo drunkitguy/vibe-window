@@ -117,6 +117,7 @@ def watch(stub, addr, length, want):
     stub.ok("Z2," + z)
     done = False
     try:
+        stub.sock.settimeout(None)  # a stop comes when the player acts
         code = stops(stub, z, want, rel)
         stub.ok("z2," + z)
         stub.send("c")
@@ -181,7 +182,6 @@ def main(argv):
             if args is None:
                 stub.send("c")
                 return 0
-            sock.settimeout(None)  # a stop comes when the player acts
             return watch(stub, *args)
         except (OSError, ValueError) as e:  # OSError: also the go mode's 10 s ack timeout
             print("error: %s; if the game stays frozen, run the go line; if it freezes again, quit "

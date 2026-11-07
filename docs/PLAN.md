@@ -2373,7 +2373,7 @@ the message:
 
 **Read-only report for T8c** (does not depend on the trigger or on `medallion_len`): on 1.2.1,
 only while the file `user:totk-re` exists and is non-empty (checked once per session on the worker
-and handed to the tick thread as a flag, §A3 step 1; the `totk-dump` pattern, `totk_dump.h:170`), the first time in a session that `totk.loading` publishes 0 the
+and handed to the tick thread as a flag, §A3 step 1; the `totk-dump` pattern, `totk_dump.h:159`), the first time in a session that `totk.loading` publishes 0 the
 module runs the probe for 0x636b4637 in `v3a_table` and for `WarpMarkerData.Index` (0xc6dc3b56,
 IntArray [S38 `GMDHash_InfoList.mjs:162026`; S29 `zelda-totk.js:1516`]) in `int_table`, and logs
 one line per probe, once: `totk travel: v3a_table 0x636b4637 -> index N (size S)` and
@@ -2727,7 +2727,7 @@ queue their writes go through (step 1 says why not the arrays), then call them f
    (for the + menu rows: menu open, cursor on the item); (2) in the second window run
    `py -3 C:\duo\rsp_watch.py 127.0.0.1:6543 <addr> 4 <hash> | Tee-Object C:\duo\watch-<row>.txt`
    with that row's hash; (3) do the action; (4) wait until the script ends; if the script prints
-   no line after `main base ...` within 30 s of the action, close its window, write down the row, quit eden-cli and
+   no new line within 30 s of the action or of its last line, close its window, write down the row, quit eden-cli and
    relaunch as above (a closed script leaves its watchpoint armed until eden-cli exits). If the script
    ends with an `error:` line, run the `go` line if the game is frozen, check the address and hash
    you typed, and run that row once more; if it fails again, write down the row and go on. Rows: (a) equip

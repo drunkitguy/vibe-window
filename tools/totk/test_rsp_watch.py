@@ -89,7 +89,7 @@ class RspWatch(unittest.TestCase):
     def test_watch_skips_then_matches(self):
         z = "%x,4" % ADDR
         stop = "T0520:%s;1f:%s;1e:%s;thread:5a;watch:%x;" % (le(0), le(0), le(0), ADDR)
-        frames = [(0x10F000, MAIN + 0x3E59A4), (0x110000, 0x7100001234)]  # then outside main
+        frames = [(0x10F000, MAIN + 0x3E59A4), (0x110000, 0x86000000)]  # then sdk's start
         script = [
             *START,
             ("Z2," + z, "OK"),
@@ -121,7 +121,7 @@ class RspWatch(unittest.TestCase):
             "match stop 2: pc=main+100 lr=main+200 hash in x12",
             "x0=0x7 x1=0x0 x2=0x0 x3=0x0 x4=0x0 x5=0x0 x6=0x0 x7=0x0",
             "frame 0: main+3E59A4",
-            "frame 1: 0x7100001234",
+            "frame 1: 0x86000000",
         ])
 
     def test_gives_up_after_max_stops(self):
@@ -157,6 +157,7 @@ class RspWatch(unittest.TestCase):
         self.assertEqual(out.splitlines()[1], "match stop 1: pc=main+10 lr=main+0 hash in x0")
         self.assertEqual(out.splitlines()[3:], ["frame %d: main+40" % i for i in range(16)])
 
+    @mock.patch.object(rsp_watch, "ACK_TIMEOUT", 0.5)
     def test_errors(self):
         z = "%x,4" % ADDR
         g = ("g", g_reply([HASH], MAIN + 0x10, MAIN + 0x20, 0x10E000))
@@ -166,6 +167,9 @@ class RspWatch(unittest.TestCase):
             # one module: no main (Eden's qOffsets would take it as main; TotK never has one)
             ([("qRcmd," + b"info".hex(),
                b"Modules:\n  0x0080000000 - 0x0080003fff rtld\n".hex())], []),
+            # no reply to monitor info or to the Z2: the ack timeout ends it, nothing armed
+            ([("qRcmd," + b"info".hex(), None)], []),
+            ([*START, ("Z2," + z, None)], []),
             # Eden refuses an unmapped range itself [S1 gdbstub.cpp:311-314]: nothing armed
             ([*START, ("Z2," + z, "E01")], []),
             # an error past the Z2 (a refused z2): the best-effort z2 and c still go out; the
@@ -229,6 +233,7 @@ class RspWatch(unittest.TestCase):
             s.bind(("127.0.0.1", 0))
             port = s.getsockname()[1]
         saved = rsp_watch.CONNECT_TIMEOUT
+        self.assertEqual((saved, rsp_watch.RETRY), (60.0, 0.5))  # the spec's; patched below
         rsp_watch.CONNECT_TIMEOUT = 1.0
         start = time.monotonic()
         try:
