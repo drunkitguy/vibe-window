@@ -378,7 +378,7 @@ Doable in this Linux container now (no game, no Windows, no Thor):
 | H1a | Eden Duo: native modules on Windows (loader, harness compile fix, tests), as patches | - | done: `host/eden-duo/0001-0003` + `host/eden-duo-companions/0001`; loader Catch2 tests pass standalone; full eden-duo build blocked (proxy 403 on CPM fmt download), real-Windows checks in H1c; critic SATISFIED round 3 |
 | T1 | TotK package skeleton: build gate, fail-closed reader, tests; Linux `.so` and Windows DLL; `.dsmod.zip` | H1a (builder patch) | done: `2c482b6` (+ plan `911aed8`); gcc/clang/MinGW builds and ctest pass (MinGW under wine), single export, package + wine probe pass; critic SATISFIED round 3 |
 | H1b | eden-cli composite layout: `--window-rect`, `--aux-rect`, borderless, aux not focusable | H1a | done: `afe952e`, patch 0004 adds `--window-rect`/`--aux-rect` (borderless, hidden until placed), non-focusable aux, 640x360 main floor, 32767 bound, ledger rows; parser tests pass natively and under wine; SDL and harness code compile-checked only in H1c; critic SATISFIED round 3 |
-| H1d | eden-cli uses the Eden Qt config: `qt-config.ini`, then the game's `custom/<program id>.ini` (use_global), read-only (§H1d) | H1b | done: patch `0013`; `qt_config_test` passes natively and under wine (own config, global, per-game, no write or create, absent, empty and garbage files, `[UI]` external content dirs, `DisabledAddOns` replaced); `yuzu.cpp` syntax-checked only, run on the PC in H1c check 6; `-c` keeps eden-cli's own config; data dirs follow Eden Qt (§H1d) |
+| H1d | eden-cli uses the Eden Qt config: `qt-config.ini`, then the game's `custom/<program id>.ini` (use_global), read-only (§H1d) | H1b | done: patch `0013`; `qt_config_test` passes natively and under wine (own config, global, per-game, no write or create, absent, empty and garbage files, `[UI]` external content dirs, `DisabledAddOns` replaced); `yuzu.cpp` syntax-checked only, run on the PC in H1c check 6; `-c` keeps eden-cli's own config and refuses Eden Qt's files (tested); accounts re-read from the configured NAND as Eden Qt does; data dirs follow Eden Qt (§H1d) |
 | T2a | Retarget the skeleton to 1.2.0 (`kTargetBuild`, data file name, tests) | T1 | done: `d175a18`; 1.2.0 build id and data file; critic SATISFIED (with T3s) |
 | T3a'.1 | Eden Duo patch 0009 (zstd + `ZsDic` in the runtime's romfs reader, §T3a' A) + icon keys as `romfs:` paths (§T3a' B2) | T4 | done: 64a646e, critic SATISFIED round 1, Windows CI run 41379288233 green (198 cases); real romfs untested (T8a) |
 | T3a'.2 | Item names from MSBT (B1) + the one-shot texture dump for T8a (B5) | T3a'.1 | done: 2bdcb00 (patches 0010-0011), critic SATISFIED round 4, Eden CI 41396378620 + companion CI green; real romfs untested (T8a) |
@@ -655,7 +655,7 @@ User request: eden-cli runs the game with the settings tuned in Eden Qt. Facts [
 - Constructing any `Config` writes its file back: `Reload` is `ReadValues` + `SaveValues` (ends in
   `WriteToIni`) [S1 `config.cpp:883-887,515-535`], `SetUpIni` creates a missing file [S1
   `config.cpp:104-113`], and the SDL destructor saves at the end of start-up [S1
-  `src/yuzu_cmd/sdl_config.cpp:58-62`], resetting the players to global [S1 `sdl_config.cpp:193`,
+  `src/yuzu_cmd/sdl_config.cpp:58-62`], resetting the players to global [S1 `sdl_config.cpp:194`,
   `config.cpp:552`]. So patch 0013 reads with a private `SdlConfig` constructor that gets the
   parsed ini and no file path, so nothing can save to the Qt files.
 - Per-game values apply by `use_global` in `ReadSettingGeneric` [S1 `config.cpp:909-932`]; Eden
@@ -672,12 +672,27 @@ User request: eden-cli runs the game with the settings tuned in Eden Qt. Facts [
   the loader that reads the program id needs the content provider and factories [S1
   `src/core/loader/loader.cpp:325-337`, `core.cpp:976-978`]; so 0013 sets those up before
   `Initialize` (they were after the window [S1 `yuzu.cpp:244-246`]).
+- The account list is read once, in the `ProfileManager` constructor, from the default NAND with
+  the default `current_user` [S1 `src/core/core.cpp:117,549`,
+  `src/core/hle/service/acc/profile_manager.cpp:53-72`], before any config is read. Eden Qt
+  re-reads it after its config load (`FixProfiles` [S1 `src/yuzu/main_window.cpp:456`] calls
+  `ResetUserSaveFile` [S1 `src/qt_common/util/content.cpp:297`], which reopens `current_user` [S1
+  `profile_manager.cpp:484-499`]); the DSMod save reader asks it for the running account [S1
+  `src/core/mods/mod_module_services.cpp:115`]. So 0013 calls `ResetUserSaveFile` after the config
+  reads, resolves `-u <name>` against it (was before any config [S1 `yuzu.cpp:203`]), and calls it
+  again after the launch params when `-u` is given.
+- `-c <file>` hands the path to `Config::Initialize`, which writes the file at once and again at
+  the end of start-up with the launch params in it [S1 `src/yuzu_cmd/dsmod_harness.cpp:846-847,
+  970,974`, `config.cpp:55-61`, `src/core/launch_params.cpp:172-179`], so 0013 refuses a `-c`
+  that resolves (absolute, `..`, symlinks; case-folded on Windows) to `qt-config.ini` or under
+  `custom/` in the config dir, or does not resolve: one error line, exit 1.
 What 0013 does when `<config dir>\qt-config.ini` exists and no `-c` is given (else nothing changes;
-`-c <file>` runs on that file alone, as its help line says): save eden-cli's own config, read
-`qt-config.ini` (all shared sections, player maps, debug pad, ring controller, external content
-dirs; its `DisabledAddOns` replace eden-cli's), read `custom/<id>.ini` if present, then apply the
-launch params, so `-n`, `-s`, `-u` and the input profile beat both Qt files (Eden Qt parses the
-same flags [S1 `src/yuzu/main_window.cpp:527`] but applies only `-g`, `-f` and the applet launches;
+`-c <file>` runs on that file alone, as its help line says, unless it names an Eden Qt file):
+save eden-cli's own config, read `qt-config.ini` (all shared sections, player maps, debug pad,
+ring controller, external content dirs; its `DisabledAddOns` replace eden-cli's), read
+`custom/<id>.ini` if present, then apply the launch params, so `-n`, `-s`, `-u` and the input
+profile beat both Qt files (Eden Qt parses the same flags [S1 `src/yuzu/main_window.cpp:527`]
+but applies only `-g`, `-f` and the applet launches;
 `ApplyLaunchParams` [S1 `src/core/launch_params.cpp:155-181`] is eden-cli's only, its one caller is
 `yuzu_cmd/yuzu.cpp`), then `Initialize` and the renderer pick. A file without `[Controls]` (Eden Qt
 always writes it, global and per-game [S1 `config.cpp:515-535,546-550`]) counts as unreadable. One

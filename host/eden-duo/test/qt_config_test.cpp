@@ -8,6 +8,7 @@
 
 #undef NDEBUG
 #include <cassert>
+#include <cctype>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -17,6 +18,7 @@
 #include <set>
 #include <string>
 
+#include "common/fs/path_util.h"
 #include "common/logging.h"
 #include "common/settings.h"
 #include "input_common/main.h"
@@ -167,6 +169,25 @@ int main() {
     assert(fs::last_write_time(qt_global) == global_time && fs::last_write_time(qt_game) == game_time);
     assert(Tree(qt_dir) == tree);
     assert(g_saves == 0);
+
+    // -c may not name Eden Qt's files, however spelled; eden-cli's own and other files are fine.
+    const fs::path config_dir = Common::FS::GetEdenPath(Common::FS::EdenPath::ConfigDir);
+    const auto utf8 = [](const fs::path& path) { return Common::FS::PathToUTF8String(path); };
+    assert(SdlConfig::IsEdenQtFile(utf8(config_dir / "qt-config.ini")));
+    assert(SdlConfig::IsEdenQtFile(utf8(config_dir / "custom" / "0100F2C0115B6000.ini")));
+    assert(SdlConfig::IsEdenQtFile(utf8(config_dir / "input" / ".." / "qt-config.ini")));
+    assert(SdlConfig::IsEdenQtFile(utf8(config_dir) + "/custom/x/y.ini"));
+    assert(!SdlConfig::IsEdenQtFile(utf8(config_dir / "sdl2-config.ini")));
+    assert(!SdlConfig::IsEdenQtFile(utf8(qt_global)));
+    assert(!SdlConfig::IsEdenQtFile("sdl2-config.ini"));
+#ifdef _WIN32
+    std::string upper = utf8(config_dir / "qt-config.ini");
+    for (char& c : upper) {
+        c = c == '\\' ? '/' : static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+    }
+    assert(SdlConfig::IsEdenQtFile(upper));
+    assert(SdlConfig::IsEdenQtFile(utf8(config_dir / "CUSTOM" / "0100f2c0115b6000.ini")));
+#endif
 
     fs::remove_all(root);
     std::puts("qt_config_test: all checks passed");

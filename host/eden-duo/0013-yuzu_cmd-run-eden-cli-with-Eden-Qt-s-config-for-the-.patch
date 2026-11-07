@@ -1,4 +1,4 @@
-From 53a9d48c3bbb73dbbf44f4443a629edc43e993d6 Mon Sep 17 00:00:00 2001
+From e1a5e009b793e4009f7ce9accc0f6acab57f37aa Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Sat, 7 Nov 2026 17:56:52 +0000
 Subject: [PATCH] yuzu_cmd: run eden-cli with Eden Qt's config for the game
@@ -31,6 +31,19 @@ factories are set up before System::Initialize instead of after the
 window; the per-game values are then in place for Initialize and the
 renderer pick. Without qt-config.ini, eden-cli behaves as before.
 
+The account list was read once, from the default NAND with user 0,
+before any config was read. As Eden Qt's FixProfiles does after its
+config load, eden-cli now calls ResetUserSaveFile after the config reads,
+resolves -u <name> against that list, and reopens the -u user after the
+launch params, so the save and the companion's save reader use the
+account and NAND Eden Qt uses.
+
+-c writes its file back, so a -c that resolves (absolute, "..",
+symlinks, case-folded on Windows) to <config dir>/qt-config.ini or a file
+under <config dir>/custom/, or does not resolve, is refused with one
+error line. The check sits in the option parser, so --install and
+--dump-il2cpp are covered too.
+
 Program id 0 (homebrew) gets no per-game file; Eden Qt names that one
 after the file.
 
@@ -39,43 +52,100 @@ under wine): own config, qt-config.ini, then custom/<id>.ini; use_global
 true and false; a per-game input profile; Qt files byte- and
 mtime-identical, nothing created, no save attempted; absent, empty and
 garbage files refused; external_content_dirs read from [UI]; a stale
-DisabledAddOns entry dropped.
+DisabledAddOns entry dropped; -c refused for qt-config.ini, custom/ files,
+".." and (Windows) case and slash variants, allowed for sdl2-config.ini.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01XgyuSR8o8AbzxuWHYqLwsv
 ---
- .upstream/duo-touched.tsv   |  2 ++
- src/yuzu_cmd/sdl_config.cpp | 53 ++++++++++++++++++++++++++++++++++++-
- src/yuzu_cmd/sdl_config.h   | 12 ++++++++-
- src/yuzu_cmd/yuzu.cpp       | 48 +++++++++++++++++++++++++++++----
- 4 files changed, 108 insertions(+), 7 deletions(-)
+ .upstream/duo-touched.tsv      |  6 ++-
+ src/yuzu_cmd/dsmod_harness.cpp |  8 +++
+ src/yuzu_cmd/sdl_config.cpp    | 91 +++++++++++++++++++++++++++++++++-
+ src/yuzu_cmd/sdl_config.h      | 16 +++++-
+ src/yuzu_cmd/yuzu.cpp          | 63 ++++++++++++++++++++---
+ 5 files changed, 172 insertions(+), 12 deletions(-)
 
 diff --git a/.upstream/duo-touched.tsv b/.upstream/duo-touched.tsv
-index 303de36d..c2688bf4 100644
+index 303de36d..fa52b1be 100644
 --- a/.upstream/duo-touched.tsv
 +++ b/.upstream/duo-touched.tsv
-@@ -391,6 +391,8 @@ upstream-hook	M	4	8	1	src/core/hle/service/ipc_helpers.h
+@@ -13,7 +13,6 @@ duo-only	A	-	10	0	src/video_core/host_shaders/duo_shaders.cmake
+ duo-only	A	-	102	0	src/core/mods/mod_clock.h
+ duo-only	A	-	1025	0	src/tests/core/mods/tsan_redraw_harness.cpp
+ duo-only	A	-	103	0	src/tests/core/mods/golden/Persona5Royal/render.txt
+-duo-only	A	-	1038	0	src/yuzu_cmd/dsmod_harness.cpp
+ duo-only	A	-	105	0	src/tests/core/mods/text_slant.cpp
+ duo-only	A	-	106	0	src/tests/core/mods/min_runtime.cpp
+ duo-only	A	-	1074	0	src/core/mods/mod_console.cpp
+@@ -25,6 +24,7 @@ duo-only	A	-	1	0	src/android/app/src/main/res/drawable/ic_companion_download.xml
+ duo-only	A	-	1	0	src/android/app/src/main/res/drawable/ic_kofi.xml
+ duo-only	A	-	1	0	src/android/app/src/main/res/drawable/ic_poll.xml
+ duo-only	A	-	110	0	src/android/app/src/main/res/values/duo_strings.xml
++duo-only	A	-	1105	0	src/yuzu_cmd/dsmod_harness.cpp
+ duo-only	A	-	1109	0	src/core/mods/mod_nx_assets.cpp
+ duo-only	A	-	11	0	src/core/mods/modules/README.md
+ duo-only	A	-	11	0	src/tests/core/mods/golden/LinksAwakening/render.txt
+@@ -345,8 +345,8 @@ duo-only	A	-	-	-	src/tests/core/mods/golden/Persona5Royal/waiting.partial.png
+ duo-only	A	-	-	-	src/tests/core/mods/golden/Persona5Royal/waiting.png
+ upstream-hook	M	29	206	37	src/android/app/src/main/java/org/yuzu/yuzu_emu/fragments/EmulationFragment.kt
+ upstream-hook	M	22	70	6	src/android/app/src/main/jni/native.cpp
++upstream-hook	M	21	86	19	src/yuzu_cmd/yuzu.cpp
+ upstream-hook	M	20	56	3	src/core/file_sys/registered_cache.cpp
+-upstream-hook	M	17	33	13	src/yuzu_cmd/yuzu.cpp
+ upstream-hook	M	17	45	27	src/android/app/src/main/java/org/yuzu/yuzu_emu/ui/GamesFragment.kt
+ upstream-hook	M	15	109	18	src/android/app/src/main/java/org/yuzu/yuzu_emu/utils/GameHelper.kt
+ upstream-hook	M	13	67	42	src/android/app/src/main/java/org/yuzu/yuzu_emu/fragments/GamePropertiesFragment.kt
+@@ -378,6 +378,7 @@ upstream-hook	M	5	31	0	src/core/core.h
+ upstream-hook	M	5	33	2	src/core/hle/service/set/system_settings_server.cpp
+ upstream-hook	M	5	5	4	src/android/app/src/main/res/layout-w600dp/page_setup.xml
+ upstream-hook	M	4	13	11	src/video_core/renderer_vulkan/vk_pipeline_cache.cpp
++upstream-hook	M	4	15	1	src/yuzu_cmd/sdl_config.h
+ upstream-hook	M	4	16	3	src/video_core/texture_cache/texture_cache.h
+ upstream-hook	M	4	18	11	src/video_core/renderer_vulkan/vk_texture_cache.cpp
+ upstream-hook	M	4	194	0	src/shader_recompiler/frontend/maxwell/translate_program.cpp
+@@ -390,6 +391,7 @@ upstream-hook	M	4	6	2	src/core/debugger/debugger.cpp
+ upstream-hook	M	4	8	1	src/core/hle/service/ipc_helpers.h
  upstream-hook	M	4	8	1	src/video_core/renderer_vulkan/renderer_vulkan.h
  upstream-hook	M	4	9	6	src/video_core/renderer_opengl/renderer_opengl.cpp
++upstream-hook	M	4	90	1	src/yuzu_cmd/sdl_config.cpp
  upstream-hook	M	4	7	1	src/yuzu_cmd/emu_window/emu_window_sdl3_gl.cpp
-+upstream-hook	M	4	52	1	src/yuzu_cmd/sdl_config.cpp
-+upstream-hook	M	4	11	1	src/yuzu_cmd/sdl_config.h
  upstream-hook	M	3	10	0	src/input_common/drivers/android.cpp
  upstream-hook	M	3	13	3	src/common/fs/file.cpp
- upstream-hook	M	3	14	0	src/core/file_sys/romfs_factory.h
+diff --git a/src/yuzu_cmd/dsmod_harness.cpp b/src/yuzu_cmd/dsmod_harness.cpp
+index 59611024..9a683f5e 100644
+--- a/src/yuzu_cmd/dsmod_harness.cpp
++++ b/src/yuzu_cmd/dsmod_harness.cpp
+@@ -844,6 +844,14 @@ std::optional<SDL_AppResult> ParseCommandLine(Session& session, int argc, char**
+                 override_gdb_port = uint16_t(atoi(optarg));
+                 break;
+             case 'c':
++                // Duo: eden-cli writes its -c file back (and stores launch flags in it), so it never
++                // takes one of Eden Qt's; without -c it reads them read-only.
++                if (SdlConfig::IsEdenQtFile(optarg)) {
++                    std::cout << "Refusing -c " << optarg
++                              << ": eden-cli would overwrite Eden Qt's config. Drop -c to run "
++                                 "with Eden Qt's settings for the game.\n";
++                    return SDL_APP_FAILURE;
++                }
+                 config_path = optarg;
+                 break;
+             case 'f':
 diff --git a/src/yuzu_cmd/sdl_config.cpp b/src/yuzu_cmd/sdl_config.cpp
-index b06a5a69..357a6c61 100644
+index b06a5a69..47c2a089 100644
 --- a/src/yuzu_cmd/sdl_config.cpp
 +++ b/src/yuzu_cmd/sdl_config.cpp
-@@ -8,6 +8,7 @@
+@@ -8,6 +8,10 @@
  #define SDL_MAIN_HANDLED
  #include <SDL3/SDL.h>
  
++#include <cwctype>
++
 +#include "common/fs/file.h"
++#include "common/fs/path_util.h"
  #include "common/logging.h"
  #include "input_common/main.h"
  #include "sdl_config.h"
-@@ -55,8 +56,37 @@ SdlConfig::SdlConfig(const std::optional<std::string> config_path) {
+@@ -55,8 +59,72 @@ SdlConfig::SdlConfig(const std::optional<std::string> config_path) {
      SaveSdlValues();
  }
  
@@ -109,12 +179,47 @@ index b06a5a69..357a6c61 100644
 +    return true;
 +}
 +
++namespace {
++// Absolute, "..", slashes and symlinks resolved; case-folded on Windows, where names are not
++// case-sensitive. shortcut: ASCII folding only (towlower in the C locale), use
++// CompareStringOrdinal if a non-ASCII case variant of the config dir ever matters.
++std::optional<std::filesystem::path> Resolved(const std::filesystem::path& path) {
++    std::error_code ec;
++    const auto absolute = std::filesystem::absolute(path, ec);
++    if (ec) {
++        return std::nullopt;
++    }
++    auto resolved = std::filesystem::weakly_canonical(absolute, ec);
++    if (ec) {
++        return std::nullopt;
++    }
++#ifdef _WIN32
++    auto folded = resolved.native();
++    for (auto& c : folded) {
++        c = static_cast<wchar_t>(std::towlower(c));
++    }
++    resolved = folded;
++#endif
++    return resolved;
++}
++} // namespace
++
++bool SdlConfig::IsEdenQtFile(const std::string& path) {
++    const auto dir = Resolved(Common::FS::GetEdenPath(Common::FS::EdenPath::ConfigDir));
++    const auto file = Resolved(Common::FS::ToU8String(path));
++    if (!dir || !file) {
++        return true;
++    }
++    const auto relative = file->lexically_relative(*dir);
++    return relative == "qt-config.ini" || (!relative.empty() && *relative.begin() == "custom");
++}
++
 +SdlConfig::~SdlConfig() {
 +    if (global && !config_loc.empty()) {
          SdlConfig::SaveAllValues();
      }
  }
-@@ -170,6 +200,27 @@ void SdlConfig::ReadDebugControlValues() {
+@@ -170,6 +238,27 @@ void SdlConfig::ReadDebugControlValues() {
      }
  }
  
@@ -143,7 +248,7 @@ index b06a5a69..357a6c61 100644
      const std::string default_param = InputCommon::GenerateAnalogParamFromKeys(
          0, 0, default_ringcon_analogs[0], default_ringcon_analogs[1], 0, 0.05f);
 diff --git a/src/yuzu_cmd/sdl_config.h b/src/yuzu_cmd/sdl_config.h
-index 1fd1c692..391cce7a 100644
+index 1fd1c692..f723ce26 100644
 --- a/src/yuzu_cmd/sdl_config.h
 +++ b/src/yuzu_cmd/sdl_config.h
 @@ -3,6 +3,8 @@
@@ -155,7 +260,7 @@ index 1fd1c692..391cce7a 100644
  #include "frontend_common/config.h"
  
  class SdlConfig final : public Config {
-@@ -13,13 +15,18 @@ public:
+@@ -13,13 +15,22 @@ public:
      void ReloadAllValues() override;
      void SaveAllValues() override;
  
@@ -163,6 +268,10 @@ index 1fd1c692..391cce7a 100644
 +    // into Settings the way Eden Qt does, without ever writing or creating it. False, with Settings
 +    // untouched, when the file is absent, empty or unreadable.
 +    static bool ReadQtConfig(const std::filesystem::path& path, ConfigType config_type);
++
++    // Duo: true when path (a -c argument, UTF-8, as Config opens it) is <config dir>/qt-config.ini
++    // or under <config dir>/custom/, or does not resolve. eden-cli writes its -c file back.
++    static bool IsEdenQtFile(const std::string& path);
 +
  protected:
      void ReadSdlValues();
@@ -175,7 +284,7 @@ index 1fd1c692..391cce7a 100644
      void ReadShortcutValues() override {}
      void ReadUIValues() override {}
      void ReadUIGamelistValues() override {}
-@@ -40,6 +47,9 @@ protected:
+@@ -40,6 +51,9 @@ protected:
  
      std::vector<Settings::BasicSetting*>& FindRelevantList(Settings::Category category) override;
  
@@ -186,7 +295,7 @@ index 1fd1c692..391cce7a 100644
      static const std::array<int, Settings::NativeButton::NumButtons> default_buttons;
      static const std::array<int, Settings::NativeMotion::NumMotions> default_motions;
 diff --git a/src/yuzu_cmd/yuzu.cpp b/src/yuzu_cmd/yuzu.cpp
-index 6ba95b0e..1035035a 100644
+index 6ba95b0e..50355b38 100644
 --- a/src/yuzu_cmd/yuzu.cpp
 +++ b/src/yuzu_cmd/yuzu.cpp
 @@ -7,6 +7,7 @@
@@ -206,17 +315,23 @@ index 6ba95b0e..1035035a 100644
  #include "common/logging.h"
  #include "common/scm_rev.h"
  #include "common/settings.h"
-@@ -199,18 +202,56 @@ extern "C" SDL_AppResult SDL_AppInit(void **appstate, int argc, char **argv) {
+@@ -29,6 +32,7 @@
+ #include "core/crypto/key_manager.h"
+ #include "core/file_sys/registered_cache.h"
+ #include "core/file_sys/vfs/vfs_real.h"
++#include "core/hle/service/acc/profile_manager.h"
+ #include "core/hle/service/am/applet_manager.h"
+ #include "core/hle/service/filesystem/filesystem.h"
+ #include "core/loader/loader.h"
+@@ -199,18 +203,64 @@ extern "C" SDL_AppResult SDL_AppInit(void **appstate, int argc, char **argv) {
  #ifdef _WIN32
      LocalFree(argv_w);
  #endif
 -    SdlConfig config{lp.config_path};
+-    if (!DSModHarness::ResolveSelectedUser(state->dsmod, state->system, lp)) {
+-        return SDL_APP_FAILURE;
 +    std::optional<SdlConfig> config{std::in_place, lp.config_path};
-     if (!DSModHarness::ResolveSelectedUser(state->dsmod, state->system, lp)) {
-         return SDL_APP_FAILURE;
-     }
- 
--    Core::ApplyLaunchParams(lp);
++
 +    // Duo: run with the settings Eden Qt uses, read-only: qt-config.ini, then the game's
 +    // custom/<program id>.ini below, unless -c names a config. eden-cli's own config is saved first
 +    // so no Qt value lands in it; the launch params are applied after both, so a command-line flag
@@ -227,8 +342,10 @@ index 6ba95b0e..1035035a 100644
 +        config.reset();
 +        qt_config = SdlConfig::ReadQtConfig(config_dir / "qt-config.ini",
 +                                            Config::ConfigType::GlobalConfig);
-+    }
+     }
  
+-    Core::ApplyLaunchParams(lp);
+-
      if (lp.filepath.empty()) {
          LOG_CRITICAL(Frontend, "Failed to load ROM: No ROM specified");
          return SDL_APP_FAILURE;
@@ -260,12 +377,23 @@ index 6ba95b0e..1035035a 100644
 +                 lp.config_path ? "-c given" : "no readable qt-config.ini");
 +    }
 +
++    // Duo: as Eden Qt's FixProfiles, re-read profiles.dat now that a config has named the NAND and
++    // the user (the manager was built before), resolve -u against it, then reopen the -u user.
++    auto& profiles = state->system.GetProfileManager();
++    profiles.ResetUserSaveFile();
++    if (!DSModHarness::ResolveSelectedUser(state->dsmod, state->system, lp)) {
++        return SDL_APP_FAILURE;
++    }
++
 +    Core::ApplyLaunchParams(lp);
++    if (lp.selected_user) {
++        profiles.ResetUserSaveFile();
++    }
 +
      state->system.Initialize();
  
      // Apply the command line arguments
-@@ -241,9 +282,6 @@ extern "C" SDL_AppResult SDL_AppInit(void **appstate, int argc, char **argv) {
+@@ -241,9 +291,6 @@ extern "C" SDL_AppResult SDL_AppInit(void **appstate, int argc, char **argv) {
  #endif
  
      state->system.SetInputSubsystem(&state->input_subsystem);
