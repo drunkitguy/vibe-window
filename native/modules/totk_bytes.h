@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Bounds-checked little-endian reads over game files, and one whole read through read_romfs;
-// shared by the MSBT reader (totk_msbt.h), the T8a dump (totk_dump.h) and the font (totk_font.h).
+// Bounds-checked little-endian reads over game files, one whole read through read_romfs and the
+// printf-style log line; shared by the MSBT reader (totk_msbt.h), the T8a dump (totk_dump.h), the
+// font (totk_font.h) and travel (totk_travel.h).
 #pragma once
 
+#include <cstdarg>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <span>
 #include <string>
@@ -51,6 +54,20 @@ inline bool ReadAll(const EdenDsmodHostApi& h, const char* path, std::vector<std
         return false;
     out.resize(size);
     return h.read_romfs(h.userdata, path, 0, out.data(), size) == size;
+}
+
+// One log line, printf-style, of at most N - 1 characters (the T8a dump's lines: 200).
+template <std::size_t N = 400>
+__attribute__((format(printf, 3, 4))) inline void
+Say(const EdenDsmodHostApi& h, std::uint32_t level, const char* format, ...) {
+    if (!h.log)
+        return;
+    char line[N];
+    va_list args;
+    va_start(args, format);
+    std::vsnprintf(line, sizeof line, format, args);
+    va_end(args);
+    h.log(h.userdata, level, line);
 }
 
 } // namespace totk

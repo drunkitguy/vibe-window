@@ -7,7 +7,6 @@
 #pragma once
 
 #include <array>
-#include <cstdarg>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -51,19 +50,6 @@ struct Dest {
     float x = 0, y = 0, z = 0;
     int open = -1; // 1 travelable, 0 locked, -1 unknown (its key is not in the save)
 };
-
-// One log line, printf-style.
-__attribute__((format(printf, 3, 4))) inline void
-Say(const EdenDsmodHostApi& h, std::uint32_t level, const char* format, ...) {
-    if (!h.log)
-        return;
-    char line[400];
-    va_list args;
-    va_start(args, format);
-    std::vsnprintf(line, sizeof line, format, args);
-    va_end(args);
-    h.log(h.userdata, level, line);
-}
 
 // The romfs part of the list, once per session: one Dest per Trans element that is exactly three
 // numbers inside the world (trust boundary: a romfs mod may replace the file, and the value

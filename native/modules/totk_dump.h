@@ -11,7 +11,6 @@
 // wnd1's content and frame table offsets (Switch-Toolbox's WND1; a bad offset prints "mat=?").
 #pragma once
 
-#include <cstdarg>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -31,17 +30,6 @@ inline constexpr char kMals[] = "romfs:Mals/USen.Product.%d.sarc.zs";
 // Layouts whose panes are dumped (blyt/<prefix>*.bflyt) [docs/PLAN.md §R2].
 inline constexpr std::string_view kLayouts[] = {"Pause", "Pouch",    "App",
                                                 "PlayerStatus", "ShortCut", "Map"};
-
-// One log line of at most 200 characters.
-__attribute__((format(printf, 2, 3))) inline void Line(const EdenDsmodHostApi& h,
-                                                       const char* format, ...) {
-    char line[201];
-    va_list args;
-    va_start(args, format);
-    std::vsnprintf(line, sizeof line, format, args);
-    va_end(args);
-    h.log(h.userdata, EDEN_DSMOD_LOG_INFO, line);
-}
 
 struct Member {
     std::string name;
@@ -87,14 +75,14 @@ inline bool Textures(const EdenDsmodHostApi& h, Bytes d) {
         const std::uint64_t info = r.U32(table + 8 * i);
         if (r.U32(table + 8 * i + 4) != 0 || info + 0x68 > d.size() ||
             std::memcmp(d.data() + info, "BRTI", 4) != 0) {
-            Line(h, "totk dump tex #%u: no BRTI", unsigned(i));
+            Say<201>(h, EDEN_DSMOD_LOG_INFO, "totk dump tex #%u: no BRTI", unsigned(i));
             continue;
         }
         const std::uint64_t name = r.U32(info + 0x60);
-        Line(h, "totk dump tex %s %ux%u fmt=%04X ch=%u%u%u%u",
-             r.U32(info + 0x64) ? "?" : r.Str(name + 2, r.U16(name)).c_str(), r.U32(info + 0x24),
-             r.U32(info + 0x28), r.U32(info + 0x1C), r.U8(info + 0x58), r.U8(info + 0x59),
-             r.U8(info + 0x5A), r.U8(info + 0x5B));
+        Say<201>(h, EDEN_DSMOD_LOG_INFO, "totk dump tex %s %ux%u fmt=%04X ch=%u%u%u%u",
+                 r.U32(info + 0x64) ? "?" : r.Str(name + 2, r.U16(name)).c_str(),
+                 r.U32(info + 0x24), r.U32(info + 0x28), r.U32(info + 0x1C), r.U8(info + 0x58),
+                 r.U8(info + 0x59), r.U8(info + 0x5A), r.U8(info + 0x5B));
     }
     return true;
 }
@@ -141,14 +129,16 @@ inline bool Panes(const EdenDsmodHostApi& h, std::string_view layout, Bytes d) {
             // frame (offset table at +0x6C, count at +0x64) at +0.
             const std::uint32_t mat =
                 tag == "pic1" ? sec.Index(0x64) : sec.Index(std::uint64_t(sec.U32(0x68)) + 0x10);
-            Line(h, "totk dump pane %.*s %.*s %s t=%g,%g s=%gx%g mat=%s", int(layout.size()),
-                 layout.data(), int(tag.size()), tag.data(), name.c_str(), sec.F32(0x2C),
-                 sec.F32(0x30), sec.F32(0x4C), sec.F32(0x50), material(mat).c_str());
+            Say<201>(h, EDEN_DSMOD_LOG_INFO, "totk dump pane %.*s %.*s %s t=%g,%g s=%gx%g mat=%s",
+                     int(layout.size()), layout.data(), int(tag.size()), tag.data(), name.c_str(),
+                     sec.F32(0x2C), sec.F32(0x30), sec.F32(0x4C), sec.F32(0x50),
+                     material(mat).c_str());
             for (std::uint32_t f = 0, frames = tag == "wnd1" ? sec.U8(0x64) : 0; f < frames; ++f) {
                 const std::uint64_t entry = sec.U32(0x6C) + 4 * std::uint64_t(f);
                 const std::uint64_t at = entry + 4 <= size ? sec.U32(entry) : size; // size: none
-                Line(h, "totk dump frame %.*s %s %u mat=%s", int(layout.size()), layout.data(),
-                     name.c_str(), f, material(sec.Index(at)).c_str());
+                Say<201>(h, EDEN_DSMOD_LOG_INFO, "totk dump frame %.*s %s %u mat=%s",
+                         int(layout.size()), layout.data(), name.c_str(), f,
+                         material(sec.Index(at)).c_str());
             }
         }
         s += size;
@@ -174,50 +164,54 @@ inline void Run(const EdenDsmodHostApi& h, int mals) {
     for (int n = 100; n <= 200; ++n) {
         std::snprintf(path, sizeof path, kCommon, n);
         if (const std::size_t size = h.read_romfs(h.userdata, path, 0, nullptr, 0)) {
-            Line(h, "totk dump common %d (%u bytes)", n, unsigned(size));
+            Say<201>(h, EDEN_DSMOD_LOG_INFO, "totk dump common %d (%u bytes)", n, unsigned(size));
             common = n;
         }
     }
-    Line(h, "totk dump mals %d", mals);
+    Say<201>(h, EDEN_DSMOD_LOG_INFO, "totk dump mals %d", mals);
     if (!common)
-        return Line(h, "totk dump failed: no UI/LayoutArchive/Common.Product.<100-200>");
+        return Say<201>(h, EDEN_DSMOD_LOG_INFO,
+                        "totk dump failed: no UI/LayoutArchive/Common.Product.<100-200>");
     std::snprintf(path, sizeof path, kCommon, common);
     std::strcat(path, "#");
     std::vector<std::uint8_t> bytes;
     if (!ReadAll(h, path, bytes))
-        return Line(h,
-                    "totk dump failed: %s unreadable (Eden Duo patch 0010 missing, or the decoded "
-                    "archive is over the runtime's 64 MiB cap)",
-                    path);
+        return Say<201>(
+            h, EDEN_DSMOD_LOG_INFO,
+            "totk dump failed: %s unreadable (Eden Duo patch 0010 missing, or the decoded "
+            "archive is over the runtime's 64 MiB cap)",
+            path);
     const auto members = Sarc(bytes);
     if (members.empty())
-        return Line(h, "totk dump failed: %s is not a SARC", path);
+        return Say<201>(h, EDEN_DSMOD_LOG_INFO, "totk dump failed: %s is not a SARC", path);
     const Member* bntx = nullptr;
     for (const Member& m : members) {
-        Line(h, "totk dump member %s %u", m.name.c_str(), unsigned(m.bytes.size()));
+        Say<201>(h, EDEN_DSMOD_LOG_INFO, "totk dump member %s %u", m.name.c_str(),
+                 unsigned(m.bytes.size()));
         if (m.name == "timg/__Combined.bntx")
             bntx = &m;
     }
     if (!bntx || !Textures(h, bntx->bytes))
-        return Line(h, "totk dump failed: no BNTX timg/__Combined.bntx");
+        return Say<201>(h, EDEN_DSMOD_LOG_INFO, "totk dump failed: no BNTX timg/__Combined.bntx");
     for (const Member& m : members)
         if (IsDumpedLayout(m.name) &&
             !Panes(h, std::string_view(m.name).substr(5, m.name.size() - 11), m.bytes))
-            return Line(h, "totk dump failed: %s is not a BFLYT", m.name.c_str());
+            return Say<201>(h, EDEN_DSMOD_LOG_INFO, "totk dump failed: %s is not a BFLYT",
+                            m.name.c_str());
     if (!mals)
-        return Line(h, "totk dump failed: no Mals archive");
+        return Say<201>(h, EDEN_DSMOD_LOG_INFO, "totk dump failed: no Mals archive");
     std::snprintf(path, sizeof path, kMals, mals);
     std::strcat(path, "#");
     std::vector<std::uint8_t> msgs;
     if (!ReadAll(h, path, msgs))
-        return Line(h, "totk dump failed: %s unreadable", path);
+        return Say<201>(h, EDEN_DSMOD_LOG_INFO, "totk dump failed: %s unreadable", path);
     const auto messages = Sarc(msgs);
     if (messages.empty())
-        return Line(h, "totk dump failed: %s is not a SARC", path);
+        return Say<201>(h, EDEN_DSMOD_LOG_INFO, "totk dump failed: %s is not a SARC", path);
     for (const Member& m : messages)
         if (m.name.starts_with("LayoutMsg/"))
-            Line(h, "totk dump msg %s", m.name.c_str());
-    Line(h, "totk dump done");
+            Say<201>(h, EDEN_DSMOD_LOG_INFO, "totk dump msg %s", m.name.c_str());
+    Say<201>(h, EDEN_DSMOD_LOG_INFO, "totk dump done");
 }
 
 } // namespace totk::dump

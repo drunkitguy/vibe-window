@@ -126,6 +126,7 @@ struct Instance {
     int load_clear = 0, loading = -1;
     unsigned load_unknown_logged = 0;
     std::uint64_t gate_mgr = 0; // the GameDataMgr this sample's gate read (A2 precondition 1)
+    bool sampled = false; // a sample ran since the last tick (tick runs without one while hidden)
     // A2 travel, tick thread only like `page`: the selected destination (-1 none), the queued go
     // or restore (precondition 4 reads the vec3 on two ticks: req_read, req_bits), whether this
     // session's first go asked for a manual save, the moved medallion (no pointers: every read
@@ -138,7 +139,6 @@ struct Instance {
     Bits req_bits{};
     struct Moved {
         Bits old, dest;
-        std::string label;
         int ticks = kMoveWatch;
         bool seen = false; // `last` is a value other than old and dest, seen the tick before
         Bits last{};
@@ -388,10 +388,10 @@ void Destroy(void* instance) {
             in->worker.join();
         // No write at shutdown: the old spot goes to the log (an error line, on disk at once).
         if (in->moved)
-            totk::travel::Say(in->host, EDEN_DSMOD_LOG_ERROR,
-                              "totk travel: medallion still moved; place it by hand at its old "
-                              "spot %s",
-                              totk::travel::Format(in->moved->old).s);
+            totk::Say(in->host, EDEN_DSMOD_LOG_ERROR,
+                      "totk travel: medallion still moved; place it by hand at its old "
+                      "spot %s",
+                      totk::travel::Format(in->moved->old).s);
     } catch (...) {
         // The worker may still run and use `in`: freeing it would be a use after free, and
         // destroying a joinable std::thread calls std::terminate. Leak it instead.
@@ -709,6 +709,7 @@ void Sample(void* instance, const EdenDsmodHostApi* host) {
         // Status first, then the position (which may move the layer before it is published).
         const totk::Status* status = LiveStatus(in, *host, snap.get());
         const int loading = Loading(in, *host);
+        in.sampled = true;
         const totk::Position* pos = LivePosition(in, *host);
         const Out o{*host};
         o.I(pub::kReady, 1);
@@ -779,14 +780,14 @@ const totk::travel::Dest* Selected(const Instance& in, const totk::Snapshot* s) 
     return ok ? &s->travel[std::size_t(in.travel_sel)] : nullptr;
 }
 
-std::shared_ptr<const totk::Snapshot> Shown(Instance& in) {
+std::shared_ptr<const totk::Snapshot> Snap(Instance& in) {
     std::scoped_lock lock{in.mutex};
     return in.snapshot;
 }
 
 // Preconditions 1-4 of §A2 (host reads only): null when they hold, else the message.
 const char* Preconditions(const Instance& in, const EdenDsmodHostApi& h, totk::travel::Walked& w) {
-    if (in.loading != 0)
+    if (!in.sampled || in.loading != 0) // no sample since the last tick: the gate is stale
         return "Game loading or not readable: try again";
     if (!totk::travel::ReadMedallion(h, in.offsets, w))
         return "Medallion not readable";
@@ -813,39 +814,38 @@ Spot ShortSpot(const Bits& b) {
 // Precondition 5, the "moved from" line (before the batch, so a crash during it still leaves the
 // old spot in the log), the batch, then the 60-tick watch.
 void Go(Instance& in, const EdenDsmodHostApi& h, const totk::travel::Walked& w) {
-    const auto snap = Shown(in);
+    const auto snap = Snap(in);
     const totk::travel::Dest* d = Selected(in, snap.get());
     if (!d || d->open != 1)
         return Msg(in, "Select an open destination");
     const Bits dest = totk::travel::ToBits(d->x, d->y + totk::travel::kArrivalHover, d->z);
     if (!totk::travel::InWorld(dest))
         return Msg(in, "Destination out of the world");
-    totk::travel::Say(h, EDEN_DSMOD_LOG_ERROR,
-                      "totk travel: medallion moved from %s to %s %s; if Eden closes before Put "
-                      "back, place it again by hand at the old x/z",
-                      totk::travel::Format(w.bits).s, d->label.c_str(),
-                      totk::travel::Format(dest).s);
+    totk::Say(h, EDEN_DSMOD_LOG_ERROR,
+              "totk travel: medallion moved from %s to %s %s; if Eden closes before Put "
+              "back, place it again by hand at the old x/z",
+              totk::travel::Format(w.bits).s, d->label.c_str(), totk::travel::Format(dest).s);
     if (!totk::travel::SendBatch(in.write, w, w.bits, dest)) {
-        totk::travel::Say(h, EDEN_DSMOD_LOG_ERROR, "totk travel: move not applied");
+        totk::Say(h, EDEN_DSMOD_LOG_ERROR, "totk travel: move not applied");
         return Msg(in, "Not applied, try again");
     }
-    in.moved = Instance::Moved{w.bits, dest, d->label};
+    in.moved = Instance::Moved{w.bits, dest};
     Msg(in, "Open the map and travel to your medallion");
 }
 
 void Restore(Instance& in, const EdenDsmodHostApi& h, const totk::travel::Walked& w) {
     const auto& m = *in.moved;
     if (w.bits == m.old) { // the game reverted it after the watch, or the player put it there
-        totk::travel::Say(h, EDEN_DSMOD_LOG_ERROR, "totk travel: medallion already back at %s",
-                          totk::travel::Format(m.old).s);
+        totk::Say(h, EDEN_DSMOD_LOG_ERROR, "totk travel: medallion already back at %s",
+                  totk::travel::Format(m.old).s);
         in.moved.reset();
         return Msg(in, "Medallion is already back");
     }
     if (w.bits != m.dest) { // changed after the watch, or moved by the player
-        totk::travel::Say(h, EDEN_DSMOD_LOG_ERROR,
-                          "totk travel: medallion not where the companion put it; place it by "
-                          "hand at its old spot %s",
-                          totk::travel::Format(m.old).s);
+        totk::Say(h, EDEN_DSMOD_LOG_ERROR,
+                  "totk travel: medallion not where the companion put it; place it by "
+                  "hand at its old spot %s",
+                  totk::travel::Format(m.old).s);
         Msg(in,
             "The medallion is not where the companion put it; place it by hand at its old spot %s",
             ShortSpot(m.old).s);
@@ -854,8 +854,8 @@ void Restore(Instance& in, const EdenDsmodHostApi& h, const totk::travel::Walked
     }
     if (!totk::travel::SendBatch(in.write, w, m.dest, m.old))
         return Msg(in, "Not applied, try again");
-    totk::travel::Say(h, EDEN_DSMOD_LOG_ERROR, "totk travel: medallion back at %s",
-                      totk::travel::Format(m.old).s);
+    totk::Say(h, EDEN_DSMOD_LOG_ERROR, "totk travel: medallion back at %s",
+              totk::travel::Format(m.old).s);
     in.moved.reset();
     Msg(in, "Medallion put back");
 }
@@ -868,9 +868,8 @@ void WatchMove(Instance& in, const EdenDsmodHostApi& h) {
     if (!totk::travel::ReadMedallion(h, in.offsets, w))
         return;
     if (w.bits == m.old) {
-        totk::travel::Say(h, EDEN_DSMOD_LOG_ERROR,
-                          "totk travel: move not applied (medallion still at %s)",
-                          totk::travel::Format(w.bits).s);
+        totk::Say(h, EDEN_DSMOD_LOG_ERROR, "totk travel: move not applied (medallion still at %s)",
+                  totk::travel::Format(w.bits).s);
         in.moved.reset();
         return Msg(in, "The game did not keep the move (not applied)");
     }
@@ -881,9 +880,9 @@ void WatchMove(Instance& in, const EdenDsmodHostApi& h) {
     if (m.seen && w.bits == m.last && totk::travel::InWorld(w.bits)) { // held two ticks
         m.dest = w.bits;
         m.seen = false;
-        totk::travel::Say(h, EDEN_DSMOD_LOG_ERROR,
-                          "totk travel: medallion changed by the game; now at %s; old spot %s",
-                          totk::travel::Format(m.dest).s, totk::travel::Format(m.old).s);
+        totk::Say(h, EDEN_DSMOD_LOG_ERROR,
+                  "totk travel: medallion changed by the game; now at %s; old spot %s",
+                  totk::travel::Format(m.dest).s, totk::travel::Format(m.old).s);
         return Msg(in, "The game changed the medallion; its old spot is %s", ShortSpot(m.old).s);
     }
     m.seen = true;
@@ -935,6 +934,7 @@ void Tick(void* instance, const EdenDsmodHostApi* host) {
             return;
         LogRefused(*in, *host);
         Travel(*in, *host);
+        in->sampled = false;
     } catch (...) {
     }
 }
@@ -967,7 +967,9 @@ EdenDsmodBool TravelGo(Instance& in) {
         return refuse("Moving the medallion is waiting for T8c (offsets not checked yet)");
     if (!in.write.write_batch)
         return refuse("This Eden build cannot write game memory (no write extension)");
-    const auto snap = Shown(in);
+    if (!in.host.log) // the "moved from" line is the only record of the old spot
+        return refuse("This Eden build gives the module no log");
+    const auto snap = Snap(in);
     const totk::travel::Dest* d = Selected(in, snap.get());
     if (!d || d->open != 1)
         return refuse("Select an open destination");
@@ -1012,11 +1014,7 @@ EdenDsmodBool OnAction(void* instance, const char* action, std::int64_t arg) {
             in->sel = 0;
             return true;
         case pub::kActInvSelect: {
-            std::shared_ptr<const totk::Snapshot> snap;
-            {
-                std::scoped_lock lock{in->mutex};
-                snap = in->snapshot;
-            }
+            const auto snap = Snap(*in);
             if (!snap || in->tab < 0 || in->tab >= totk::kTabs || arg < 0 ||
                 std::uint64_t(arg) >= snap->tabs[in->tab].size()) // < totk.inv.count
                 break;
@@ -1029,7 +1027,7 @@ EdenDsmodBool OnAction(void* instance, const char* action, std::int64_t arg) {
             in->layer = int(arg);
             return true;
         case pub::kActTravelSelect: { // < totk.travel.count
-            const auto snap = Shown(*in);
+            const auto snap = Snap(*in);
             if (!snap || arg < 0 || std::uint64_t(arg) >= std::min(snap->travel.size(), kMaxDest))
                 break;
             in->travel_sel = int(arg);

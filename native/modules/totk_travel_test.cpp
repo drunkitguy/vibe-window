@@ -119,7 +119,7 @@ constexpr std::uint64_t kLen = 0x2F8; // the lead for medallion_len (T8c decides
 constexpr std::int32_t kPlacedIndex = 7;
 
 struct Options {
-    bool v121 = true, write = true, layout = true, owned = true;
+    bool v121 = true, write = true, layout = true, owned = true, log = true;
     int re = 0; // user:totk-re: 0 absent, 1 "1", 2 empty
 };
 
@@ -168,6 +168,8 @@ struct World {
             Layout();
         dir.Put("slot_00/caption.sav", Caption(2024, 1, 2, 8, 0, false));
         dir.Put("slot_00/progress.sav", TravelSave(opt.owned).Build());
+        if (!opt.log)
+            h.api.log = nullptr;
         instance = m->create(&h.api, "{}");
         assert(instance);
         if (opt.write)
@@ -372,13 +374,16 @@ int main() {
                              "totk travel: LocationMsg/Location.msbt missing (no Mals archive)"});
     }
     // Trust boundary: a 2-element Trans, a NaN element, an out-of-bounds x, a string element and a
-    // 4-element Trans give no Dest and one "Trans dropped" line for the file.
+    // 4-element Trans give no Dest and one "Trans dropped" line for the file; an entry without
+    // Trans or without LocationName gives no Dest and is not counted.
     {
         Host h;
         h.PutRomfs(totk::travel::kFiles[0],
                    BymlWriter{}.Write(Dict(
                        {{"Shrine", Arr({Place("Dungeon001", {Arr({Num(1), Num(2)}), V(1, kNaN, 3),
-                                                             V(6001, 0, 0), V(5, 6, 7)})})}})));
+                                                             V(6001, 0, 0), V(5, 6, 7)}),
+                                        Dict({{"LocationName", Str("Work/Location/D2.gyml")}}),
+                                        Dict({{"Trans", Arr({V(8, 8, 8)})}})})}})));
         h.PutRomfs(
             totk::travel::kFiles[1],
             BymlWriter{}.Write(Dict(
@@ -596,10 +601,18 @@ int main() {
                    (queued || !w.Act("totk.travel.go"));
         };
         {
+            // CA7c: every travel action, valid and out of range, reads and writes nothing.
             World w({.v121 = false});
             w.Run(kLoadSettle);
+            for (int d = 0; d < 6; ++d)
+                assert(w.Act("totk.travel.select", d));
+            for (std::int64_t bad : {std::int64_t(-1), std::int64_t(6), INT64_MIN, INT64_MAX})
+                assert(!w.Act("totk.travel.select", bad) && !w.Act("totk.travel.go", bad) &&
+                       !w.Act("totk.travel.restore", bad));
             assert(refused(w, 0, "Moving the medallion needs game version 1.2.1"));
-            assert(w.h.MemoryCalls() == 0);
+            assert(!w.Act("totk.travel.restore") && w.Msg() == "Nothing to put back");
+            w.Run(2);
+            assert(w.h.MemoryCalls() == 0 && w.h.batch_calls == 0);
         }
         {
             World w;
@@ -613,6 +626,26 @@ int main() {
             World w({.write = false});
             w.Settle();
             assert(refused(w, 0, "This Eden build cannot write game memory (no write extension)"));
+        }
+        // A host write table with a wrong version, a wrong hash, a short struct_size or no
+        // write_batch is not kept.
+        for (int k = 0; k < 4; ++k) {
+            World w({.write = false});
+            EdenDsmodHostWriteApi bad = w.h.write;
+            bad.version += k == 0;
+            bad.abi_hash ^= k == 1;
+            bad.struct_size -= k == 2;
+            if (k == 3)
+                bad.write_batch = nullptr;
+            eden_dsmod_get_write_extensions(EDEN_DSMOD_WRITE_EXT_VERSION, EDEN_DSMOD_WRITE_EXT_HASH)
+                ->configure(w.instance, &bad);
+            w.Settle();
+            assert(refused(w, 0, "This Eden build cannot write game memory (no write extension)"));
+        }
+        {
+            World w({.log = false}); // no "moved from" line possible
+            w.Settle();
+            assert(refused(w, 0, "This Eden build gives the module no log"));
         }
         {
             World w({.owned = false});
@@ -649,6 +682,14 @@ int main() {
                             "Medallion not placed: place it, then tap again"));
         assert(tick_refused([](World& w) { w.h.Put<std::uint32_t>(w.base + kLen, 2); },
                             "More than one medallion placed"));
+        assert(tick_refused([](World& w) { w.h.memory.erase(w.base + kLen); },
+                            "Medallion data not found (offsets wrong, T8c)"));
+        assert(tick_refused(
+            [](World& w) { // 3 hops end at base + 0x300, P's slot (12 readable bytes there)
+                w.In().offsets.medallion = {3, {0x4721B98, 0x438, 0x300}};
+                w.h.Put<std::uint32_t>(w.base + 0x308, 0);
+            },
+            "Medallion not readable"));
         assert(tick_refused(
             [](World& w) {
                 PutTable(w.h, w.mgr + kO.v3a_table, 12, 16, {{totk::travel::kWarpPos, 9}});
@@ -698,6 +739,30 @@ int main() {
             w.Run();
             assert(w.h.batch_calls == 0 && w.Msg() == "The medallion moved meanwhile: tap again");
         }
+        // A tick without a sample since the last one (the screen hidden): the gate is stale.
+        {
+            World w;
+            w.Settle();
+            assert(w.Act("totk.travel.select", 0) && !w.Act("totk.travel.go") &&
+                   w.Act("totk.travel.go"));
+            w.Run();
+            w.m->tick(w.instance, &w.h.api);
+            w.Run(2);
+            assert(w.h.batch_calls == 0 && w.Msg() == "Game loading or not readable: try again");
+        }
+        // A new save locks the selected destination between the tap and the move.
+        {
+            World w;
+            w.Settle();
+            assert(w.Act("totk.travel.select", 0) && !w.Act("totk.travel.go") &&
+                   w.Act("totk.travel.go"));
+            w.Run();
+            auto locked = std::make_shared<totk::Snapshot>(*Snap(w.In()));
+            locked->travel[0].open = 0;
+            Replace(w.In(), locked);
+            w.Run();
+            assert(w.h.batch_calls == 0 && w.Msg() == "Select an open destination");
+        }
         // The manager changes between the gate's read (sample) and the walk (tick).
         {
             World w;
@@ -734,10 +799,10 @@ int main() {
         }
     }
 
-    // medallion_len 0 and medallion_index_placed {set, V}: Index[0] == V moves; another value
-    // or a missing WarpMarkerData.Index does not.
+    // medallion_len 0 and medallion_index_placed {set, V}: Index[0] == V moves; another value, a
+    // missing WarpMarkerData.Index, a length 0 entry or a values pointer below 0x10000 does not.
     {
-        for (int k = 0; k < 3; ++k) {
+        for (int k = 0; k < 5; ++k) {
             World w;
             w.In().offsets.medallion_len = 0;
             w.In().offsets.medallion_index_placed = {true, kPlacedIndex};
@@ -745,6 +810,15 @@ int main() {
                 w.h.Put<std::int32_t>(w.idata, kPlacedIndex + 1);
             if (k == 2)
                 PutTable(w.h, w.mgr + kO.int_table, 4, 8, {});
+            const std::uint64_t at = w.mgr + kO.int_table - totk::kTableToValues;
+            const std::uint64_t entry = 2 * totk::kIntArrayEntry;
+            if (k == 3)
+                w.h.Put<std::uint32_t>(w.h.Get<std::uint64_t>(at) + entry + totk::kIntArrayLen, 0);
+            if (k == 4) { // a low values pointer whose entry would pass
+                w.h.Put<std::uint64_t>(at, 0x8000);
+                w.h.Put<std::uint32_t>(0x8000 + entry + totk::kIntArrayLen, 1);
+                w.h.Put(0x8000 + entry + totk::kIntArrayData, w.idata);
+            }
             w.Settle();
             assert(w.Go(0) && w.h.batch_calls == (k == 0 ? 1u : 0u));
             assert(k == 0 || w.Msg() == "Medallion not placed: place it, then tap again");
@@ -847,6 +921,19 @@ int main() {
                lines[1].second == EDEN_DSMOD_LOG_ERROR);
     }
     {
+        // Put back tapped inside the watch, and the game reverts the move before it runs: the
+        // watch drops moved, the queued restore sends nothing.
+        World w;
+        w.Settle();
+        assert(w.Go(0));
+        w.Run(5);
+        assert(w.Act("totk.travel.restore"));
+        w.h.Put(w.p, kOld);
+        w.Run(2);
+        assert(w.h.batch_calls == 1 && !w.In().moved && w.In().req == Instance::Req::none &&
+               w.Msg() == "The game did not keep the move (not applied)");
+    }
+    {
         // A third value on one tick only leaves the destination; held two ticks it becomes the
         // destination (one level-3 line), moved and old.* stay; restore then expects it.
         World w;
@@ -859,7 +946,9 @@ int main() {
         w.Run();
         assert(w.In().moved->dest == kDest && w.Lines("totk travel: medallion changed").empty());
         w.h.Put(w.p, third);
-        w.Run(3);
+        w.Run(); // the destination in between: one tick of `third` is not two
+        assert(w.In().moved->dest == kDest && w.Lines("totk travel: medallion changed").empty());
+        w.Run();
         assert(w.In().moved && w.In().moved->dest == third &&
                w.Msg() == "The game changed the medallion; its old spot is x -1234.5 y 150.0 z "
                           "2345.5");
