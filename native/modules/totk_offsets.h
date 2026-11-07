@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Named pointer chains for the live status (docs/PLAN.md §L2, §T3a), the loading gate (§A1) and the
-// Travel Medallion trigger (§A2), and the GameData table layout the A2 probe reads.
+// Travel Medallion trigger (§A2), the GameData table layout the A2 probe reads and the IntArray
+// write queue the A3 watch sessions watch (§A3 step 1).
 // Offsets{} (1.2.0 and any other build) is all empty: every chain UNKNOWN, so ReadStatus reads
 // nothing. kOffsets121 holds the 1.2.1 leads, each UNVERIFIED until T8c checks it with the
 // console's `chain` command.
@@ -65,6 +66,8 @@ struct Offsets {
         bool set = false;
         std::int32_t value = 0;
     } medallion_index_placed;
+    // UNKNOWN: mgr-relative offset of the IntArray write-queue store (A3's `totk re:` line).
+    std::uint64_t ia_queue = 0;
 };
 
 // GameData type block layout (docs/PLAN.md §A2, §L2), the same on every build. A table is
@@ -83,6 +86,14 @@ inline constexpr std::uint64_t kIntArrayEntry = 0x40;
 inline constexpr std::uint64_t kIntArrayLen = 0x20;
 // UNVERIFIED until T8c [S28 gamedata_live.c:49-50].
 inline constexpr std::uint64_t kIntArrayData = 0x28;
+// GameData write-queue store: s32 capacity, buffer pointer, u32 control (write index in the low
+// 20 bits) [S7 runtime-support/include/totk/engine/Totk121Offsets.hpp:81-87,
+// GameDataQueue.hpp:39-45] (1.2.1). UNVERIFIED until A3 step 2.
+inline constexpr std::uint64_t kQueueCapacity = 0x28;
+// UNVERIFIED until A3 step 2 [S7 Totk121Offsets.hpp:81-87].
+inline constexpr std::uint64_t kQueueBuffer = 0x30;
+// UNVERIFIED until A3 step 2 [S7 Totk121Offsets.hpp:81-87].
+inline constexpr std::uint64_t kQueueControl = 0x38;
 
 // 1.2.1 (decoded from Eiffel2018's set [S40], same codes in [S9] key 9B4E43650501A4D4).
 inline constexpr Offsets kOffsets121{
@@ -138,6 +149,9 @@ inline constexpr Offsets kOffsets121{
     .medallion_len = 0,
     // UNKNOWN: filled instead of medallion_len if T8c's hexdump shows Index tracks the medallion.
     .medallion_index_placed = {},
+    // [S7 runtime-support/include/totk/engine/KeyItemGrant.hpp:43-44] mgr+296 = 8 + 3 * 0x60, the
+    // IntArray block on §L2's grid. UNVERIFIED until A3 step 2.
+    .ia_queue = 0x128,
 };
 
 } // namespace totk

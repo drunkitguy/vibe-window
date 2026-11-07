@@ -1057,6 +1057,62 @@ int main() {
                w.Lines("totk travel: int").empty());
     }
 
+    // A3 step 1's `totk re:` line: with user:totk-re, once, after totk.loading turns 0, the
+    // committed ia_queue's control address, capacity and buffer, and the four hashes.
+    {
+        World w({.re = 1});
+        const std::uint64_t store = w.mgr + 0x128; // the plan's values, not the constants
+        w.h.Put<std::int32_t>(store + 0x28, 512);
+        w.h.Put<std::uint64_t>(store + 0x30, 0x9a000000);
+        w.Run(kLoadSettle - 1);
+        assert(w.Lines("totk re:").empty());
+        w.Run(3);
+        char line[400];
+        std::snprintf(line, sizeof line,
+                      "totk re: IntArray queue control at 0x%llx (capacity 512, buffer "
+                      "0x9a000000); hashes Pouch.Weapon.EquipIndex 0xb80e3dbb "
+                      "Pouch.Shield.EquipIndex 0x350ad90e Pouch.Bow.EquipIndex 0x2cf18d2b "
+                      "Pouch.Food.Content.StockNum 0x2a952a60",
+                      static_cast<unsigned long long>(w.mgr + 0x160));
+        assert((w.Lines("totk re:") == std::vector<std::pair<std::string, std::uint32_t>>{
+                                           {line, EDEN_DSMOD_LOG_INFO}}));
+        assert(w.Lines("totk travel: v3a_table").size() == 1 && w.h.batch_calls == 0);
+    }
+    // Its memory calls alone (the A2 report off): is_mapped + read for capacity and buffer with
+    // the file, none without it, with an empty one or with ia_queue 0; an unreadable store (its
+    // first is_mapped fails) still gives the address.
+    struct Case {
+        int re;
+        std::uint64_t ia_queue;
+        bool store;
+        unsigned reads;
+        const char* what;
+    };
+    for (const Case c : {Case{1, 0x128, true, 4, "capacity 512, buffer 0x9a000000"},
+                         Case{1, 0x128, false, 1, "store unreadable"}, Case{0, 0x128, true, 0, ""},
+                         Case{2, 0x128, true, 0, ""}, Case{1, 0, true, 0, ""}}) {
+        World w({.re = c.re});
+        w.In().offsets.v3a_table = w.In().offsets.int_table = 0;
+        w.In().offsets.ia_queue = c.ia_queue;
+        if (c.store) {
+            w.h.Put<std::int32_t>(w.mgr + 0x150, 512);
+            w.h.Put<std::uint64_t>(w.mgr + 0x158, 0x9a000000);
+        }
+        unsigned reads = 0;
+        for (int i = 0; i < kLoadSettle + 5; ++i) {
+            w.m->sample(w.instance, &w.h.api);
+            const unsigned before = w.h.MemoryCalls();
+            w.m->tick(w.instance, &w.h.api);
+            reads += w.h.MemoryCalls() - before;
+        }
+        const auto lines = w.Lines("totk re:");
+        assert(reads == c.reads && lines.size() == (*c.what ? 1u : 0u));
+        char head[128];
+        std::snprintf(head, sizeof head, "totk re: IntArray queue control at 0x%llx (%s); hashes ",
+                      static_cast<unsigned long long>(w.mgr + 0x160), c.what);
+        assert(!*c.what || lines[0].first.starts_with(head));
+    }
+
     // The romfs list arriving after the save (no Mals: the names give up after 30 tries): the
     // shown save is read again, so the list comes with its unlock state.
     {

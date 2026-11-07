@@ -158,7 +158,7 @@ struct Instance {
     // holding its copy, frees it.
     std::shared_ptr<const totk::Snapshot> retired;
     bool names = false; // the item names loaded (totk.names.valid)
-    bool re = false;    // user:totk-re exists and is non-empty (A2's read-only report)
+    bool re = false;    // user:totk-re exists and is non-empty (the A2 and A3 read-only reports)
     std::shared_ptr<const totk::map::Tiles> tiles; // set once by the worker
 
     // The font atlas, built on first use by decode_font (tick thread) or load_image (asset
@@ -312,7 +312,7 @@ void Worker(Instance& in) {
             if ((names.mals || names.done) && !dumped) {
                 dumped = true;
                 totk::dump::Run(in.host, names.mals);
-                // A2's read-only report for T8c, asked for like the dump by a player's file.
+                // The A2 and A3 read-only reports, asked for like the dump by a player's file.
                 const bool re = in.host.read_romfs(in.host.userdata, "user:totk-re", 0, nullptr, 0);
                 std::scoped_lock re_lock{in.mutex};
                 in.re = re;
@@ -914,12 +914,43 @@ void Step(Instance& in, const EdenDsmodHostApi& h) {
     req == Instance::Req::go ? Go(in, h, w) : Restore(in, h, w);
 }
 
+// Pouch.Weapon/Shield/Bow.EquipIndex and Pouch.Food.Content.StockNum, the IntArrays A3's watch
+// rows filter on [S38 GMDHash_InfoList.mjs:162082,162070,162053,162059].
+constexpr std::uint32_t kReHashes[] = {0xb80e3dbb, 0x350ad90e, 0x2cf18d2b, 0x2a952a60};
+static_assert(totk::Murmur3("Pouch.Weapon.EquipIndex") == kReHashes[0] &&
+              totk::Murmur3("Pouch.Shield.EquipIndex") == kReHashes[1] &&
+              totk::Murmur3("Pouch.Bow.EquipIndex") == kReHashes[2] &&
+              totk::Murmur3("Pouch.Food.Content.StockNum") == kReHashes[3]);
+
+// A3 step 1's line for the watch sessions (host reads only): the IntArray queue's control word
+// (the watch address), the store's capacity and buffer, and the four hashes.
+void QueueReport(const EdenDsmodHostApi& h, std::uint64_t mgr, const totk::Offsets& o) {
+    const std::uint64_t store = mgr + o.ia_queue;
+    std::int32_t capacity = 0;
+    std::uint64_t buffer = 0;
+    char what[64] = "store unreadable";
+    if (totk::detail::Read(h, store + totk::kQueueCapacity, capacity) &&
+        totk::detail::Read(h, store + totk::kQueueBuffer, buffer))
+        std::snprintf(what, sizeof what, "capacity %d, buffer 0x%llx", int(capacity),
+                      static_cast<unsigned long long>(buffer));
+    totk::Say(h, EDEN_DSMOD_LOG_INFO,
+              "totk re: IntArray queue control at 0x%llx (%s); hashes Pouch.Weapon.EquipIndex "
+              "0x%08x Pouch.Shield.EquipIndex 0x%08x Pouch.Bow.EquipIndex 0x%08x "
+              "Pouch.Food.Content.StockNum 0x%08x",
+              static_cast<unsigned long long>(store + totk::kQueueControl), what,
+              unsigned(kReHashes[0]), unsigned(kReHashes[1]), unsigned(kReHashes[2]),
+              unsigned(kReHashes[3]));
+}
+
 void Travel(Instance& in, const EdenDsmodHostApi& h) {
-    // T8c's read-only report: once, the first time the gate publishes 0 (1.2.1 offsets only).
-    if (in.report && !in.reported && in.loading == 0 && in.offsets.v3a_table &&
-        in.offsets.int_table) {
+    // The read-only reports (user:totk-re): once, the first time the gate publishes 0, each only
+    // with its 1.2.1 offsets (T8c's for A2, A3 step 1's queue line).
+    if (in.report && !in.reported && in.loading == 0) {
         in.reported = true;
-        totk::travel::Report(h, in.gate_mgr, in.offsets);
+        if (in.offsets.v3a_table && in.offsets.int_table)
+            totk::travel::Report(h, in.gate_mgr, in.offsets);
+        if (in.offsets.ia_queue)
+            QueueReport(h, in.gate_mgr, in.offsets);
     }
     // the watch first, so a restore on the same tick expects the value the game just set
     if (in.moved && in.moved->ticks > 0)
