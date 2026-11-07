@@ -8,7 +8,8 @@ Fails (exit 1) when
 - an action kind is not page, module or view_reset; a module action is not in kActionNames, or
   its argument is not an integer in kActionArgs' range or "$payload"; a button action is not
   wheel_<a> for an <a> in gen_manifest.WHEEL, its enabled_bind is not ui.wheel.<a>, that derived
-  expr is not exactly "totk.ability.<a>.owned && !totk.loading", its chord is not
+  entry is not exactly one {name, expr: "totk.ability.<a>.owned && !totk.loading"} with no
+  other field (any_nonzero, select, cmp... replace expr in the runtime), its chord is not
   L+RStick(x,y), it has a field beyond kind/button/frames/enabled_bind (repeat, counter...
   re-press without the gate) or frames is not WHEEL_FRAMES, or enforce names it (PLAN.md CA7b);
 - an on_tap/on_hold/on_swipe_*/drop_action/enforce names an undefined action, a page action or
@@ -266,16 +267,19 @@ def check(manifest, literals, patterns, module_actions, size=0, data=None):
         if kind == "button":
             a = name[len("wheel_"):] if name.startswith("wheel_") else None
             gate = f"ui.wheel.{a}"
-            exprs = [d.get("expr") for d in manifest.get("derived", []) if d.get("name") == gate]
+            want = {"name": gate, "expr": f"totk.ability.{a}.owned && !totk.loading"}
+            # EvaluateDerived runs any_eq/select/hold_last_nonzero/cmp/any_*/countdown before expr
+            # and skips expr, so any field beyond name/expr replaces the gate
+            entries = [d for d in manifest.get("derived", []) if d.get("name") == gate]
             if a not in WHEEL:
                 errors.append(f"action '{name}': kind 'button' is only for wheel_<a>, <a> in "
                               f"WHEEL {sorted(WHEEL)}")
             elif action.get("enabled_bind") != gate:
                 errors.append(f"action '{name}': enabled_bind {action.get('enabled_bind')!r} is "
                               f"not '{gate}'")
-            elif exprs != [f"totk.ability.{a}.owned && !totk.loading"]:
-                errors.append(f"action '{name}': derived '{gate}' expr {exprs} is not "
-                              f"'totk.ability.{a}.owned && !totk.loading'")
+            elif entries != [want]:
+                errors.append(f"action '{name}': derived '{gate}' entries {entries} are not "
+                              f"[{want}]")
             if set(action) != WHEEL_FIELDS:
                 errors.append(f"action '{name}': fields {sorted(action)} are not "
                               f"{sorted(WHEEL_FIELDS)}")

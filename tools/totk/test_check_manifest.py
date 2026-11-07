@@ -116,8 +116,8 @@ class CheckManifestTest(unittest.TestCase):
             self.fails(lambda m: m["actions"]["ui_page_0"].update(kind=kind), "kind")
 
     def test_wheel_buttons(self):
-        """CA7b: button only for the six wheel_<a>, gated on ui.wheel.<a> whose expr is exactly
-        owned && !loading, with an L+RStick(x,y) chord."""
+        """CA7b: button only for the six wheel_<a>, gated on ui.wheel.<a>: one derived entry,
+        only name and expr "owned && !loading"; an L+RStick(x,y) chord."""
         wheel = {"kind": "button", "button": "L+RStick(0,1)", "frames": 20,
                  "enabled_bind": "ui.wheel.ascend"}
         self.fails(lambda m: m["actions"].update(wheel_travel={
@@ -135,10 +135,16 @@ class CheckManifestTest(unittest.TestCase):
         for text in ("totk.ability.ascend.owned", "totk.ability.ascend.owned || !totk.loading",
                      "!totk.loading && totk.ability.ascend.owned",
                      "totk.ability.fuse.owned && !totk.loading"):
-            self.fails(expr(text), "derived 'ui.wheel.ascend' expr")
-        self.fails(lambda m: m["derived"].remove(next(
-            d for d in m["derived"] if d["name"] == "ui.wheel.ascend")),
-            "derived 'ui.wheel.ascend' expr []")
+            self.fails(expr(text), "derived 'ui.wheel.ascend' entries")
+        gate = lambda m: next(d for d in m["derived"] if d["name"] == "ui.wheel.ascend")
+        self.fails(lambda m: m["derived"].remove(gate(m)), "derived 'ui.wheel.ascend' entries []")
+        self.fails(lambda m: m["derived"].append(dict(gate(m))),
+                   "derived 'ui.wheel.ascend' entries")
+        for extra in ({"any_nonzero": ["totk.ready"]},
+                      {"hold_last_nonzero": "totk.ability.ascend.owned"},
+                      {"cmp": "ge", "a": "totk.ready", "b": 0},
+                      {"select": "totk.ready", "then": "totk.ready", "else": "totk.ready"}):
+            self.fails(lambda m: gate(m).update(extra), "derived 'ui.wheel.ascend' entries")
         for chord in ("L+RStick(0,1)+A", "ZL+RStick(0,1)", "RStick(0,1)", "L+LStick(0,1)",
                       "L+RY+", "L+RStick(x,1)", "L", 7):
             self.fails(lambda m: m["actions"]["wheel_ascend"].update(button=chord),
