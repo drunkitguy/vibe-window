@@ -8,8 +8,9 @@ Fails (exit 1) when
 - an action kind is not page, module or view_reset; a module action is not in kActionNames, or
   its argument is not an integer in kActionArgs' range or "$payload"; a button action is not
   wheel_<a> for an <a> in gen_manifest.WHEEL, its enabled_bind is not ui.wheel.<a>, that derived
-  expr is not exactly "totk.ability.<a>.owned && !totk.loading", or its chord is not
-  L+RStick(x,y) (PLAN.md CA7b);
+  expr is not exactly "totk.ability.<a>.owned && !totk.loading", its chord is not
+  L+RStick(x,y), it has a field beyond kind/button/frames/enabled_bind (repeat, counter...
+  re-press without the gate) or frames is not WHEEL_FRAMES, or enforce names it (PLAN.md CA7b);
 - an on_tap/on_hold/on_swipe_*/drop_action/enforce names an undefined action, a page action or
   page bind an undefined page, a widget scroll an undefined region; a page id or derived name
   is defined twice;
@@ -31,7 +32,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # -I leaves the script's folder out
-from gen_manifest import WHEEL  # noqa: E402
+from gen_manifest import WHEEL, WHEEL_FRAMES  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = ROOT / "packages/TearsOfTheKingdom/dualscreen/manifest.json"
@@ -41,6 +42,7 @@ GLYPH_ADVANCE = 4  # built-in font: 3 px glyph + 1 px gap per character, times t
 KINDS = {"page", "module", "view_reset", "button"}  # button: only CA7b's wheel actions
 NUMBER = r"-?\d+(?:\.\d+)?"
 WHEEL_CHORD = re.compile(rf"L\+RStick\({NUMBER},{NUMBER}\)")
+WHEEL_FIELDS = {"kind", "button", "frames", "enabled_bind"}  # repeat, gap, counter... re-press ungated
 ACTION_REFS = ("on_tap", "on_hold", "on_swipe_left", "on_swipe_right", "on_swipe_up",
                "on_swipe_down", "drop_action")
 # Objects whose keys are names (actions, text_map values, ...), not runtime keys.
@@ -265,6 +267,12 @@ def check(manifest, literals, patterns, module_actions, size=0):
             elif exprs != [f"totk.ability.{a}.owned && !totk.loading"]:
                 errors.append(f"action '{name}': derived '{gate}' expr {exprs} is not "
                               f"'totk.ability.{a}.owned && !totk.loading'")
+            if set(action) != WHEEL_FIELDS:
+                errors.append(f"action '{name}': fields {sorted(action)} are not "
+                              f"{sorted(WHEEL_FIELDS)}")
+            if action.get("frames") != WHEEL_FRAMES:
+                errors.append(f"action '{name}': frames {action.get('frames')!r} is not "
+                              f"{WHEEL_FRAMES}")
             if not (isinstance(action.get("button"), str) and
                     WHEEL_CHORD.fullmatch(action["button"])):
                 errors.append(f"action '{name}': chord {action.get('button')!r} is not "
@@ -274,6 +282,9 @@ def check(manifest, literals, patterns, module_actions, size=0):
     for i, entry in enumerate(manifest.get("enforce", [])):
         if entry.get("action") not in actions:
             errors.append(f"enforce[{i}]: action '{entry.get('action')}' is not defined")
+        elif actions[entry["action"]].get("kind") == "button":
+            # enforce re-runs the action every every_ms with no tap, past the one-shot gate check
+            errors.append(f"enforce[{i}]: action '{entry['action']}' is a wheel button")
     for i, bind in enumerate(manifest.get("page_binds", [])):
         for branch in ("when_equal", "when_not_equal"):
             target = bind.get(branch)

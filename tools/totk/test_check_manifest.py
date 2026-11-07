@@ -122,6 +122,14 @@ class CheckManifestTest(unittest.TestCase):
                       "L+RY+", "L+RStick(x,1)", "L", 7):
             self.fails(lambda m: m["actions"]["wheel_ascend"].update(button=chord),
                        "is not L+RStick(x,y)")
+        for field in ("repeat", "gap", "counter", "target", "delta", "button_neg", "hold_map"):
+            self.fails(lambda m: m["actions"]["wheel_ascend"].update({field: 1000}),
+                       "are not ['button', 'enabled_bind', 'frames', 'kind']")
+        for frames in (1000000, 0, "20", None):
+            self.fails(lambda m: m["actions"]["wheel_ascend"].update(frames=frames),
+                       f"frames {frames!r} is not {gen_manifest.WHEEL_FRAMES}")
+        self.fails(lambda m: m.setdefault("enforce", []).append({"action": "wheel_ascend"}),
+                   "enforce[0]: action 'wheel_ascend' is a wheel button")
         for chord in ("L+RStick(0.71,-0.71)", "L+RStick(-1,0)"):
             m = copy.deepcopy(self.manifest)
             m["actions"]["wheel_ascend"]["button"] = chord
