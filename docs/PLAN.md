@@ -1998,12 +1998,12 @@ Once A1 and A2 are in CI, run §A3 "T8c additions" (Next steps 11) in their own 
 ### T8d (user, PC, after T3c is in CI): GameData check and ability scan
 
 1. Live inventory (T3c), PowerShell as §T8c:
-   (a) start as T8c step 3 and load a save that has at least one material and an equipped weapon,
-       bow and shield; on the companion's home page write down one material's count (Materials
-       tab) and the weapon, bow and shield gear cards;
+   (a) start as T8c step 3 and load a save that has at least one material, two weapons, and an
+       equipped weapon, bow and shield; on the companion's home page write down one material's
+       count (Materials tab) and the weapon, bow and shield gear cards;
    (b) in the game pick up one more of that material, then equip another weapon;
    (c) within 5 s (the live read runs every 2 s) write down that material's count, the three gear
-       cards and the source line ("Live" or "Save") on the home page;
+       cards and the source line ("Live" or "From last save") on the home page;
    (d) quit, then `Select-String -Path "$d\log\eden_log.txt" -Pattern 'totk live gamedata' |
        ForEach-Object Line | Set-Content -Encoding utf8 totk-live.txt`, and send `totk-live.txt`
        and your notes from (a) and (c).

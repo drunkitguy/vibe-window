@@ -26,7 +26,7 @@
 namespace totk::live {
 
 enum class Result : std::uint8_t {
-    off,          // a chain or table offset empty: no host call
+    off,          // a table offset empty: no host call (ReadLoading refuses empty chains)
     gate_unknown, // ReadLoading -1
     loading,      // ReadLoading 1
     index,        // the index self-check failed (`why`: "<key> <got>")
@@ -109,7 +109,7 @@ inline bool Array(const EdenDsmodHostApi& h, std::uint64_t values, std::uint32_t
     // real 1.2.1 lengths are UNKNOWN until T8d's `ok lengths=` line.
     out.assign(std::min<std::size_t>(len, kMaxItems) * l.elem, 0);
     return out.empty() ||
-           (data >= kMinPointer && data % std::min<std::uint64_t>(l.elem, 8) == 0 &&
+           (data >= kMinPointer && data % 4 == 0 &&
             dsmod_sdk::ReadGuest<dsmod_sdk::MissingIsMapped::Reject>(h, data, out.data(),
                                                                      out.size()));
 }
@@ -194,8 +194,7 @@ inline Result Pass(const EdenDsmodHostApi& h, const Offsets& o, std::uint64_t mg
 // Content.Name lengths), or why not. `save` (may be null) gives the effects.
 inline Result ReadGameData(const EdenDsmodHostApi& h, const Offsets& o, const GameData* save,
                            std::vector<std::uint8_t>& out, std::string& why) {
-    if (!o.gmd_mgr.n || !o.gmd_holder.n || !o.gmd_count.n || !o.gmd_loading.n || !o.int_table ||
-        !o.s64a_table)
+    if (!o.int_table || !o.s64a_table)
         return Result::off;
     Unknown unknown;
     std::uint32_t n = 0;

@@ -120,9 +120,9 @@ void MoveValues(Host& h, const Gmd& g, const totk::Offsets& o, std::uint64_t to)
     h.Put(slot, to);
 }
 
-// A module over `h` with the fixture save shown; without `names` read_romfs is off (the worker
-// only polls), with it the romfs holds the Mals archive and PutNames adds PouchContent.msbt
-// naming Item_Fruit_A.
+// A module over `h` with the fixture save shown (`saved` false: no progress.sav); without `names`
+// read_romfs is off (the worker only polls), with it the romfs holds the Mals archive and PutNames
+// adds PouchContent.msbt naming Item_Fruit_A.
 struct Module {
     Host h;
     SaveDir d;
@@ -134,7 +134,7 @@ struct Module {
     Gmd g;
 
     explicit Module(bool v121, const GmdKeys* keys = nullptr, const totk::Offsets& lay = kO,
-                    bool names = false) {
+                    bool names = false, bool saved = true) {
         if (v121)
             std::memcpy(h.api.build_id, totk::kBuild121Bytes.data(), 32);
         if (names) {
@@ -145,7 +145,8 @@ struct Module {
         if (keys)
             g = PutGameData(h, *keys, lay);
         d.Put("slot_01/caption.sav", Caption(2024, 1, 2, 8, 0, false));
-        d.Put("slot_01/progress.sav", FixtureSave().Build());
+        if (saved)
+            d.Put("slot_01/progress.sav", FixtureSave().Build());
         instance = m->create(&h.api, "{}");
         assert(instance);
         eden_dsmod_get_save_extensions(EDEN_DSMOD_SAVE_EXT_VERSION, EDEN_DSMOD_SAVE_EXT_HASH)
@@ -387,15 +388,30 @@ int main() {
         const auto saved = totk::BuildSnapshot(*totk::GameData::Parse(b.Build()));
         assert(got.r == Result::ok && got.s->tabs[4].size() == 400 && saved.tabs[4].size() == 400 &&
                got.s->tabs[4][399].id == "Item_399" && got.s->tabs[4][399].value == 399);
+        assert(got.why == "lengths=3,1,1,2,2,401,1,1,1"); // the length before the 400 cut
+    }
+    // A save with fewer Weapon effects than names (its names the live ones): no effect past them.
+    {
+        totk::SaveBuilder b;
+        b.String64Array("Pouch.Weapon.Content.Name", {"Weapon_Sword_001", "", "Weapon_Spear_002"})
+            .EnumArray("Pouch.Weapon.Content.Effect.Type", {"None"});
+        const auto short_save = totk::GameData::Parse(b.Build());
+        Host h;
+        PutGameData(h, keys);
+        const Got got = Read(h, &*short_save);
+        assert(got.r == Result::ok && got.s->tabs[0].size() == 2 && got.s->tabs[0][0].effect &&
+               !got.s->tabs[0][1].effect); // [1]: the save's third weapon (the empty name skipped)
     }
     // Empty offsets with a fake GameDataMgr in memory: no host call.
     {
         Host h;
         PutGameData(h, keys);
-        totk::Offsets no_table = kO;
-        no_table.s64a_table = 0;
+        totk::Offsets no_text = kO, no_int = kO;
+        no_text.s64a_table = 0;
+        no_int.int_table = 0;
         assert(Read(h, &Save(), totk::Offsets{}).r == Result::off &&
-               Read(h, &Save(), no_table).r == Result::off && h.MemoryCalls() == 0);
+               Read(h, &Save(), no_text).r == Result::off &&
+               Read(h, &Save(), no_int).r == Result::off && h.MemoryCalls() == 0);
     }
     // A torn second pass (the last read: KeyItem's LifeRecover data).
     {
@@ -507,6 +523,11 @@ int main() {
         w.h.Put<std::uint8_t>(w.g.flags, 0);
         w.Poll();
         assert(w.Source() == 2 && w.h.texts.at("totk.inv.sel.name") == "Apple");
+    }
+    // No save shown yet: no live read.
+    {
+        Module w(true, &keys, kO, false, false);
+        assert(w.WorkerReads() == 0 && w.Lines().empty());
     }
     // A failed index check: the save, one line, and no more reads this session.
     {
