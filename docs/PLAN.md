@@ -378,7 +378,7 @@ Doable in this Linux container now (no game, no Windows, no Thor):
 | H1a | Eden Duo: native modules on Windows (loader, harness compile fix, tests), as patches | - | done: `host/eden-duo/0001-0003` + `host/eden-duo-companions/0001`; loader Catch2 tests pass standalone; full eden-duo build blocked (proxy 403 on CPM fmt download), real-Windows checks in H1c; critic SATISFIED round 3 |
 | T1 | TotK package skeleton: build gate, fail-closed reader, tests; Linux `.so` and Windows DLL; `.dsmod.zip` | H1a (builder patch) | done: `2c482b6` (+ plan `911aed8`); gcc/clang/MinGW builds and ctest pass (MinGW under wine), single export, package + wine probe pass; critic SATISFIED round 3 |
 | H1b | eden-cli composite layout: `--window-rect`, `--aux-rect`, borderless, aux not focusable | H1a | done: `afe952e`, patch 0004 adds `--window-rect`/`--aux-rect` (borderless, hidden until placed), non-focusable aux, 640x360 main floor, 32767 bound, ledger rows; parser tests pass natively and under wine; SDL and harness code compile-checked only in H1c; critic SATISFIED round 3 |
-| H1d | eden-cli uses the Eden Qt config: `qt-config.ini`, then the game's `custom/<program id>.ini` (use_global), read-only (§H1d) | H1b | done: patch `0013`; `qt_config_test` passes natively and under wine (own config, global, per-game, no write or create, absent, empty and garbage files, `[UI]` external content dirs, `DisabledAddOns` replaced, `[UI]` screenshot dir); `yuzu.cpp` syntax-checked only, run on the PC in H1c check 6; `-c` keeps eden-cli's own config and refuses Eden Qt's files (tested); accounts re-read from Eden Qt's NAND as Eden Qt does (Qt config only); data dirs follow Eden Qt (§H1d) |
+| H1d | eden-cli uses the Eden Qt config: `qt-config.ini`, then the game's `custom/<program id>.ini` (use_global), read-only (§H1d) | H1b | done: patch `0013`; `qt_config_test` passes natively and under wine (own config, global, per-game, no write or create, absent, empty and garbage files, `[UI]` external content dirs, `DisabledAddOns` replaced, `[UI]` screenshot dir); `yuzu.cpp` and `dsmod_harness.cpp` syntax-checked only (g++ and MinGW), run on the PC in H1c check 6; the Qt read sits in the Duo hook `DSModHarness::ApplyEdenQtConfig`, `.upstream/DIVERGENCES.md` row 30; `-c` keeps eden-cli's own config and refuses Eden Qt's files (tested); accounts re-read from Eden Qt's NAND as Eden Qt does (Qt config only); data dirs follow Eden Qt (§H1d) |
 | T2a | Retarget the skeleton to 1.2.0 (`kTargetBuild`, data file name, tests) | T1 | done: `d175a18`; 1.2.0 build id and data file; critic SATISFIED (with T3s) |
 | T3a'.1 | Eden Duo patch 0009 (zstd + `ZsDic` in the runtime's romfs reader, §T3a' A) + icon keys as `romfs:` paths (§T3a' B2) | T4 | done: 64a646e, critic SATISFIED round 1, Windows CI run 41379288233 green (198 cases); real romfs untested (T8a) |
 | T3a'.2 | Item names from MSBT (B1) + the one-shot texture dump for T8a (B5) | T3a'.1 | done: 2bdcb00 (patches 0010-0011), critic SATISFIED round 4, Eden CI 41396378620 + companion CI green; real romfs untested (T8a) |
@@ -623,7 +623,8 @@ failed load. On the user's Windows build of the patched fork:
 4. Confirm the call-site minimums: `--window-rect 0,0,639,360` and `0,0,640,359` are refused with
    a message, `0,0,640,360` starts; `--aux-rect 0,0,0,1` is refused, `0,0,1,1` starts.
 5. Run `tools/duo/duo-touched-ledger.sh --check` in the patched tree. Must pass.
-6. Eden Qt config (H1d): start TotK with the H2 command line (`--aux-window --window-rect
+6. Eden Qt config (H1d): close Eden Qt first (a `qt-config.ini` it is saving can be read
+   half-written, §H1d Limits), then start TotK with the H2 command line (`--aux-window --window-rect
    0,0,1920,1080 --aux-rect 0,1080,1240,1080 -g "<TotK nsp>"`). `eden_log.txt` must hold
    `Duo config: qt-config.ini + custom/0100F2C0115B6000.ini` (or `Duo config: qt-config.ini` when
    Eden Qt has no per-game settings for TotK), and the graphics API (Vulkan or OpenGL, as set in
@@ -714,7 +715,10 @@ name [S1 `src/core/launch_params.cpp:165-167`, `src/yuzu_cmd/dsmod_harness.cpp:8
 loads no input profile file, so the controls are Eden Qt's) (Eden Qt parses the same flags [S1 `src/yuzu/main_window.cpp:527`]
 but applies only `-g`, `-f` and the applet launches;
 `ApplyLaunchParams` [S1 `src/core/launch_params.cpp:155-181`] is eden-cli's only, its one caller is
-`yuzu_cmd/yuzu.cpp`), then `Initialize` and the renderer pick. A file without `[Controls]` (Eden Qt
+`yuzu_cmd/yuzu.cpp`, in 0013 `ApplyEdenQtConfig`), then `Initialize` and the renderer pick. The
+reads, the log line, the account re-read, `-u` and `ApplyLaunchParams` sit in one Duo hook,
+`DSModHarness::ApplyEdenQtConfig` in `dsmod_harness.cpp`; `yuzu.cpp` keeps the three moved
+filesystem lines and the call, and `.upstream/DIVERGENCES.md` row 30 tells a sync to keep both. A file without `[Controls]` (Eden Qt
 always writes it, global and per-game [S1 `config.cpp:515-535,546-550`]) counts as unreadable. One
 log line: `Duo config: qt-config.ini + custom/0100F2C0115B6000.ini`, `Duo config: qt-config.ini`
 (no per-game file), `Duo config: eden-cli's own config only (no readable qt-config.ini)` or `Duo
@@ -740,7 +744,11 @@ there to the FrontendManual content provider [S1 `src/qt_common/game_list/worker
 `src/android/app/src/main/jni/native.cpp:252`]); 0013 reads the setting but eden-cli scans no game
 dir, so an update kept only there runs in Eden Qt and not in eden-cli (another game version and
 build id, so the companion's build gate stays shut; H1c check 6 catches it, the fix is to install
-the update to Eden Qt's NAND); program id 0 (homebrew) gets no per-game file. Check on the PC:
+the update to Eden Qt's NAND); program id 0 (homebrew) gets no per-game file; a `qt-config.ini`
+that Eden Qt is saving at that moment can be read half-written: `WriteToIni` opens it with `wb`
+(truncates) and then writes [S1 `src/frontend_common/config.cpp:64,80-82`], a cut file that still
+holds `[Controls]` passes the check, and the missing sections read as defaults with no log line, so
+close Eden Qt before starting eden-cli. Check on the PC:
 §H1c check 6.
 
 ### H2 (host: apollo2-vibe window-host, verify first)
