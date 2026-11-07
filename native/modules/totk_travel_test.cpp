@@ -375,8 +375,9 @@ int main() {
                n.logs == std::vector<std::string>{
                              "totk travel: LocationMsg/Location.msbt missing (no Mals archive)"});
     }
-    // Trust boundary: a 2-element Trans, a NaN element, an out-of-bounds x, a string element and a
-    // 4-element Trans give no Dest and one "Trans dropped" line for the file; an entry without
+    // Trust boundary: a 2-element Trans, a NaN element, an out-of-bounds x, a string element, a
+    // 4-element Trans and every Trans of an entry with a bad stem (a newline and a fake vec3, 65
+    // characters, empty) give no Dest and one "Trans dropped" line for the file; an entry without
     // Trans or without LocationName gives no Dest and is not counted.
     {
         Host h;
@@ -385,7 +386,11 @@ int main() {
                        {{"Shrine", Arr({Place("Dungeon001", {Arr({Num(1), Num(2)}), V(1, kNaN, 3),
                                                              V(6001, 0, 0), V(5, 6, 7)}),
                                         Dict({{"LocationName", Str("Work/Location/D2.gyml")}}),
-                                        Dict({{"Trans", Arr({V(8, 8, 8)})}})})}})));
+                                        Dict({{"Trans", Arr({V(8, 8, 8)})}}),
+                                        Place("D3\nx=1 y=2 z=3", {V(8, 8, 8), V(9, 9, 9)}),
+                                        Place(std::string(65, 'L'), {V(8, 8, 8)}),
+                                        Place(std::string(64, 'L'), {V(4, 4, 4)}),
+                                        Place("", {V(8, 8, 8)})})}})));
         h.PutRomfs(
             totk::travel::kFiles[1],
             BymlWriter{}.Write(Dict(
@@ -393,9 +398,9 @@ int main() {
                                                              Arr({Num(1), Num(2), Num(3), Num(4)}),
                                                              V(1, kInf, 3)})})}})));
         const auto list = totk::travel::Load(h.api, 0);
-        assert(list.size() == 1 && list[0].x == 5);
+        assert(list.size() == 2 && list[0].x == 5 && list[1].label == std::string(64, 'L'));
         assert(h.logs[0] ==
-                   std::string("totk travel: ") + totk::travel::kFiles[0] + ": 3 Trans dropped" &&
+                   std::string("totk travel: ") + totk::travel::kFiles[0] + ": 7 Trans dropped" &&
                h.logs[1] ==
                    std::string("totk travel: ") + totk::travel::kFiles[1] + ": 3 Trans dropped");
     }
@@ -590,23 +595,6 @@ int main() {
                          "back, place it again by hand at the old x/z";
         const auto moved = w.Lines(kMovedFrom);
         assert(line.size() > 200 && moved.size() == 1 && moved[0].first == line);
-    }
-
-    // A 300-character stem (a romfs mod) is cut to 64 in the "moved from" line, so the line
-    // still ends with the destination and the old x/z text.
-    {
-        World w;
-        w.Settle();
-        auto next = std::make_shared<totk::Snapshot>(*w.In().snapshot);
-        next->travel[0].label = std::string(300, 'L');
-        Replace(w.In(), std::move(next));
-        assert(w.Go(0) && w.h.batch_calls == 1);
-        const auto moved = w.Lines(kMovedFrom);
-        assert(moved.size() == 1 &&
-               moved[0].first == kMovedFrom + std::string(totk::travel::Format(kOld).s) + " to " +
-                                     std::string(64, 'L') + " " + totk::travel::Format(kDest).s +
-                                     "; if Eden closes before Put back, place it again by hand "
-                                     "at the old x/z");
     }
 
     // The vec3 chain: a later move from the spot the companion set prints that spot exactly as
@@ -964,6 +952,22 @@ int main() {
         w.Run(2);
         assert(w.h.batch_calls == 1 && !w.In().moved && w.In().req == Instance::Req::none &&
                w.Msg() == "The game did not keep the move (not applied)");
+    }
+    {
+        // Restore queued in the watch, and the game's value held on the tick of the restore's
+        // second read: the watch takes it first, so the batch expects it ("back at", no "not
+        // where").
+        World w;
+        w.Settle();
+        assert(w.Go(0));
+        const Bits third = ToBits(100, 48.5f, -200);
+        w.h.Put(w.p, third);
+        assert(w.Act("totk.travel.restore"));
+        w.Run(2);
+        assert(w.h.batch_calls == 2 && !w.In().moved);
+        AssertBatch(w, w.h.batches[1], w.base, w.p, third, kOld);
+        assert(w.Lines("totk travel: medallion back at ").size() == 1 &&
+               w.Lines("totk travel: medallion not where").empty());
     }
     {
         // A third value on one tick only leaves the destination; held two ticks it becomes the

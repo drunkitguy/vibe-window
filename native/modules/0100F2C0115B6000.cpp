@@ -821,9 +821,8 @@ void Go(Instance& in, const EdenDsmodHostApi& h, const totk::travel::Walked& w) 
     const Bits dest = totk::travel::ToBits(d->x, d->y + totk::travel::kArrivalHover, d->z);
     if (!totk::travel::InWorld(dest))
         return Msg(in, "Destination out of the world");
-    // shortcut: label cut at 64 in the log, real stems are <= 16; upgrade if a mod needs longer
     totk::Say(h, EDEN_DSMOD_LOG_ERROR,
-              "totk travel: medallion moved from %s to %.64s %s; if Eden closes before Put "
+              "totk travel: medallion moved from %s to %s %s; if Eden closes before Put "
               "back, place it again by hand at the old x/z",
               totk::travel::Format(w.bits).s, d->label.c_str(), totk::travel::Format(dest).s);
     if (!totk::travel::SendBatch(in.write, w, w.bits, dest)) {
@@ -922,6 +921,7 @@ void Travel(Instance& in, const EdenDsmodHostApi& h) {
         in.reported = true;
         totk::travel::Report(h, in.gate_mgr, in.offsets);
     }
+    // the watch first, so a restore on the same tick expects the value the game just set
     if (in.moved && in.moved->ticks > 0)
         WatchMove(in, h);
     if (in.req != Instance::Req::none)

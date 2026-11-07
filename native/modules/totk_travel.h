@@ -52,9 +52,10 @@ struct Dest {
 };
 
 // The romfs part of the list, once per session: one Dest per Trans element that is exactly three
-// numbers inside the world (trust boundary: a romfs mod may replace the file, and the value
-// reaches GameData and the save). Fails soft: a missing or unparsable file or msbt gives no
-// entries (or labels for names) and one line; never an error page.
+// numbers inside the world, of an entry whose stem is 1-64 of [A-Za-z0-9_] (trust boundary: a
+// romfs mod may replace the file, and the value reaches GameData, the save and the log). Fails
+// soft: a missing or unparsable file or msbt gives no entries (or labels for names) and one line;
+// never an error page.
 inline std::vector<Dest> Load(const EdenDsmodHostApi& h, int mals) {
     std::vector<Dest> out;
     for (int f = 0; f < 2; ++f) {
@@ -80,10 +81,16 @@ inline std::vector<Dest> Load(const EdenDsmodHostApi& h, int mals) {
                     continue;
                 std::string_view stem = path->substr(path->find_last_of('/') + 1);
                 stem = stem.substr(0, stem.find('.'));
+                // The stem keys the save and is printed in the "moved from" line, which the
+                // crash recovery parses: a bad stem drops the entry's Trans.
+                const bool named =
+                    !stem.empty() && stem.size() <= 64 &&
+                    stem.find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklm"
+                                           "nopqrstuvwxyz0123456789_") == std::string_view::npos;
                 for (std::size_t t = 0; trans->At(t); ++t) {
                     const byml::Node& pos = *trans->At(t);
                     float v[3]{};
-                    bool ok = pos.type == byml::Node::Type::Array && pos.Size() == 3;
+                    bool ok = named && pos.type == byml::Node::Type::Array && pos.Size() == 3;
                     for (int i = 0; ok && i < 3; ++i) {
                         const auto n = pos.array[i].Number();
                         ok = n.has_value();
