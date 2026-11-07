@@ -20,8 +20,7 @@ INFO = ("Process:     0x51 (Game)\nProgram Id:  0x0100f2c0115b6000\nLayout:\n"
         "  0x0080000000 - 0x0080003fff rtld\n  0x0080004000 - 0x0085ffffff main\n"
         "  0x0086000000 - 0x0086ffffff sdk\n")
 ADDR, HASH = 0x9A100160, 0xB80E3DBB
-# monitor info, then the target read that must answer before any Z2
-START = [("qRcmd," + b"info".hex(), INFO.encode().hex()), ("m%x,4" % ADDR, "00000000")]
+START = [("qRcmd," + b"info".hex(), INFO.encode().hex())]
 
 
 def le(v):
@@ -145,15 +144,14 @@ class RspWatch(unittest.TestCase):
                          ["no match after 2 stops"])
 
     def test_frame_walk_stops_at_16(self):
-        # a self-referencing x29 chain ([fp] == fp) ends at the cap; lr == main base is main+0;
-        # an 8-byte watch reads 8 bytes first
-        z = "%x,8" % ADDR
-        script = [START[0], ("m" + z, "00" * 8), ("Z2," + z, "OK"),
+        # a self-referencing x29 chain ([fp] == fp) ends at the cap; lr == main base is main+0
+        z = "%x,4" % ADDR
+        script = [*START, ("Z2," + z, "OK"),
                   ("c", "T05thread:5a;"), ("g", g_reply([HASH], MAIN + 0x10, MAIN, 0x10E000))]
         script += [("m10e000,10", le(0x10E000) + le(MAIN + 0x40))] * 16
         script += [("z2," + z, "OK"), ("c", None)]
         stub = FakeStub(script)
-        code, out = run(["127.0.0.1:%d" % stub.port, hex(ADDR), "8", hex(HASH)])
+        code, out = run(["127.0.0.1:%d" % stub.port, hex(ADDR), "4", hex(HASH)])
         stub.join(5)
         self.assertEqual((code, stub.got, stub.closed), (0, [p[0] for p in script], True))
         self.assertEqual(out.splitlines()[1], "match stop 1: pc=main+10 lr=main+0 hash in x0")
@@ -168,7 +166,8 @@ class RspWatch(unittest.TestCase):
             # one module: no main (Eden's qOffsets would take it as main; TotK never has one)
             ([("qRcmd," + b"info".hex(),
                b"Modules:\n  0x0080000000 - 0x0080003fff rtld\n".hex())], []),
-            ([*START, ("Z2," + z, "E01")], []),  # Eden refuses the range: nothing armed
+            # Eden refuses an unmapped range itself [S1 gdbstub.cpp:311-314]: nothing armed
+            ([*START, ("Z2," + z, "E01")], []),
             # an error past the Z2 (a refused z2): the best-effort z2 and c still go out; the
             # walk stops at a misaligned fp without reading it
             ([*START, ("Z2," + z, "OK"), ("c", "T05thread:5a;"), g,
@@ -184,8 +183,6 @@ class RspWatch(unittest.TestCase):
             # a skip stop whose re-arm is refused: no c without a watchpoint; best-effort z2, c
             ([*START, ("Z2," + z, "OK"), ("c", "T05thread:5a;"), skip, ("z2," + z, "OK"),
               ("s", "T05thread:5a;"), ("Z2," + z, "E01"), ("z2," + z, "E01"), ("c", None)], []),
-            # an unmapped (stale or mistyped) <addr>: E01 to the read, no Z2 (last: checked below)
-            ([START[0], ("m%x,4" % ADDR, "E01")], []),
         ):
             stub = FakeStub(script)
             code, out = run(["127.0.0.1:%d" % stub.port, hex(ADDR), "4", hex(HASH)])
@@ -194,7 +191,6 @@ class RspWatch(unittest.TestCase):
             self.assertIn("; if the game stays frozen, run the go line;", out.splitlines()[-1])
             lines = [s for s in out.splitlines() if s.startswith(("match", "frame"))]
             self.assertEqual(lines, want)
-        self.assertIn("error: <addr> is not mapped; read the new totk re: line;", out)
 
     def test_nack_and_dead_stub(self):
         # a nack (Eden's answer to a bad checksum) fails the packet

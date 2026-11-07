@@ -2679,11 +2679,9 @@ queue their writes go through (step 1 says why not the arrays), then call them f
      launch; on timeout print `no gdbstub at <host:port> after 60 s; is --debug set?` and exit 1),
      send `c`, close the socket while the game runs (no reply comes until the next stop), for the
      boot suspension (G1). `rsp_watch.py <host:port> <addr> <len> <hash>`: connect, read the main
-     base (`monitor info`), read `<addr>`/`<len>` (`m`; on `E01` exit 1 with `<addr> is not mapped;
-     read the new totk re: line` and no `Z2`, because Eden's `Z2` on an unmapped page hits
-     `ASSERT(false && "Attempted to mark unmapped pages as debug")` [S1 src/core/memory.cpp:418],
-     which with `use_debug_asserts` on breaks into the debugger and kills eden-cli), set one write
-     watchpoint (`Z2,<addr>,<len>`), `c`. At each stop: if one
+     base (`monitor info`), set one write watchpoint (`Z2,<addr>,<len>`; Eden answers `E01` for
+     an unmapped range [S1 src/core/debugger/gdbstub.cpp:311-314]: exit 1 with the error message,
+     no watchpoint armed), `c`. At each stop: if one
      of x0-x15 holds `<hash>` in its low 32 bits, print pc, lr, x0-x7 and 16 frames of the x29
      chain as `main+X` and finish; else print `skip pc=main+X lr=main+Y`, remove the watchpoint,
      single-step, set it again, `c`. It finishes after the match or 200 stops: remove the
