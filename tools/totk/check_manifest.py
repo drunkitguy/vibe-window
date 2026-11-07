@@ -199,9 +199,14 @@ def expr_names(text):
     return names
 
 
-def check(manifest, literals, patterns, module_actions, size=0):
-    """Returns (errors, warnings)."""
+def check(manifest, literals, patterns, module_actions, size=0, data=None):
+    """Returns (errors, warnings). data: the parsed dualscreen/data.json."""
     errors, warnings = [], []
+    # data.json's points and derived merge into the same snapshot (mod_manifest.cpp ParsePoints,
+    # ParseDerived), past every rule below.
+    # shortcut: data.json must stay {}, run these rules over it when a packet commits data there.
+    if data is not None and data != {}:
+        errors.append(f"data.json is {json.dumps(data)[:60]}, not {{}}")
     if size > MAX_BYTES:
         errors.append(f"manifest is {size} bytes, over {MAX_BYTES}")
     canvas_w, canvas_h = (manifest.get(k) if is_number(manifest.get(k)) else 0
@@ -363,6 +368,11 @@ def check(manifest, literals, patterns, module_actions, size=0):
     walk_gates({k: v for k, v in manifest.items() if k != "derived"}, "manifest")
     for d in derived:
         where = f"derived '{d.get('name')}'"
+        # EvaluateDerived runs after the module publishes and overwrites by name, so a derived
+        # totk.loading or build_match would replace the gate inputs it shadows.
+        name = d.get("name")
+        if isinstance(name, str) and (name.startswith("totk.") or name in RUNTIME_KEYS):
+            errors.append(f"{where}: name shadows a module or runtime key")
         if "cmp" in d:
             if d["cmp"] not in CMP_OPS:
                 errors.append(f"{where}: cmp {d['cmp']!r} is not one of {sorted(CMP_OPS)}")
@@ -408,8 +418,9 @@ def main(argv=None):
     args = parser.parse_args(argv)
     raw = Path(args.manifest).read_bytes()
     patterns, module_actions = parse_keys_header(Path(args.keys).read_text())
+    data = json.loads(Path(args.manifest).with_name("data.json").read_bytes())
     errors, warnings = check(json.loads(raw), runtime_literals(args.eden), patterns,
-                             module_actions, len(raw))
+                             module_actions, len(raw), data)
     for w in warnings:
         print(f"check_manifest: warning: {w}", file=sys.stderr)
     for e in errors:

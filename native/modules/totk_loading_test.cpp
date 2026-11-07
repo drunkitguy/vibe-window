@@ -87,6 +87,7 @@ int main() {
         for (int n = 1; n < kLoadSettle; ++n)
             assert(f.Sample() == 1);
         assert(f.Sample() == 0 && f.Sample() == 0);
+        assert(static_cast<Instance*>(f.instance)->load_clear == kLoadSettle); // capped
         assert(f.Lines() == std::vector<std::string>{kOn});
         for (const bool unknown : {false, true}) {
             if (unknown)

@@ -58,6 +58,27 @@ class CheckManifestTest(unittest.TestCase):
 
     def test_committed_manifest_passes(self):
         self.assertEqual(self.errors(self.manifest, len(self.raw)), [])
+        data = json.loads(check_manifest.MANIFEST.with_name("data.json").read_bytes())
+        self.assertEqual(check_manifest.check(self.manifest, self.literals, self.patterns,
+                                              self.actions, data=data)[0], [])
+
+    def test_shadowing(self):
+        for name in ("totk.loading", "totk.ability.ascend.owned", "build_match"):
+            self.fails(lambda m: m["derived"].append({"name": name, "expr": "totk.ready"}),
+                       f"derived '{name}': name shadows")
+        errors = check_manifest.check(self.manifest, self.literals, self.patterns, self.actions,
+                                      data={"derived": [{"name": "totk.loading", "expr": "0"}]})[0]
+        self.assertTrue(any(e.startswith("data.json is") for e in errors), errors)
+        with tempfile.TemporaryDirectory() as d:  # main reads data.json beside the manifest
+            mods = Path(d) / "src/core/mods"
+            mods.mkdir(parents=True)
+            (mods / "stand_in.cpp").write_text(
+                "".join(f'"{k}";\n' for k in sorted(all_keys(self.manifest, set()))))
+            (Path(d) / "manifest.json").write_bytes(self.raw)
+            argv = ["--eden", d, "--manifest", str(Path(d) / "manifest.json")]
+            for data, code in (("{}", 0), ('{"points": []}', 1)):
+                (Path(d) / "data.json").write_text(data)
+                self.assertEqual(check_manifest.main(argv), code)
 
     @unittest.skipUnless(os.environ.get("EDEN_SOURCE_ROOT"), "EDEN_SOURCE_ROOT not set")
     def test_committed_manifest_passes_real_runtime(self):
