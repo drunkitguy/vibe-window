@@ -2679,7 +2679,11 @@ queue their writes go through (step 1 says why not the arrays), then call them f
      launch; on timeout print `no gdbstub at <host:port> after 60 s; is --debug set?` and exit 1),
      send `c`, close the socket while the game runs (no reply comes until the next stop), for the
      boot suspension (G1). `rsp_watch.py <host:port> <addr> <len> <hash>`: connect, read the main
-     base (`monitor info`), set one write watchpoint (`Z2,<addr>,<len>`), `c`. At each stop: if one
+     base (`monitor info`), read `<addr>`/`<len>` (`m`; on `E01` exit 1 with `<addr> is not mapped;
+     read the new totk re: line` and no `Z2`, because Eden's `Z2` on an unmapped page hits
+     `ASSERT(false && "Attempted to mark unmapped pages as debug")` [S1 src/core/memory.cpp:418],
+     which with `use_debug_asserts` on breaks into the debugger and kills eden-cli), set one write
+     watchpoint (`Z2,<addr>,<len>`), `c`. At each stop: if one
      of x0-x15 holds `<hash>` in its low 32 bits, print pc, lr, x0-x7 and 16 frames of the x29
      chain as `main+X` and finish; else print `skip pc=main+X lr=main+Y`, remove the watchpoint,
      single-step, set it again, `c`. It finishes after the match or 200 stops: remove the
@@ -2753,7 +2757,10 @@ queue their writes go through (step 1 says why not the arrays), then call them f
    stay refused and the coder says so in the report. A row that ended with 200 `skip` lines at
    one pc is a tool failure (the exclusive-store shortcut in step 1), not a row without a match:
    it does not count toward this decision; the coder makes the skip upgrade named there and the
-   user reruns that row. The one other known route is the quick-menu
+   user reruns that row. One pc alone does not prove an exclusive store: every IntArray push
+   shares the push code, so 200 plain pushes before the target also give 200 skips at one pc.
+   So the rule applies once: after the skip upgrade, a rerun row that again ends with 200 `skip`
+   lines counts as a row without a match. The one other known route is the quick-menu
    input with readback (hold the D-pad, flick the stick, read `EquipIndex` back; Thor-tested on
    1.4.3 for weapons, not bows or food [S28 BOTTOM_SCREEN §5 H]); it is not what D3 was told, so
    it needs a new user decision. Otherwise the coder sends two files: `data.json` for the installed package,

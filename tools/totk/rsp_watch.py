@@ -6,7 +6,8 @@ py -3 rsp_watch.py <host:port> go
     Connect (retrying for 60 s: the stub may not listen yet right after the launch), send c and
     close while the game runs: ends the boot suspension of a --debug launch.
 py -3 rsp_watch.py <host:port> <addr> <len> <hash>
-    Read the main base (monitor info), set one write watchpoint on <addr>/<len> and continue.
+    Read the main base (monitor info), check that <addr>/<len> reads (m), set one write
+    watchpoint on it and continue.
     At each stop, if one of x0-x15 holds <hash> in its low 32 bits, print pc, lr, x0-x7 and 16
     frames of the x29 chain as main+X and finish; else print a skip line, step past the store
     with the watchpoint removed, set it again and continue. Finishes after the match or 200
@@ -113,6 +114,9 @@ def watch(stub, addr, length, want):
     def rel(v):
         return "main+%X" % (v - base) if base <= v < end else "0x%x" % v
 
+    # Eden's Z2 asserts on an unmapped page [S1 src/core/memory.cpp:418]; its m answers E01 there
+    if len(stub.ask("m%x,%x" % (addr, length))) != 2 * length:
+        raise ConnectionError("<addr> is not mapped; read the new totk re: line")
     z = "%x,%x" % (addr, length)
     stub.ok("Z2," + z)
     done = False
