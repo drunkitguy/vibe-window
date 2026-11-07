@@ -3,8 +3,8 @@
 
 // Standalone check of SdlConfig::ReadQtConfig (src/yuzu_cmd/sdl_config.cpp, patched eden-duo, 0013):
 // eden-cli's own config, then qt-config.ini, then custom/<id>.ini with use_global, as eden-cli
-// applies them; the Qt files stay byte-identical and nothing is created next to them; an absent
-// or empty file changes nothing. Built by run.sh against frontend_common/config.cpp and common.
+// applies them; the Qt files stay byte-identical and nothing is created next to them; an absent,
+// empty or non-Qt file changes nothing. Built by run.sh against frontend_common/config.cpp and common.
 
 #undef NDEBUG
 #include <cassert>
@@ -70,7 +70,8 @@ std::set<fs::path> Tree(const fs::path& dir) {
 }
 
 // What Eden Qt writes (WriteSettingGeneric/WritePreparedSetting): "\default=false" before a value
-// it means, "\use_global" in a custom file, quotes around strings with special characters.
+// it means, "\use_global" in a custom file, quotes around strings with special characters, and
+// the Paths group inside [UI] (QtConfig::SaveUIValues calls SavePathValues).
 const char* const kQtGlobal = "[Core]\n"
                               "use_multi_core\\default=false\n"
                               "use_multi_core=false\n"
@@ -82,9 +83,9 @@ const char* const kQtGlobal = "[Core]\n"
                               "[Controls]\n"
                               "player_0_button_a\\default=false\n"
                               "player_0_button_a=\"engine:sdl,button:1,port:0\"\n"
-                              "[Paths]\n"
-                              "external_content_dirs\\size=1\n"
-                              "external_content_dirs\\1\\path=/games/updates\n";
+                              "[UI]\n"
+                              "Paths\\external_content_dirs\\size=1\n"
+                              "Paths\\external_content_dirs\\1\\path=/games/updates\n";
 
 const char* const kQtGame = "[Core]\n"
                             "use_multi_core\\use_global=true\n"
@@ -127,17 +128,21 @@ int main() {
     assert(Settings::values.use_multi_core.GetValue() && Settings::values.speed_limit.GetValue() == 100);
     g_saves = 0;
 
-    // Absent, empty: false, Settings untouched, nothing created.
+    // Absent, empty, not an Eden Qt ini: false, Settings untouched, nothing created.
     assert(!SdlConfig::ReadQtConfig(qt_dir / "custom" / "0100000000000001.ini",
                                     Config::ConfigType::PerGameConfig));
     assert(!SdlConfig::ReadQtConfig(root / "no-dir" / "qt-config.ini", Config::ConfigType::GlobalConfig));
     Put(root / "empty.ini", "");
     assert(!SdlConfig::ReadQtConfig(root / "empty.ini", Config::ConfigType::GlobalConfig));
+    Put(root / "garbage.ini", std::string("\x89PNG\r\n\x1a\n\0\xff\xfe junk = 1 [x\n", 24));
+    assert(!SdlConfig::ReadQtConfig(root / "garbage.ini", Config::ConfigType::GlobalConfig));
     assert(!fs::exists(root / "no-dir") && Tree(qt_dir) == tree);
     assert(Settings::values.use_multi_core.GetValue() && Settings::values.speed_limit.GetValue() == 100);
 
-    // qt-config.ini replaces every shared value.
+    // qt-config.ini replaces every shared value, and its DisabledAddOns list replaces eden-cli's.
+    Settings::values.disabled_addons[0x0100000000000001] = {"Update"};
     assert(SdlConfig::ReadQtConfig(qt_global, Config::ConfigType::GlobalConfig));
+    assert(Settings::values.disabled_addons.empty());
     assert(!Settings::values.use_multi_core.GetValue());
     assert(Settings::values.speed_limit.GetValue() == 150);
     assert(Settings::values.log_flush_line.GetValue());

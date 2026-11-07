@@ -1,4 +1,4 @@
-From ff6120a7b2d7a38cd7fc197c7fba1b24a4e462b7 Mon Sep 17 00:00:00 2001
+From c622c3d5398434713ea9c4e2504a5e8e0012d031 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Sat, 7 Nov 2026 17:56:52 +0000
 Subject: [PATCH] yuzu_cmd: run eden-cli with Eden Qt's config for the game
@@ -12,11 +12,15 @@ config first (so no Qt value lands in it), then reads qt-config.ini as a
 global config and the game's custom/<program id>.ini as a per-game
 config into Settings, through the shared Config readers and SdlConfig's
 player reader: every section frontend_common reads, the player
-mappings, debug pad, ring controller and Qt's external_content_dirs,
+mappings, debug pad, ring controller and Qt's external_content_dirs
+(kept under [UI] as Paths\external_content_dirs, as QtConfig reads it),
 with each per-game value applied by its use_global flag as Eden Qt's
-BootGame does. The launch params still override qt-config.ini. The
-reader never gets a file path, so no save path can write the Qt files,
-and an absent, empty or unreadable file leaves Settings as they were.
+BootGame does. Qt's DisabledAddOns list replaces sdl2-config.ini's
+instead of merging with it. The launch params are applied after both
+files, so a command-line flag always wins. The reader never gets a file
+path, so no save path can write the Qt files, and an absent, empty or
+unreadable file, or one without the [Controls] section Eden Qt always
+writes, leaves Settings as they were.
 One log line names what was applied, e.g.
 "Duo config: qt-config.ini + custom/0100F2C0115B6000.ini".
 
@@ -31,33 +35,34 @@ after the file.
 Test (vibe-window host/eden-duo/test/qt_config_test.cpp, natively and
 under wine): own config, qt-config.ini, then custom/<id>.ini; use_global
 true and false; a per-game input profile; Qt files byte- and
-mtime-identical, nothing created, no save attempted; absent and empty
-files refused.
+mtime-identical, nothing created, no save attempted; absent, empty and
+garbage files refused; external_content_dirs read from [UI]; a stale
+DisabledAddOns entry dropped.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01XgyuSR8o8AbzxuWHYqLwsv
 ---
  .upstream/duo-touched.tsv   |  2 ++
- src/yuzu_cmd/sdl_config.cpp | 44 ++++++++++++++++++++++++++++++++++++-
- src/yuzu_cmd/sdl_config.h   | 12 +++++++++-
- src/yuzu_cmd/yuzu.cpp       | 44 +++++++++++++++++++++++++++++++++----
- 4 files changed, 96 insertions(+), 6 deletions(-)
+ src/yuzu_cmd/sdl_config.cpp | 54 ++++++++++++++++++++++++++++++++++++-
+ src/yuzu_cmd/sdl_config.h   | 12 ++++++++-
+ src/yuzu_cmd/yuzu.cpp       | 46 +++++++++++++++++++++++++++----
+ 4 files changed, 107 insertions(+), 7 deletions(-)
 
 diff --git a/.upstream/duo-touched.tsv b/.upstream/duo-touched.tsv
-index 303de36d..99e2c1c0 100644
+index 303de36d..0700de8e 100644
 --- a/.upstream/duo-touched.tsv
 +++ b/.upstream/duo-touched.tsv
 @@ -391,6 +391,8 @@ upstream-hook	M	4	8	1	src/core/hle/service/ipc_helpers.h
  upstream-hook	M	4	8	1	src/video_core/renderer_vulkan/renderer_vulkan.h
  upstream-hook	M	4	9	6	src/video_core/renderer_opengl/renderer_opengl.cpp
  upstream-hook	M	4	7	1	src/yuzu_cmd/emu_window/emu_window_sdl3_gl.cpp
-+upstream-hook	M	4	43	1	src/yuzu_cmd/sdl_config.cpp
++upstream-hook	M	4	53	1	src/yuzu_cmd/sdl_config.cpp
 +upstream-hook	M	4	11	1	src/yuzu_cmd/sdl_config.h
  upstream-hook	M	3	10	0	src/input_common/drivers/android.cpp
  upstream-hook	M	3	13	3	src/common/fs/file.cpp
  upstream-hook	M	3	14	0	src/core/file_sys/romfs_factory.h
 diff --git a/src/yuzu_cmd/sdl_config.cpp b/src/yuzu_cmd/sdl_config.cpp
-index b06a5a69..e175c1b3 100644
+index b06a5a69..f0cc1d7b 100644
 --- a/src/yuzu_cmd/sdl_config.cpp
 +++ b/src/yuzu_cmd/sdl_config.cpp
 @@ -8,6 +8,7 @@
@@ -68,7 +73,7 @@ index b06a5a69..e175c1b3 100644
  #include "common/logging.h"
  #include "input_common/main.h"
  #include "sdl_config.h"
-@@ -55,8 +56,32 @@ SdlConfig::SdlConfig(const std::optional<std::string> config_path) {
+@@ -55,8 +56,38 @@ SdlConfig::SdlConfig(const std::optional<std::string> config_path) {
      SaveSdlValues();
  }
  
@@ -77,9 +82,13 @@ index b06a5a69..e175c1b3 100644
 +SdlConfig::SdlConfig(const ConfigType config_type, std::unique_ptr<CSimpleIniA> ini)
 +    : Config(config_type) {
 +    config = std::move(ini);
+     if (global) {
++        // Eden Qt reads its config once; eden-cli has already merged sdl2-config.ini's list here.
++        Settings::values.disabled_addons.clear();
++    }
 +    ReadValues();
 +    ReadSdlValues();
-     if (global) {
++    if (global) {
 +        ReadPathValues();
 +    }
 +}
@@ -89,8 +98,10 @@ index b06a5a69..e175c1b3 100644
 +    auto ini = std::make_unique<CSimpleIniA>();
 +    ini->SetUnicode(true);
 +    ini->SetSpaces(false);
-+    // Eden Qt always writes its sections, so an empty read is a missing or unreadable file.
-+    if (data.empty() || ini->LoadData(data) < 0) {
++    // Eden Qt always writes [Controls] (global and per-game), so a file without it is missing,
++    // unreadable or not an Eden Qt config.
++    if (data.empty() || ini->LoadData(data) < 0 ||
++        ini->GetSectionSize(Settings::TranslateCategory(Settings::Category::Controls)) < 0) {
 +        return false;
 +    }
 +    const SdlConfig reader{config_type, std::move(ini)};
@@ -102,12 +113,15 @@ index b06a5a69..e175c1b3 100644
          SdlConfig::SaveAllValues();
      }
  }
-@@ -170,6 +195,23 @@ void SdlConfig::ReadDebugControlValues() {
+@@ -170,6 +201,27 @@ void SdlConfig::ReadDebugControlValues() {
      }
  }
  
-+// Duo: the one Qt path setting the core reads (as Eden Qt's QtConfig::ReadPathValues does).
++// Duo: the one Qt path setting the core reads. Eden Qt reads Paths inside the UI group
++// (QtConfig::ReadUIValues calls ReadPathValues), so the array is in [UI] under
++// Paths\external_content_dirs.
 +void SdlConfig::ReadPathValues() {
++    BeginGroup(Settings::TranslateCategory(Settings::Category::Ui));
 +    BeginGroup(Settings::TranslateCategory(Settings::Category::Paths));
 +
 +    const int external_dirs_size = BeginArray(std::string("external_content_dirs"));
@@ -120,6 +134,7 @@ index b06a5a69..e175c1b3 100644
 +    }
 +    EndArray();
 +
++    EndGroup();
 +    EndGroup();
 +}
 +
@@ -170,7 +185,7 @@ index 1fd1c692..391cce7a 100644
      static const std::array<int, Settings::NativeButton::NumButtons> default_buttons;
      static const std::array<int, Settings::NativeMotion::NumMotions> default_motions;
 diff --git a/src/yuzu_cmd/yuzu.cpp b/src/yuzu_cmd/yuzu.cpp
-index 6ba95b0e..1ad7e1bf 100644
+index 6ba95b0e..7def0d64 100644
 --- a/src/yuzu_cmd/yuzu.cpp
 +++ b/src/yuzu_cmd/yuzu.cpp
 @@ -7,6 +7,7 @@
@@ -190,7 +205,7 @@ index 6ba95b0e..1ad7e1bf 100644
  #include "common/logging.h"
  #include "common/scm_rev.h"
  #include "common/settings.h"
-@@ -199,11 +202,22 @@ extern "C" SDL_AppResult SDL_AppInit(void **appstate, int argc, char **argv) {
+@@ -199,18 +202,54 @@ extern "C" SDL_AppResult SDL_AppInit(void **appstate, int argc, char **argv) {
  #ifdef _WIN32
      LocalFree(argv_w);
  #endif
@@ -200,9 +215,10 @@ index 6ba95b0e..1ad7e1bf 100644
          return SDL_APP_FAILURE;
      }
  
+-    Core::ApplyLaunchParams(lp);
 +    // Duo: run with the settings Eden Qt uses, read-only: qt-config.ini, then the game's
 +    // custom/<program id>.ini below. eden-cli's own config is saved first so no Qt value lands in
-+    // it; the launch params still override qt-config.ini.
++    // it; the launch params are applied after both, so a command-line flag always wins.
 +    const auto config_dir = Common::FS::GetEdenPath(Common::FS::EdenPath::ConfigDir);
 +    bool qt_config = false;
 +    if (Common::FS::IsFile(config_dir / "qt-config.ini")) {
@@ -210,11 +226,9 @@ index 6ba95b0e..1ad7e1bf 100644
 +        qt_config = SdlConfig::ReadQtConfig(config_dir / "qt-config.ini",
 +                                            Config::ConfigType::GlobalConfig);
 +    }
-+
-     Core::ApplyLaunchParams(lp);
  
      if (lp.filepath.empty()) {
-@@ -211,6 +225,31 @@ extern "C" SDL_AppResult SDL_AppInit(void **appstate, int argc, char **argv) {
+         LOG_CRITICAL(Frontend, "Failed to load ROM: No ROM specified");
          return SDL_APP_FAILURE;
      }
  
@@ -242,6 +256,8 @@ index 6ba95b0e..1ad7e1bf 100644
 +    } else {
 +        LOG_INFO(Frontend, "Duo config: eden-cli's own config only (no readable qt-config.ini)");
 +    }
++
++    Core::ApplyLaunchParams(lp);
 +
      state->system.Initialize();
  

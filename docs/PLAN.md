@@ -28,8 +28,9 @@ Everything below is blocked on you, in this order. Send logs, `.shot` files and 
 1. **H1c, eden-cli on Windows.** Fork igawa6/eden-duo at `v1.3.2.2`, then
    `git am host/eden-duo/00*.patch`. Run `tools/windows/load-msvc-env.ps1`, then
    `cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DYUZU_TESTS=ON -DEDEN_DSMOD_BUILD_DEV_TOOLS=ON`
-   and `cmake --build build`. Then run the five checks in §H1c (stage and rect tests,
-   `tests.exe "[dsmod][module]"`, smoke run, rect minimums, `tools/duo/duo-touched-ledger.sh --check`).
+   and `cmake --build build`. Then run the six checks in §H1c (stage and rect tests,
+   `tests.exe "[dsmod][module]"`, smoke run, rect minimums, `tools/duo/duo-touched-ledger.sh --check`,
+   the Eden Qt config line in `eden_log.txt`).
 2. **H2, host.** Install the apollo2-vibe window-host MSI from branch `claude/clever-clarke-k7hhhj`.
    Turn on Windows taskbar auto-hide (Settings > Personalization > Taskbar > Automatically hide).
    Keep `virtual_display_mode = per_client` and `virtual_display_layout = exclusive`. Add the app
@@ -377,7 +378,7 @@ Doable in this Linux container now (no game, no Windows, no Thor):
 | H1a | Eden Duo: native modules on Windows (loader, harness compile fix, tests), as patches | - | done: `host/eden-duo/0001-0003` + `host/eden-duo-companions/0001`; loader Catch2 tests pass standalone; full eden-duo build blocked (proxy 403 on CPM fmt download), real-Windows checks in H1c; critic SATISFIED round 3 |
 | T1 | TotK package skeleton: build gate, fail-closed reader, tests; Linux `.so` and Windows DLL; `.dsmod.zip` | H1a (builder patch) | done: `2c482b6` (+ plan `911aed8`); gcc/clang/MinGW builds and ctest pass (MinGW under wine), single export, package + wine probe pass; critic SATISFIED round 3 |
 | H1b | eden-cli composite layout: `--window-rect`, `--aux-rect`, borderless, aux not focusable | H1a | done: `afe952e`, patch 0004 adds `--window-rect`/`--aux-rect` (borderless, hidden until placed), non-focusable aux, 640x360 main floor, 32767 bound, ledger rows; parser tests pass natively and under wine; SDL and harness code compile-checked only in H1c; critic SATISFIED round 3 |
-| H1d | eden-cli uses the Eden Qt config: `qt-config.ini`, then the game's `custom/<program id>.ini` (use_global), read-only (§H1d) | H1b | done: patch `0013`; `qt_config_test` passes natively and under wine (own config, global, per-game, no write or create, absent and empty files); `yuzu.cpp` syntax-checked only, run on the PC in H1c |
+| H1d | eden-cli uses the Eden Qt config: `qt-config.ini`, then the game's `custom/<program id>.ini` (use_global), read-only (§H1d) | H1b | done: patch `0013`; `qt_config_test` passes natively and under wine (own config, global, per-game, no write or create, absent, empty and garbage files, `[UI]` external content dirs, `DisabledAddOns` replaced); `yuzu.cpp` syntax-checked only, run on the PC in H1c check 6 |
 | T2a | Retarget the skeleton to 1.2.0 (`kTargetBuild`, data file name, tests) | T1 | done: `d175a18`; 1.2.0 build id and data file; critic SATISFIED (with T3s) |
 | T3a'.1 | Eden Duo patch 0009 (zstd + `ZsDic` in the runtime's romfs reader, §T3a' A) + icon keys as `romfs:` paths (§T3a' B2) | T4 | done: 64a646e, critic SATISFIED round 1, Windows CI run 41379288233 green (198 cases); real romfs untested (T8a) |
 | T3a'.2 | Item names from MSBT (B1) + the one-shot texture dump for T8a (B5) | T3a'.1 | done: 2bdcb00 (patches 0010-0011), critic SATISFIED round 4, Eden CI 41396378620 + companion CI green; real romfs untested (T8a) |
@@ -622,6 +623,11 @@ failed load. On the user's Windows build of the patched fork:
 4. Confirm the call-site minimums: `--window-rect 0,0,639,360` and `0,0,640,359` are refused with
    a message, `0,0,640,360` starts; `--aux-rect 0,0,0,1` is refused, `0,0,1,1` starts.
 5. Run `tools/duo/duo-touched-ledger.sh --check` in the patched tree. Must pass.
+6. Eden Qt config (H1d): start TotK with the H2 command line (`--aux-window --window-rect
+   0,0,1920,1080 --aux-rect 0,1080,1240,1080 -g "<TotK nsp>"`). `eden_log.txt` must hold
+   `Duo config: qt-config.ini + custom/0100F2C0115B6000.ini` (or `Duo config: qt-config.ini` when
+   Eden Qt has no per-game settings for TotK), and the graphics API (Vulkan or OpenGL, as set in
+   Eden Qt's Graphics page) and the controller must match Eden Qt.
 Send logs and screenshots back.
 
 Decision point: if a failed load leaves its `module-*` staging dir behind on real Windows,
@@ -646,22 +652,30 @@ User request: eden-cli runs the game with the settings tuned in Eden Qt. Facts [
 - Per-game values apply by `use_global` in `ReadSettingGeneric` [S1 `config.cpp:909-932`]; Eden
   Qt's player reader is the same code as SdlConfig's [S1 `qt_config.cpp:84-135`,
   `sdl_config.cpp:96-148`]; the one Qt-only reader the core uses is `external_content_dirs` [S1
-  `qt_config.cpp:234-240`, `src/core/hle/service/filesystem/filesystem.cpp:759-786`].
+  `qt_config.cpp:234-240`, `src/core/hle/service/filesystem/filesystem.cpp:759-786`]. Qt reads
+  and writes it inside the UI group (`ReadUIValues` opens `UI`, then calls `ReadPathValues`; the
+  save side mirrors it) [S1 `qt_config.cpp:274-283,497-510`] and the section is the outermost
+  group [S1 `config.cpp:974-980`], so the array sits in `[UI]` as
+  `Paths\external_content_dirs\N\path`.
+- `ReadDisabledAddOnValues` only `insert_or_assign`s per title [S1 `config.cpp:325-345`], and
+  eden-cli has already loaded `sdl2-config.ini`, so 0013 clears the list before the Qt read.
 - `System::Initialize` reads multicore, memory layout and async GPU [S1 `src/core/core.cpp:121-146`];
   the loader that reads the program id needs the content provider and factories [S1
   `src/core/loader/loader.cpp:325-337`, `core.cpp:976-978`]; so 0013 sets those up before
   `Initialize` (they were after the window [S1 `yuzu.cpp:244-246`]).
 What 0013 does when `<config dir>\qt-config.ini` exists (else nothing changes): save eden-cli's
 own config, read `qt-config.ini` (all shared sections, player maps, debug pad, ring controller,
-external content dirs), apply the launch params (they beat `qt-config.ini`), read
-`custom/<id>.ini` if present (it can beat a launch param, as in Qt), then `Initialize` and the
-renderer pick. One log line: `Duo config: qt-config.ini + custom/0100F2C0115B6000.ini`,
+external content dirs; its `DisabledAddOns` replace eden-cli's), read `custom/<id>.ini` if
+present, then apply the launch params, so `-n`, `-s`, `-u` and the input profile beat both Qt
+files (Eden Qt has no such flags; `ApplyLaunchParams` is eden-cli's [S1
+`src/core/launch_params.cpp:155-181`]), then `Initialize` and the renderer pick. A file without
+`[Controls]` (Eden Qt always writes it, global and per-game [S1 `config.cpp:515-535,546-550`])
+counts as unreadable. One log line: `Duo config: qt-config.ini + custom/0100F2C0115B6000.ini`,
 `Duo config: qt-config.ini` (no per-game file) or `Duo config: eden-cli's own config only (no
 readable qt-config.ini)`. Limits: `qt-config.ini` is looked up in eden-cli's config dir, so a
 portable `C:\duo\user` hides `%APPDATA%\eden\config\qt-config.ini`; Qt keyboard bindings are
 Qt key codes [S1 `qt_config.cpp:12-18`] and do not mean the same keys in eden-cli (controller
-bindings do); program id 0 (homebrew) gets no per-game file. Check on the PC (H1c run): the log
-line names both files, and the game runs with the Qt graphics and controller settings.
+bindings do); program id 0 (homebrew) gets no per-game file. Check on the PC: §H1c check 6.
 
 ### H2 (host: apollo2-vibe window-host, verify first)
 
