@@ -231,24 +231,35 @@ int main() {
         assert(h.MemoryCalls() == 0);
     }
 
-    // §T8a's 200-character cap: a long layout name makes the member, pane, frame and failed lines
-    // longer; each is cut to exactly 200.
+    // §T8a's 200-character cap: a long layout and texture name make the member, tex, pane, frame
+    // and failed lines longer; each is cut to exactly 200. Then a long msg line.
     {
         Host h;
         full(h);
         const std::string good = "blyt/Pause" + std::string(200, 'G') + ".bflyt",
                           bad = "blyt/Pause" + std::string(200, 'B') + ".bflyt";
-        h.PutRomfs(kCommon110 + "#",
-                   Sarc({{good, flyt}, {bad, {'F', 'L', 'Y', 'X'}}, {"timg/__Combined.bntx", bntx}}));
+        const Bytes long_tex = Bntx({{std::string(250, 'T') + "^w", 64, 32, 0x0B06, {2, 3, 4, 5}},
+                                     {"Heart_00^r", 48, 48, 0x0201, {2, 2, 2, 1}}});
+        h.PutRomfs(kCommon110 + "#", Sarc({{good, flyt},
+                                           {bad, {'F', 'L', 'Y', 'X'}},
+                                           {"timg/__Combined.bntx", long_tex}}));
         totk::dump::Run(h.api, 120);
         const auto logs = Logs(h);
-        const std::string kinds[] = {"member ", "member ", "pane ",  "pane ",
+        const std::string kinds[] = {"member ", "member ", "tex ",   "pane ",  "pane ",
                                      "pane ",   "frame ",  "frame ", "failed: "};
         assert(logs.size() == 13); // head, three members, two textures, the good layout, failed
-        for (std::size_t i = 0; i < std::size(kinds); ++i) {
-            const std::string& line = i < 2 ? logs[2 + i] : logs[5 + i];
-            assert(line.starts_with("totk dump " + kinds[i]) && line.size() == 200);
-        }
+        const std::size_t at[] = {2, 3, 5, 7, 8, 9, 10, 11, 12}; // not the bntx or Heart lines
+        for (std::size_t i = 0; i < std::size(kinds); ++i)
+            assert(logs[at[i]].starts_with("totk dump " + kinds[i]) && logs[at[i]].size() == 200);
+        // A long LayoutMsg member (no bad layout, so the dump reaches the messages).
+        Host m;
+        full(m);
+        m.PutRomfs(kMals120 + "#", Sarc({{"LayoutMsg/" + std::string(200, 'M'), {1}}}));
+        totk::dump::Run(m.api, 120);
+        const auto msgs = Logs(m);
+        const std::string& msg = msgs[msgs.size() - 2];
+        assert(msgs.back() == "totk dump done" && msg.starts_with("totk dump msg ") &&
+               msg.size() == 200);
     }
 
     // No user file: one size query, nothing else read, nothing logged. No read_romfs or no log:

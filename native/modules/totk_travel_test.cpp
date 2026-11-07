@@ -592,6 +592,23 @@ int main() {
         assert(line.size() > 200 && moved.size() == 1 && moved[0].first == line);
     }
 
+    // A 300-character stem (a romfs mod) is cut to 64 in the "moved from" line, so the line
+    // still ends with the destination and the old x/z text.
+    {
+        World w;
+        w.Settle();
+        auto next = std::make_shared<totk::Snapshot>(*w.In().snapshot);
+        next->travel[0].label = std::string(300, 'L');
+        Replace(w.In(), std::move(next));
+        assert(w.Go(0) && w.h.batch_calls == 1);
+        const auto moved = w.Lines(kMovedFrom);
+        assert(moved.size() == 1 &&
+               moved[0].first == kMovedFrom + std::string(totk::travel::Format(kOld).s) + " to " +
+                                     std::string(64, 'L') + " " + totk::travel::Format(kDest).s +
+                                     "; if Eden closes before Put back, place it again by hand "
+                                     "at the old x/z");
+    }
+
     // The vec3 chain: a later move from the spot the companion set prints that spot exactly as
     // the earlier line's destination.
     {
