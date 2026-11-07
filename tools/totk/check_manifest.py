@@ -283,7 +283,8 @@ def check(manifest, literals, patterns, module_actions, size=0):
         if entry.get("action") not in actions:
             errors.append(f"enforce[{i}]: action '{entry.get('action')}' is not defined")
         elif actions[entry["action"]].get("kind") == "button":
-            # enforce re-runs the action every every_ms with no tap, past the one-shot gate check
+            # enforce presses the chord every every_ms with no tap whenever the gate is open
+            # (RunAction re-checks enabled_bind, so the gate holds, but the input is unrequested)
             errors.append(f"enforce[{i}]: action '{entry['action']}' is a wheel button")
     for i, bind in enumerate(manifest.get("page_binds", [])):
         for branch in ("when_equal", "when_not_equal"):
