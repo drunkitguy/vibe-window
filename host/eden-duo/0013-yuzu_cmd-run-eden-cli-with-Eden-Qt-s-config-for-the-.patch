@@ -1,4 +1,4 @@
-From a6a6a720e9602c7e416877f98b58ca59f37ed683 Mon Sep 17 00:00:00 2001
+From 85d22cb53332d3316570db99cd5b029e218b46bd Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Sat, 7 Nov 2026 17:56:52 +0000
 Subject: [PATCH] yuzu_cmd: run eden-cli with Eden Qt's config for the game
@@ -51,8 +51,9 @@ and --dump-il2cpp are covered too.
 
 Known limits, each a shortcut comment: program id 0 (homebrew) gets no
 per-game file (Eden Qt names that one after the file); Qt keyboard
-bindings are Qt key codes, not the SDL scancodes eden-cli's keyboard
-gets, so a non-default Qt key binding maps to another key; updates and
+bindings do not carry over: Qt-default keys become eden-cli's SDL
+defaults and custom Qt keys map to other keys (controller bindings
+match); updates and
 DLC that Eden Qt registers from its game dirs
 (ext_content_from_game_dirs) are not loaded, only those in the NAND and
 the external content dirs; qt-config.ini is looked up only in
@@ -145,7 +146,7 @@ index 59611024..9a683f5e 100644
                  break;
              case 'f':
 diff --git a/src/yuzu_cmd/sdl_config.cpp b/src/yuzu_cmd/sdl_config.cpp
-index b06a5a69..c5b93922 100644
+index b06a5a69..b1924d1d 100644
 --- a/src/yuzu_cmd/sdl_config.cpp
 +++ b/src/yuzu_cmd/sdl_config.cpp
 @@ -8,6 +8,10 @@
@@ -179,9 +180,9 @@ index b06a5a69..c5b93922 100644
 +    }
 +}
 +
-+// shortcut: Qt keyboard bindings are Qt::Key codes but eden-cli feeds SDL scancodes to the
-+// keyboard engine, so a non-default Qt key binding maps to another key; translate them if
-+// keyboard play from the Qt config is ever needed.
++// shortcut: Qt keyboard bindings do not carry over: Qt-default keys (saved as \default=true)
++// become eden-cli's SDL defaults and custom Qt::Key codes map to other SDL keys; controller
++// bindings match. Translate Qt::Key codes if keyboard play from the Qt config is ever needed.
 +// shortcut: updates and DLC that Eden Qt registers from its game dirs (ext_content_from_game_dirs)
 +// are not loaded; read [UI] Paths\gamedirs and call ManualContentProvider::
 +// AddEntriesFromContainer on each NSP/XCI there if an update outside NAND must be supported.

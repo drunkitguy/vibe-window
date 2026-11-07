@@ -51,7 +51,7 @@ Everything below is blocked on you, in this order. Send logs, `.shot` files and 
    saves and install it in Eden (§T8c steps 1-2). Before T2b's package (CI "TotK companion") is
    built, the companion on 1.2.1 shows only the notice page.
 6. **T8a on 1.2.1 if you said yes in step 5, else 1.2.0 (after T2b and H1c): texture dump.** Use the CI-built eden-cli (it applies
-   `host/eden-duo/0001-0011`) and the CI-built companion package. Install the package, create the
+   all `host/eden-duo/00*.patch`) and the CI-built companion package. Install the package, create the
    `totk-dump` file, start TotK (1.2.1 if you said yes in step 5, else 1.2.0) once, load a save, wait 2 minutes, then quit. The log should
    then contain `totk dump done` (or `failed`), as §T8a explains.
    - Send every log line with `totk`, `DSMod` or `build_id=`. Eden's `Querying NSO patch existence for
@@ -727,11 +727,13 @@ dump and save directories: `ReadDataStorageValues` calls `SetEdenPath` for each 
 `qt-config.ini` is looked up only in eden-cli's config dir, so a portable `C:\duo\user` hides
 `%APPDATA%\eden\config\qt-config.ini` and a portable Eden Qt (`user` next to `eden.exe`) keeps its
 `qt-config.ini` where eden-cli never looks [S1 `src/common/fs/path_util.cpp:114-118`] (H1c check 6
-gives the junction fix); Qt keyboard bindings are Qt key codes [S1 `qt_config.cpp:12-18`] while
-eden-cli feeds SDL scancodes to the keyboard engine [S1
-`src/yuzu_cmd/emu_window/emu_window_sdl3.cpp:136-138`], so a non-default Qt key binding maps to
-another key (controller bindings match); updates and DLC that Eden Qt registers from its game
-dirs are not loaded: its game-list worker scans `[UI] Paths\gamedirs` and, with
+gives the junction fix); Qt keyboard bindings do not carry over: Eden Qt saves a binding equal to
+its own Qt key default with `\default=true` [S1 `qt_config.cpp:12-18`], the reader then returns
+eden-cli's SDL scancode default [S1 `src/frontend_common/config.cpp:810-812`,
+`src/yuzu_cmd/sdl_config.cpp:19-23,186-190`], and a custom Qt key code reaches the keyboard engine
+as an SDL scancode [S1 `src/yuzu_cmd/emu_window/emu_window_sdl3.cpp:136-138`], so Qt-default keys
+become eden-cli's SDL defaults and custom keys map to other keys (controller bindings match);
+updates and DLC that Eden Qt registers from its game dirs are not loaded: its game-list worker scans `[UI] Paths\gamedirs` and, with
 `ext_content_from_game_dirs` on (default true [S1 `src/common/settings.h:863`]), adds every NSP/XCI
 there to the FrontendManual content provider [S1 `src/qt_common/game_list/worker.cpp:376-379`,
 `src/qt_common/qt_common.cpp:303`] (Android likewise [S1
@@ -1654,8 +1656,8 @@ installed once with `.\eden-cli.exe --install <TotK 1.2.0 update.nsp>` [S1
 `src/yuzu_cmd/dsmod_harness.cpp:232,831`], or from Eden Qt (File > Install Files to NAND...) when
 H1c check 6 printed a NAND other than `$d\nand`.
 1. From this branch's GitHub Actions runs (signed in to GitHub, which artifact downloads need)
-   download `eden-duo-windows-x64` (workflow "Eden Duo Windows": eden-cli with patches 0001-0011;
-   dev tools are on by default, `EDEN_DSMOD_BUILD_DEV_TOOLS`) and `totk-companion` (workflow "TotK
+   download `eden-duo-windows-x64` (workflow "Eden Duo Windows": eden-cli with all
+   `host/eden-duo/00*.patch`; dev tools are on by default, `EDEN_DSMOD_BUILD_DEV_TOOLS`) and `totk-companion` (workflow "TotK
    companion"). Unzip both into `C:\duo`; `totk-companion.zip` holds `0100F2C0115B6000.dsmod.zip`,
    which stays zipped. Then:
    ```
@@ -2830,9 +2832,10 @@ queue their writes go through (step 1 says why not the arrays), then call them f
    .\eden-cli.exe --aux-window --debug 6543 -g <TotK 1.2.1>
    ```
    (Back up the save folder from H1c check 6 instead, if it printed another.) With `qt-config.ini`
-   present, the `--debug` run writes no file and runs with the Eden Qt settings for TotK (G1,
-   H1d). Without it, the `--debug` run writes `use_gdbstub=true` into the config it used (G1), so
-   isolate it: run `Copy-Item -Force "$d\config\sdl2-config.ini" C:\duo\re-config.ini` before the
+   present, the `--debug` run writes `use_gdbstub` into no file (eden-cli saves its own
+   `sdl2-config.ini` before the command line is applied) and runs with the Eden Qt settings for
+   TotK (G1, H1d). Without it, the `--debug` run writes `use_gdbstub=true` into the config it
+   used (G1), so isolate it: run `Copy-Item -Force "$d\config\sdl2-config.ini" C:\duo\re-config.ini` before the
    launch and launch with `.\eden-cli.exe -c C:\duo\re-config.ini --aux-window --debug 6543 -g
    <TotK 1.2.1>`, so it lands in `re-config.ini`, never in your normal config. The saves
    are shared, hence the backup (a game frozen at a stop and then killed can lose unsaved
@@ -2983,7 +2986,7 @@ from each field that passed, and the trigger becomes live in Next steps 12.
 | Wheel look, A2 run, A3 sessions | A1, A2, A3 | Next steps 10-13; `flush_line` on once, to read the log during a session (§A2 "Log on disk"); for A3 the UltraCam `exefs` file list and patch log lines (§G2) |
 | Approve vendoring zstd | T3a | Answered: approved. No longer vendored in the module (§R2); the same files build patch 0009's test outside the repo (hashes in §T3a') |
 | Approve vendoring stb_truetype | T3a' | Answered: approved; vendored as `native/third_party/stb_truetype.h` v1.26 (public domain) for the game font (§R2) |
-| T8a dump | T8a, T4v | The `totk-dump` file, one start of TotK (1.2.1 if you update, else 1.2.0; Next steps 5-6) with the CI-built eden-cli (patches 0001-0011) and companion package, the `totk`/`DSMod` log lines and the `imgdump` PNGs the coder lists (PowerShell steps in §T8a) |
+| T8a dump | T8a, T4v | The `totk-dump` file, one start of TotK (1.2.1 if you update, else 1.2.0; Next steps 5-6) with the CI-built eden-cli (all `host/eden-duo/00*.patch`) and companion package, the `totk`/`DSMod` log lines and the `imgdump` PNGs the coder lists (PowerShell steps in §T8a) |
 | Reference look decisions | T4v | Accepted by the user: pages Map / Inventory (home) / Abilities with Gear in the home page's right column; no 3D Link figure (§R3), the equipped weapon at 256 px instead; English only |
 | T8 run | T8 | Package installed in the CI-built eden-cli, one save loaded, `.shot` pictures per page, `totk`/`DSMod` log lines, values compared with the game |
 | eden-duo fork + Windows build | H1c | A fork repo for the H1 patches, and either a Windows build on their PC (MSVC + Ninja, `tools/windows/load-msvc-env.ps1` [S1 docs/Build.md]) or a GitHub Actions Windows runner in the fork |
