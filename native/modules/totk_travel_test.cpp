@@ -389,7 +389,7 @@ int main() {
                                         Dict({{"Trans", Arr({V(8, 8, 8)})}}),
                                         Place("D3\nx=1 y=2 z=3", {V(8, 8, 8), V(9, 9, 9)}),
                                         Place(std::string(65, 'L'), {V(8, 8, 8)}),
-                                        Place(std::string(64, 'L'), {V(4, 4, 4)}),
+                                        Place("Dungeon_" + std::string(56, 'L'), {V(4, 4, 4)}),
                                         Place("", {V(8, 8, 8)})})}})));
         h.PutRomfs(
             totk::travel::kFiles[1],
@@ -398,7 +398,7 @@ int main() {
                                                              Arr({Num(1), Num(2), Num(3), Num(4)}),
                                                              V(1, kInf, 3)})})}})));
         const auto list = totk::travel::Load(h.api, 0);
-        assert(list.size() == 2 && list[0].x == 5 && list[1].label == std::string(64, 'L'));
+        assert(list.size() == 2 && list[0].x == 5 && list[1].label == "Dungeon_" + std::string(56, 'L'));
         assert(h.logs[0] ==
                    std::string("totk travel: ") + totk::travel::kFiles[0] + ": 7 Trans dropped" &&
                h.logs[1] ==
@@ -451,6 +451,12 @@ int main() {
         r = totk::FindHash(h.api, at, 1);
         assert(r.fail == totk::ProbeFail::unmapped && r.table == 0x7000000000ULL &&
                h.read_calls - r0 == 3 && h.is_mapped_calls - m0 == 4);
+        // Only the last slot's last byte unmapped: still refused up front (the range is size * 8).
+        const std::uint64_t half = PutTable(h, at, 1, 8, {});
+        h.memory.erase(half + 8 * 8 - 1);
+        const unsigned r1 = h.read_calls, m1 = h.is_mapped_calls;
+        assert(totk::FindHash(h.api, at, 1).fail == totk::ProbeFail::unmapped &&
+               h.read_calls - r1 == 3 && h.is_mapped_calls - m1 == 4);
         // An unreadable header.
         assert(totk::FindHash(h.api, 0x7100000000ULL, 1).fail == totk::ProbeFail::header);
         // The report's failure line keeps the raw header, so a size above the cap reaches the log.
@@ -968,6 +974,18 @@ int main() {
         AssertBatch(w, w.h.batches[1], w.base, w.p, third, kOld);
         assert(w.Lines("totk travel: medallion back at ").size() == 1 &&
                w.Lines("totk travel: medallion not where").empty());
+    }
+    {
+        // An out-of-world third value held three ticks never becomes the destination: no
+        // "changed by the game" line, the message stays.
+        World w;
+        w.Settle();
+        assert(w.Go(0));
+        const std::string msg = w.Msg();
+        w.h.Put(w.p, ToBits(7000, 1, 2));
+        w.Run(3);
+        assert(w.In().moved && w.In().moved->dest == kDest && w.Msg() == msg &&
+               w.Lines("totk travel: medallion changed").empty());
     }
     {
         // A third value on one tick only leaves the destination; held two ticks it becomes the
