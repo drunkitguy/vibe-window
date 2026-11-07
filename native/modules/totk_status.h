@@ -169,9 +169,10 @@ inline int ReadLoading(const EdenDsmodHostApi& h, std::uint64_t base, const Offs
         why = Unknown::count;
     if (why != Unknown::none)
         return -1;
-    const std::uint64_t file = detail::Walk(h, base, o.gmd_loading);
+    // Walk gives the flags byte's address; a null file pointer fails the walk's hop check.
+    const std::uint64_t flags_at = detail::Walk(h, base, o.gmd_loading);
     std::uint8_t flags = 0;
-    if (!file || !detail::Read(h, file, flags)) {
+    if (!detail::Read(h, flags_at, flags)) {
         why = Unknown::file_walk;
         return -1;
     }
