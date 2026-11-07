@@ -9,13 +9,16 @@
 // GameData loading gate that permits the manifest's wheel buttons (totk.loading, §A1). The
 // worker also loads the item names from the game's romfs (totk_msbt.h) and, once per session
 // when the player asks for it, logs T8a's texture dump (totk_dump.h), and finds the map's tile
-// files once (totk_map.h).
-// Base extensions: module actions drive the UI state (page, tab, selection, map layer); game
-// actions are refused; load_image serves only the font atlas (icons are romfs: paths the runtime
+// files and the travel destinations once (totk_map.h, totk_travel.h).
+// Base extensions: module actions drive the UI state (page, tab, selection, map layer, travel
+// destination); game actions are refused except A2's travel.go and travel.restore, which move
+// the Travel Medallion through one 4-op write batch behind fail-closed checks (§A2, write
+// extension); load_image serves only the font atlas (icons are romfs: paths the runtime
 // reads). Font extension: decode_font builds that atlas from the game's own font (totk_font.h).
 
 #include <algorithm>
 #include <array>
+#include <cstdarg>
 #include <chrono>
 #include <cmath>
 #include <condition_variable>
@@ -40,6 +43,7 @@
 #include "totk_offsets.h"
 #include "totk_save.h"
 #include "totk_status.h"
+#include "totk_travel.h"
 
 namespace {
 
@@ -58,6 +62,11 @@ constexpr int kLiveGrace = 30;
 // shortcut: 1 s settle after loading, tune after T8c.
 constexpr int kLoadSettle = 60;
 static_assert(pub::kActionArgs[pub::kActMapLayer] == totk::map::kLayerCount);
+constexpr int kAbilityTravel = 6; // the Travel Medallion's totk.ability.<a>
+static_assert(std::string_view(pub::kAbilityNames[kAbilityTravel]) == "travel");
+constexpr std::size_t kMaxDest = totk::travel::kMaxDest;
+constexpr int kMoveWatch = 60; // ticks the move is re-read after go
+using totk::travel::Bits;
 
 // Every key sample publishes with a computed name, built once in create so sample never allocates.
 struct Keys {
@@ -66,6 +75,7 @@ struct Keys {
     std::array<std::string, totk::kTabs> tab_count;
     std::vector<std::array<std::string, pub::kItemFields>> items;
     std::array<std::array<std::string, totk::map::kLevelCount>, totk::map::kTiles> tiles;
+    std::array<std::array<std::string, pub::kTravelFields>, kMaxDest> travel;
 
     Keys() : items(totk::kMaxItems) {
         for (int s = 0; s < totk::kGearSlots; ++s)
@@ -81,6 +91,9 @@ struct Keys {
         for (int n = 0; n < totk::map::kTiles; ++n)
             for (int l = 0; l < totk::map::kLevelCount; ++l)
                 tiles[n][l] = pub::Expand(pub::kTileKeys[l], std::to_string(n));
+        for (std::size_t i = 0; i < kMaxDest; ++i)
+            for (int f = 0; f < pub::kTravelFields; ++f)
+                travel[i][f] = pub::Expand(pub::kTravelKeys[f], std::to_string(i));
     }
 };
 
@@ -112,6 +125,27 @@ struct Instance {
     // totk.loading (-1: none yet) and the unknown cause kinds logged (bit 1 << Unknown).
     int load_clear = 0, loading = -1;
     unsigned load_unknown_logged = 0;
+    std::uint64_t gate_mgr = 0; // the GameDataMgr this sample's gate read (A2 precondition 1)
+    // A2 travel, tick thread only like `page`: the selected destination (-1 none), the queued go
+    // or restore (precondition 4 reads the vec3 on two ticks: req_read, req_bits), whether this
+    // session's first go asked for a manual save, the moved medallion (no pointers: every read
+    // walks the chain again) and the last result line (totk.travel.msg).
+    bool v121 = false;
+    EdenDsmodHostWriteApi write{}; // set by the write extension's configure
+    int travel_sel = -1;
+    enum class Req : std::uint8_t { none, go, restore } req = Req::none;
+    bool req_read = false, save_asked = false;
+    Bits req_bits{};
+    struct Moved {
+        Bits old, dest;
+        std::string label;
+        int ticks = kMoveWatch;
+        bool seen = false; // `last` is a value other than old and dest, seen the tick before
+        Bits last{};
+    };
+    std::optional<Moved> moved;
+    char msg[200] = "";
+    bool report = false, reported = false; // user:totk-re asked (copied from `re`); report ran
 
     std::mutex mutex; // guards everything below; sample holds it only to copy `snapshot`
     std::condition_variable wake;
@@ -124,6 +158,7 @@ struct Instance {
     // holding its copy, frees it.
     std::shared_ptr<const totk::Snapshot> retired;
     bool names = false; // the item names loaded (totk.names.valid)
+    bool re = false;    // user:totk-re exists and is non-empty (A2's read-only report)
     std::shared_ptr<const totk::map::Tiles> tiles; // set once by the worker
 
     // The font atlas, built on first use by decode_font (tick thread) or load_image (asset
@@ -192,7 +227,7 @@ bool TryNames(const EdenDsmodHostApi& h, Names& n) {
     if (n.done || !h.read_romfs)
         return false;
     n.done = ++n.tries >= kNameTries;
-    const char* why = "no Mals/USen.Product.<100-200>.sarc.zs";
+    std::string why = "no Mals/USen.Product.<100-200>.sarc.zs";
     n.mals = totk::msbt::FindMals(h);
     const bool ok = n.mals && totk::msbt::LoadNames(h, n.mals, n.labels, why);
     if (!ok && !n.done)
@@ -204,7 +239,7 @@ bool TryNames(const EdenDsmodHostApi& h, Names& n) {
             std::snprintf(line, sizeof line, "totk: item names from Mals/USen.Product.%d (%u labels)",
                           n.mals, unsigned(n.labels.size()));
         else
-            std::snprintf(line, sizeof line, "totk: item names unavailable: %s", why);
+            std::snprintf(line, sizeof line, "totk: item names unavailable: %s", why.c_str());
         h.log(h.userdata, EDEN_DSMOD_LOG_INFO, line);
     }
     return ok;
@@ -217,7 +252,7 @@ bool TryNames(const EdenDsmodHostApi& h, Names& n) {
 // shortcut: a progress.sav that stays old for a whole poll (2 s) after its caption is newer is
 // taken as is; T8 checks the game's write order.
 void Poll(Instance& in, const EdenDsmodHostSaveApi& api, Watch& w,
-          const totk::msbt::Labels& labels) {
+          const totk::msbt::Labels& labels, const std::vector<totk::travel::Dest>& places) {
     const auto newest = totk::NewestSlot(api);
     if (!newest || newest == w.shown)
         return;
@@ -242,6 +277,7 @@ void Poll(Instance& in, const EdenDsmodHostSaveApi& api, Watch& w,
         return;
     auto next = std::make_shared<totk::Snapshot>(totk::BuildSnapshot(*data));
     ApplyNames(*next, labels);
+    next->travel = totk::travel::Apply(places, *data);
     Replace(in, std::move(next));
     w = Watch{newest, {}, 0, std::nullopt, 0};
 }
@@ -249,7 +285,8 @@ void Poll(Instance& in, const EdenDsmodHostSaveApi& api, Watch& w,
 void Worker(Instance& in) {
     Watch watch;
     Names names;
-    bool dumped = false, probed = false;
+    bool dumped = false, probed = false, placed = false;
+    std::vector<totk::travel::Dest> places;
     std::unique_lock lock{in.mutex};
     while (!in.stop) {
         const std::uint64_t generation = in.requested;
@@ -275,6 +312,10 @@ void Worker(Instance& in) {
             if ((names.mals || names.done) && !dumped) {
                 dumped = true;
                 totk::dump::Run(in.host, names.mals);
+                // A2's read-only report for T8c, asked for like the dump by a player's file.
+                const bool re = in.host.read_romfs(in.host.userdata, "user:totk-re", 0, nullptr, 0);
+                std::scoped_lock re_lock{in.mutex};
+                in.re = re;
             }
             // The map tiles: once, on the same condition (the romfs answered, or never will).
             if ((names.mals || names.done) && !probed && in.host.read_romfs) {
@@ -283,8 +324,16 @@ void Worker(Instance& in) {
                 std::scoped_lock tiles_lock{in.mutex};
                 in.tiles = std::move(tiles);
             }
+            // The travel destinations: once, likewise; a save already shown is read again for
+            // their unlock state.
+            if ((names.mals || names.done) && !placed && in.host.read_romfs) {
+                placed = true;
+                places = totk::travel::Load(in.host, names.mals);
+                if (!places.empty())
+                    watch = Watch{};
+            }
             if (api)
-                Poll(in, *api, watch, names.labels);
+                Poll(in, *api, watch, names.labels, places);
         } catch (...) {
         }
         lock.lock();
@@ -311,7 +360,8 @@ void* Create(const EdenDsmodHostApi* host, const char*) {
         if (!in)
             return nullptr;
         in->host = *host;
-        in->offsets = totk::Is121(host->build_id) ? totk::kOffsets121 : totk::Offsets{};
+        in->v121 = totk::Is121(host->build_id);
+        in->offsets = in->v121 ? totk::kOffsets121 : totk::Offsets{};
         try {
             in->worker = std::thread(Worker, std::ref(*in));
         } catch (...) {
@@ -336,6 +386,12 @@ void Destroy(void* instance) {
         in->wake.notify_all();
         if (in->worker.joinable())
             in->worker.join();
+        // No write at shutdown: the old spot goes to the log (an error line, on disk at once).
+        if (in->moved)
+            totk::travel::Say(in->host, EDEN_DSMOD_LOG_ERROR,
+                              "totk travel: medallion still moved; place it by hand at its old "
+                              "spot %s",
+                              totk::travel::Format(in->moved->old).s);
     } catch (...) {
         // The worker may still run and use `in`: freeing it would be a use after free, and
         // destroying a joinable std::thread calls std::terminate. Leak it instead.
@@ -495,7 +551,7 @@ const totk::Position* LivePosition(Instance& in, const EdenDsmodHostApi& h) {
 int Loading(Instance& in, const EdenDsmodHostApi& h) {
     totk::Unknown why;
     std::uint32_t n = 0;
-    const int gate = totk::ReadLoading(h, h.main_base, in.offsets, why, n);
+    const int gate = totk::ReadLoading(h, h.main_base, in.offsets, why, n, in.gate_mgr);
     in.load_clear = gate == 0 ? std::min(in.load_clear + 1, kLoadSettle) : 0;
     const int loading = in.load_clear < kLoadSettle ? 1 : 0;
     const unsigned bit = 1u << unsigned(why);
@@ -603,6 +659,38 @@ void PublishInventory(const Out& o, const Instance& in, const totk::Snapshot& s)
         o.I(pub::kInvSelHearts, *it.hearts);
 }
 
+// The Map page's destinations and the move's state (only while that page is open: CA10's prebuilt
+// keys). A destination off the selected layer has kind -1 (hidden); dim 1 unless it is open.
+void PublishTravel(const Out& o, const Instance& in, const totk::Snapshot* s) {
+    const std::size_t n = s ? std::min(s->travel.size(), kMaxDest) : 0;
+    o.I(pub::kTravelCount, std::int64_t(n));
+    for (std::size_t i = 0; i < n; ++i) {
+        const auto& d = s->travel[i];
+        const auto& k = in.keys.travel[i];
+        o.F(k[pub::kTravelX].c_str(), d.x);
+        o.F(k[pub::kTravelY].c_str(), -double(d.z));
+        o.I(k[pub::kTravelKind].c_str(), d.layer == in.layer ? d.kind : -1);
+        o.I(k[pub::kTravelDim].c_str(), d.open == 1 ? 0 : 1);
+    }
+    o.T(pub::kTravelIcon, "file:assets/travel-dot.png");
+    const bool sel = in.travel_sel >= 0 && std::size_t(in.travel_sel) < n;
+    o.I(pub::kTravelSelValid, sel ? 1 : 0);
+    if (sel) {
+        const auto& d = s->travel[std::size_t(in.travel_sel)];
+        o.T(pub::kTravelSelName, Shown(d.name, d.label).c_str());
+        o.I(pub::kTravelSelOpen, d.open);
+        o.I(pub::kTravelSelKind, d.kind);
+    }
+    o.I(pub::kTravelMoved, in.moved ? 1 : 0);
+    if (in.moved) {
+        const auto& b = in.moved->old;
+        o.F(pub::kTravelOldX, totk::detail::Float(b[0]));
+        o.F(pub::kTravelOldY, totk::detail::Float(b[1]));
+        o.F(pub::kTravelOldZ, totk::detail::Float(b[2]));
+    }
+    o.Line(pub::kTravelMsg, in.msg);
+}
+
 void Sample(void* instance, const EdenDsmodHostApi* host) {
     try {
         if (!instance || !host || !host->publish_i64)
@@ -616,6 +704,7 @@ void Sample(void* instance, const EdenDsmodHostApi* host) {
             snap = in.snapshot;
             tiles = in.tiles;
             names = in.names;
+            in.report = in.re;
         }
         // Status first, then the position (which may move the layer before it is published).
         const totk::Status* status = LiveStatus(in, *host, snap.get());
@@ -631,6 +720,8 @@ void Sample(void* instance, const EdenDsmodHostApi* host) {
         o.I(pub::kLoading, loading);
         PublishStatus(o, status, snap.get());
         PublishMap(o, in, pos, snap.get(), tiles.get());
+        if (in.page == kPageMap)
+            PublishTravel(o, in, snap.get());
         if (!snap) { // no save read yet: every other save domain is empty
             o.I(pub::kGearValid, 0);
             o.I(pub::kAbilityValid, 0);
@@ -648,31 +739,202 @@ void Sample(void* instance, const EdenDsmodHostApi* host) {
 }
 
 // Writes the log line of each action refused since the last tick, once per action name.
+void LogRefused(Instance& in, const EdenDsmodHostApi& h) {
+    if (!h.log || !(in.refused & ~in.logged))
+        return;
+    for (int a = 0; a < pub::kActions; ++a) {
+        const std::uint32_t bit = 1u << a;
+        if (!(in.refused & bit) || (in.logged & bit))
+            continue;
+        in.logged |= bit;
+        char line[224];
+        if (a == pub::kActAbilitySelect) // the manifest sends it only for the medallion
+            std::snprintf(line, sizeof line,
+                          "totk: %s disabled: the Travel Medallion is placed in the + menu "
+                          "and used from the game's map; the companion's medallion move "
+                          "(Map page) waits for T8c",
+                          pub::kActionNames[a]);
+        else if (a >= pub::kActGearSwap && a < pub::kActTravelSelect)
+            std::snprintf(line, sizeof line, "totk: %s disabled: no verified offsets",
+                          pub::kActionNames[a]);
+        else
+            std::snprintf(line, sizeof line, "totk: %s refused: argument out of range",
+                          pub::kActionNames[a]);
+        h.log(h.userdata, EDEN_DSMOD_LOG_INFO, line);
+    }
+}
+
+// totk.travel.msg, the last result line (printf-style; no allocation).
+__attribute__((format(printf, 2, 3))) void Msg(Instance& in, const char* format, ...) {
+    va_list args;
+    va_start(args, format);
+    std::vsnprintf(in.msg, sizeof in.msg, format, args);
+    va_end(args);
+}
+
+// The selected destination of the shown snapshot, or null.
+const totk::travel::Dest* Selected(const Instance& in, const totk::Snapshot* s) {
+    const bool ok = s && in.travel_sel >= 0 &&
+                    std::size_t(in.travel_sel) < std::min(s->travel.size(), kMaxDest);
+    return ok ? &s->travel[std::size_t(in.travel_sel)] : nullptr;
+}
+
+std::shared_ptr<const totk::Snapshot> Shown(Instance& in) {
+    std::scoped_lock lock{in.mutex};
+    return in.snapshot;
+}
+
+// Preconditions 1-4 of §A2 (host reads only): null when they hold, else the message.
+const char* Preconditions(const Instance& in, const EdenDsmodHostApi& h, totk::travel::Walked& w) {
+    if (in.loading != 0)
+        return "Game loading or not readable: try again";
+    if (!totk::travel::ReadMedallion(h, in.offsets, w))
+        return "Medallion not readable";
+    if (w.ptr[0] != in.gate_mgr)
+        return "Game data changed: try again";
+    if (const char* placed = totk::travel::PlacedCheck(h, in.offsets, w))
+        return placed;
+    if (!totk::travel::InWorld(w.bits))
+        return "Medallion position not readable";
+    return nullptr;
+}
+
+// x X y Y z Z, one decimal, for the screen (the log keeps Format's exact floats).
+struct Spot {
+    char s[64];
+};
+Spot ShortSpot(const Bits& b) {
+    Spot t;
+    std::snprintf(t.s, sizeof t.s, "x %.1f y %.1f z %.1f", double(totk::detail::Float(b[0])),
+                  double(totk::detail::Float(b[1])), double(totk::detail::Float(b[2])));
+    return t;
+}
+
+// Precondition 5, the "moved from" line (before the batch, so a crash during it still leaves the
+// old spot in the log), the batch, then the 60-tick watch.
+void Go(Instance& in, const EdenDsmodHostApi& h, const totk::travel::Walked& w) {
+    const auto snap = Shown(in);
+    const totk::travel::Dest* d = Selected(in, snap.get());
+    if (!d || d->open != 1)
+        return Msg(in, "Select an open destination");
+    const Bits dest = totk::travel::ToBits(d->x, d->y + totk::travel::kArrivalHover, d->z);
+    if (!totk::travel::InWorld(dest))
+        return Msg(in, "Destination out of the world");
+    totk::travel::Say(h, EDEN_DSMOD_LOG_ERROR,
+                      "totk travel: medallion moved from %s to %s %s; if Eden closes before Put "
+                      "back, place it again by hand at the old x/z",
+                      totk::travel::Format(w.bits).s, d->label.c_str(),
+                      totk::travel::Format(dest).s);
+    if (!totk::travel::SendBatch(in.write, w, w.bits, dest)) {
+        totk::travel::Say(h, EDEN_DSMOD_LOG_ERROR, "totk travel: move not applied");
+        return Msg(in, "Not applied, try again");
+    }
+    in.moved = Instance::Moved{w.bits, dest, d->label};
+    Msg(in, "Open the map and travel to your medallion");
+}
+
+void Restore(Instance& in, const EdenDsmodHostApi& h, const totk::travel::Walked& w) {
+    const auto& m = *in.moved;
+    if (w.bits == m.old) { // the game reverted it after the watch, or the player put it there
+        totk::travel::Say(h, EDEN_DSMOD_LOG_ERROR, "totk travel: medallion already back at %s",
+                          totk::travel::Format(m.old).s);
+        in.moved.reset();
+        return Msg(in, "Medallion is already back");
+    }
+    if (w.bits != m.dest) { // changed after the watch, or moved by the player
+        totk::travel::Say(h, EDEN_DSMOD_LOG_ERROR,
+                          "totk travel: medallion not where the companion put it; place it by "
+                          "hand at its old spot %s",
+                          totk::travel::Format(m.old).s);
+        Msg(in,
+            "The medallion is not where the companion put it; place it by hand at its old spot %s",
+            ShortSpot(m.old).s);
+        in.moved.reset();
+        return;
+    }
+    if (!totk::travel::SendBatch(in.write, w, m.dest, m.old))
+        return Msg(in, "Not applied, try again");
+    totk::travel::Say(h, EDEN_DSMOD_LOG_ERROR, "totk travel: medallion back at %s",
+                      totk::travel::Format(m.old).s);
+    in.moved.reset();
+    Msg(in, "Medallion put back");
+}
+
+// One of the 60 ticks after go: did the game keep the move? A failed walk skips the tick.
+void WatchMove(Instance& in, const EdenDsmodHostApi& h) {
+    auto& m = *in.moved;
+    --m.ticks;
+    totk::travel::Walked w;
+    if (!totk::travel::ReadMedallion(h, in.offsets, w))
+        return;
+    if (w.bits == m.old) {
+        totk::travel::Say(h, EDEN_DSMOD_LOG_ERROR,
+                          "totk travel: move not applied (medallion still at %s)",
+                          totk::travel::Format(w.bits).s);
+        in.moved.reset();
+        return Msg(in, "The game did not keep the move (not applied)");
+    }
+    if (w.bits == m.dest) {
+        m.seen = false;
+        return;
+    }
+    if (m.seen && w.bits == m.last && totk::travel::InWorld(w.bits)) { // held two ticks
+        m.dest = w.bits;
+        m.seen = false;
+        totk::travel::Say(h, EDEN_DSMOD_LOG_ERROR,
+                          "totk travel: medallion changed by the game; now at %s; old spot %s",
+                          totk::travel::Format(m.dest).s, totk::travel::Format(m.old).s);
+        return Msg(in, "The game changed the medallion; its old spot is %s", ShortSpot(m.old).s);
+    }
+    m.seen = true;
+    m.last = w.bits;
+}
+
+// A queued go or restore: preconditions 1-4 on two ticks with the same vec3 (any failure drops
+// the request and keeps `moved`), then the move itself.
+void Step(Instance& in, const EdenDsmodHostApi& h) {
+    if (in.req == Instance::Req::restore && !in.moved) { // the watch saw a revert meanwhile
+        in.req = Instance::Req::none;
+        return;
+    }
+    totk::travel::Walked w;
+    const char* fail = Preconditions(in, h, w);
+    if (!fail && in.req_read && w.bits != in.req_bits)
+        fail = "The medallion moved meanwhile: tap again";
+    if (fail) {
+        in.req = Instance::Req::none;
+        return Msg(in, "%s", fail);
+    }
+    if (!in.req_read) {
+        in.req_read = true;
+        in.req_bits = w.bits;
+        return;
+    }
+    const auto req = in.req;
+    in.req = Instance::Req::none;
+    req == Instance::Req::go ? Go(in, h, w) : Restore(in, h, w);
+}
+
+void Travel(Instance& in, const EdenDsmodHostApi& h) {
+    // T8c's read-only report: once, the first time the gate publishes 0 (1.2.1 offsets only).
+    if (in.report && !in.reported && in.loading == 0 && in.offsets.v3a_table &&
+        in.offsets.int_table) {
+        in.reported = true;
+        totk::travel::Report(h, in.gate_mgr, in.offsets);
+    }
+    if (in.moved && in.moved->ticks > 0)
+        WatchMove(in, h);
+    if (in.req != Instance::Req::none)
+        Step(in, h);
+}
+
 void Tick(void* instance, const EdenDsmodHostApi* host) {
     try {
         auto* in = static_cast<Instance*>(instance);
-        if (!in || !host || !host->log || !(in->refused & ~in->logged))
+        if (!in || !host)
             return;
-        for (int a = 0; a < pub::kActions; ++a) {
-            const std::uint32_t bit = 1u << a;
-            if (!(in->refused & bit) || (in->logged & bit))
-                continue;
-            in->logged |= bit;
-            char line[224];
-            if (a == pub::kActAbilitySelect) // the manifest sends it only for the medallion
-                std::snprintf(line, sizeof line,
-                              "totk: %s disabled: the Travel Medallion is placed in the + menu "
-                              "and used from the game's map; the companion's medallion move "
-                              "(Map page) waits for T8c",
-                              pub::kActionNames[a]);
-            else if (a >= pub::kActGearSwap)
-                std::snprintf(line, sizeof line, "totk: %s disabled: no verified offsets",
-                              pub::kActionNames[a]);
-            else
-                std::snprintf(line, sizeof line, "totk: %s refused: argument out of range",
-                              pub::kActionNames[a]);
-            host->log(host->userdata, EDEN_DSMOD_LOG_INFO, line);
-        }
+        LogRefused(*in, *host);
+        Travel(*in, *host);
     } catch (...) {
     }
 }
@@ -690,9 +952,43 @@ void Configure(void* instance, const EdenDsmodHostExtensions* host) {
     }
 }
 
+// totk.travel.go's on_action checks (§A2), in order; a refusal sets totk.travel.msg. Passing
+// queues the request for the next ticks' preconditions.
+EdenDsmodBool TravelGo(Instance& in) {
+    const auto& o = in.offsets;
+    const auto refuse = [&](const char* why) {
+        Msg(in, "%s", why);
+        return EDEN_DSMOD_FALSE;
+    };
+    if (!in.v121)
+        return refuse("Moving the medallion needs game version 1.2.1");
+    if (!o.medallion.n || !o.v3a_table || !o.int_table || !o.medallion_index ||
+        !(o.medallion_len || o.medallion_index_placed.set))
+        return refuse("Moving the medallion is waiting for T8c (offsets not checked yet)");
+    if (!in.write.write_batch)
+        return refuse("This Eden build cannot write game memory (no write extension)");
+    const auto snap = Shown(in);
+    const totk::travel::Dest* d = Selected(in, snap.get());
+    if (!d || d->open != 1)
+        return refuse("Select an open destination");
+    if (!snap->owned[kAbilityTravel])
+        return refuse("The last save has no Travel Medallion");
+    if (in.moved)
+        return refuse("Put the medallion back first");
+    if (!in.save_asked) { // data-loss rule: a save to fall back on
+        in.save_asked = true;
+        return refuse("Make a manual save in game, then tap again");
+    }
+    in.req = Instance::Req::go;
+    in.req_read = false;
+    Msg(in, "Moving the medallion");
+    return EDEN_DSMOD_TRUE;
+}
+
 // The action table [docs/PLAN.md "Actions"]: UI actions within range are accepted and change
 // only module state; game actions, unknown names and out-of-range arguments return false (the
-// runtime plays the refused haptic). Nothing here reads or writes guest memory.
+// runtime plays the refused haptic). Nothing here reads or writes guest memory: travel.go and
+// travel.restore only queue a request for Tick.
 EdenDsmodBool OnAction(void* instance, const char* action, std::int64_t arg) {
     try {
         auto* in = static_cast<Instance*>(instance);
@@ -732,6 +1028,24 @@ EdenDsmodBool OnAction(void* instance, const char* action, std::int64_t arg) {
                 break;
             in->layer = int(arg);
             return true;
+        case pub::kActTravelSelect: { // < totk.travel.count
+            const auto snap = Shown(*in);
+            if (!snap || arg < 0 || std::uint64_t(arg) >= std::min(snap->travel.size(), kMaxDest))
+                break;
+            in->travel_sel = int(arg);
+            return true;
+        }
+        case pub::kActTravelGo:
+            return TravelGo(*in);
+        case pub::kActTravelRestore:
+            if (!in->moved) {
+                Msg(*in, "Nothing to put back");
+                return false;
+            }
+            in->req = Instance::Req::restore;
+            in->req_read = false;
+            Msg(*in, "Putting the medallion back");
+            return true;
         default: // kActGearSwap, kActInvUse, kActAbilitySelect: no verified offsets; or unknown
             break;
         }
@@ -740,6 +1054,20 @@ EdenDsmodBool OnAction(void* instance, const char* action, std::int64_t arg) {
         return false;
     } catch (...) {
         return false;
+    }
+}
+
+// The write extension's host table, kept only when it matches. configure runs right after create
+// on the runtime's thread, before any tick, and only tick and on_action read it.
+void ConfigureWrite(void* instance, const EdenDsmodHostWriteApi* api) {
+    try {
+        auto* in = static_cast<Instance*>(instance);
+        if (!in || !api || api->version != EDEN_DSMOD_WRITE_EXT_VERSION ||
+            api->struct_size < sizeof(EdenDsmodHostWriteApi) ||
+            api->abi_hash != EDEN_DSMOD_WRITE_EXT_HASH || !api->write_batch)
+            return;
+        in->write = *api;
+    } catch (...) {
     }
 }
 
@@ -836,11 +1164,19 @@ const EdenDsmodModuleSaveExtensions kSaveExtensions{
     ConfigureSave,
 };
 
+const EdenDsmodModuleWriteExtensions kWriteExtensions{
+    EDEN_DSMOD_WRITE_EXT_VERSION,
+    sizeof(EdenDsmodModuleWriteExtensions),
+    EDEN_DSMOD_WRITE_EXT_HASH,
+    ConfigureWrite,
+};
+
 } // namespace
 
 DSMOD_SDK_EXPORT_MODULE(kModule)
 DSMOD_SDK_EXPORT_EXTENSIONS(kExtensions)
 DSMOD_SDK_EXPORT_FONT_EXTENSIONS(kFontExtensions)
+DSMOD_SDK_EXPORT_WRITE_EXTENSIONS(kWriteExtensions)
 // The SDK has no save macro [S3 MODULE_GUIDE §1.5]; this is the generic getter the macros expand
 // to, as the SMO module does [S2 native/modules/0100000000010000.cpp:1499].
 DSMOD_SDK_DEFINE_GETTER(eden_dsmod_get_save_extensions, EdenDsmodModuleSaveExtensions,

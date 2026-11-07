@@ -49,9 +49,13 @@ int Gate(Host& h, std::string_view cause = "", const totk::Offsets& o = kOffsets
          std::uint32_t count = 0) {
     totk::Unknown why;
     std::uint32_t n = 0;
-    const int r = totk::ReadLoading(h.api, h.api.main_base, o, why, n);
+    std::uint64_t mgr = 1;
+    const int r = totk::ReadLoading(h.api, h.api.main_base, o, why, n, mgr);
     assert(totk::kUnknownText[unsigned(why)] == cause);
     assert(why != totk::Unknown::count || n == count);
+    // mgr is the GameDataMgr the walk read (A2 compares it), 0 when a chain is empty.
+    const bool all = o.gmd_mgr.n && o.gmd_holder.n && o.gmd_count.n && o.gmd_loading.n;
+    assert(mgr == (all ? totk::detail::Walk(h.api, h.api.main_base, o.gmd_mgr) : 0));
     return r;
 }
 

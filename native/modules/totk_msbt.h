@@ -139,18 +139,20 @@ inline int FindMals(const EdenDsmodHostApi& h) {
     return 0;
 }
 
-// PouchContent.msbt of Mals <n>: a size query, then one read. False with `why` set otherwise.
-inline bool LoadNames(const EdenDsmodHostApi& h, int n, Labels& out, const char*& why) {
-    char path[96];
-    std::snprintf(path, sizeof path, "romfs:Mals/USen.Product.%d.sarc.zs#ActorMsg/PouchContent.msbt",
-                  n);
+// `member` of Mals <n> (PouchContent.msbt by default; A2 reads LocationMsg/Location.msbt): a size
+// query, then one read. False with `why` set otherwise, naming `member`.
+inline bool LoadNames(const EdenDsmodHostApi& h, int n, Labels& out, std::string& why,
+                      const char* member = "ActorMsg/PouchContent.msbt") {
+    char path[128];
+    std::snprintf(path, sizeof path, "romfs:Mals/USen.Product.%d.sarc.zs#%s", n, member);
     std::vector<std::uint8_t> bytes;
+    const char* name = std::strrchr(member, '/') ? std::strrchr(member, '/') + 1 : member;
     if (!ReadAll(h, path, bytes)) {
-        why = "PouchContent.msbt unreadable (Eden Duo patch 0009 missing?)";
+        why = std::string(name) + " unreadable (Eden Duo patch 0009 missing?)";
         return false;
     }
     if (!Parse(bytes, out)) {
-        why = "PouchContent.msbt is not a UTF-16LE MSBT";
+        why = std::string(name) + " is not a UTF-16LE MSBT";
         return false;
     }
     return true;

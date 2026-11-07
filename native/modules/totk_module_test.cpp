@@ -144,7 +144,7 @@ int main() {
     assert(m->name && *m->name);
     assert(m->supports_build && m->create && m->destroy && m->sample && m->tick);
 
-    // eden_dsmod_get_save_extensions: version and hash gate, then the table the host checks.
+    // Each getter: version and hash gate, then the table the host checks.
     assert(!eden_dsmod_get_save_extensions(EDEN_DSMOD_SAVE_EXT_VERSION + 1, EDEN_DSMOD_SAVE_EXT_HASH));
     assert(!eden_dsmod_get_save_extensions(EDEN_DSMOD_SAVE_EXT_VERSION, EDEN_DSMOD_SAVE_EXT_HASH ^ 1));
     const EdenDsmodModuleSaveExtensions* se = SaveExt();
@@ -152,8 +152,7 @@ int main() {
            se->struct_size == sizeof(EdenDsmodModuleSaveExtensions) &&
            se->abi_hash == EDEN_DSMOD_SAVE_EXT_HASH && se->configure);
 
-    // eden_dsmod_get_extensions: version and hash gate; every callback present (the host requires
-    // configure, and a module with EDEN_DSMOD_CAP_EXTENSIONS must export the table).
+    // Base extensions: every callback (EDEN_DSMOD_CAP_EXTENSIONS needs the table).
     assert(!eden_dsmod_get_extensions(EDEN_DSMOD_EXT_VERSION + 1, EDEN_DSMOD_EXT_HASH));
     assert(!eden_dsmod_get_extensions(EDEN_DSMOD_EXT_VERSION, EDEN_DSMOD_EXT_HASH ^ 1));
     const EdenDsmodModuleExtensions* ext = Ext();
@@ -162,7 +161,6 @@ int main() {
            ext->abi_hash == EDEN_DSMOD_EXT_HASH && ext->configure && ext->on_action &&
            ext->load_image);
 
-    // eden_dsmod_get_font_extensions: version and hash gate, then the table the host checks.
     assert(!eden_dsmod_get_font_extensions(EDEN_DSMOD_FONT_EXT_VERSION + 1,
                                            EDEN_DSMOD_FONT_EXT_HASH));
     assert(!eden_dsmod_get_font_extensions(EDEN_DSMOD_FONT_EXT_VERSION,
@@ -690,10 +688,12 @@ int main() {
     }
     for (std::int64_t bad : {std::int64_t(-1), std::int64_t(3), kMin, kMax})
         assert(!act("totk.map.layer", bad));
-    // Game actions are refused for every argument, valid or not (CA7d): -1-7, kMin and kMax.
+    // Game actions are refused for every argument, valid or not (CA7d): -1-7, kMin and kMax
+    // (travel: 1.2.0, nothing moved, no destination).
     const auto game_refused = [&](std::int64_t k) {
         return !act("totk.gear.swap", k) && !act("totk.inv.use", k) &&
-               !act("totk.ability.select", k);
+               !act("totk.ability.select", k) && !act("totk.travel.select", k) &&
+               !act("totk.travel.go", k) && !act("totk.travel.restore", k);
     };
     assert(game_refused(kMin) && game_refused(kMax));
     for (std::int64_t k = -1; k <= 7; ++k)
@@ -716,7 +716,8 @@ int main() {
         "totk: totk.gear.swap disabled: no verified offsets",
         "totk: totk.inv.use disabled: no verified offsets",
         "totk: totk.ability.select disabled: the Travel Medallion is placed in the + menu and "
-        "used from the game's map; the companion's medallion move (Map page) waits for T8c"};
+        "used from the game's map; the companion's medallion move (Map page) waits for T8c",
+        "totk: totk.travel.select refused: argument out of range"};
     assert(h.logs == lines); // unknown names: no line
     assert(!act("totk.gear.swap", 0) && !act("totk.other", 0) && !act("totk.ui.page", 9));
     m->tick(instance, &h.api);
@@ -758,7 +759,7 @@ int main() {
     in.tab = 0;
     in.sel = 0;
     // CA7c: the whole save path never touched guest memory.
-    assert(h.read_calls == 0 && h.is_mapped_calls == 0 && h.write_calls == 0);
+    assert(h.read_calls == 0 && h.is_mapped_calls == 0 && h.write_calls == 0 && !h.batch_calls);
 
     // Null instance or host: nothing happens, nothing crashes.
     m->sample(nullptr, &h.api);
@@ -1113,11 +1114,11 @@ int main() {
         {
             std::scoped_lock lock{hn.log_mutex};
             const std::string one = ": 1/120, first missing " + dir;
-            assert((hn.logs == std::vector<std::string>{
+            assert((hn.logs == totk::test::WithTravelMissing({
                                    "totk: item names from Mals/USen.Product.121 (6 labels)",
                                    "totk: map tiles G" + one + "G_01-00_02.bntx.zs",
                                    "totk: map tiles S" + one + "S_00-00_02.bntx.zs",
-                                   "totk: map tiles U" + one + "U_00-00_02.bntx.zs"}));
+                                   "totk: map tiles U" + one + "U_00-00_02.bntx.zs"})));
         }
         ni.page = kPageHome;
         ni.tab = 1;
@@ -1195,6 +1196,7 @@ int main() {
     }
     // No names after 30 tries: one line, then no more probes; the dump runs then (here the
     // player's user:totk-dump exists but the romfs has no layout archive).
+    const std::string no_tile = ": 0/120, first missing romfs:/UI/Map/MainField/";
     {
         Host hf;
         hf.PutRomfs("user:totk-dump", {'1'});
@@ -1206,21 +1208,21 @@ int main() {
         };
         for (int i = 0; i < 40 && logs().empty(); ++i)
             PollNow(unnamed);
-        const std::string none = ": 0/120, first missing romfs:/UI/Map/MainField/";
-        const std::vector<std::string> lines{
+        const auto lines = totk::test::WithTravelMissing({
             "totk: item names unavailable: no Mals/USen.Product.<100-200>.sarc.zs",
             "totk dump mals 0", "totk dump failed: no UI/LayoutArchive/Common.Product.<100-200>",
-            "totk: map tiles G" + none + "G_00-00_02.bntx.zs",
-            "totk: map tiles S" + none + "S_00-00_02.bntx.zs",
-            "totk: map tiles U" + none + "U_00-00_02.bntx.zs"};
+            "totk: map tiles G" + no_tile + "G_00-00_02.bntx.zs",
+            "totk: map tiles S" + no_tile + "S_00-00_02.bntx.zs",
+            "totk: map tiles U" + no_tile + "U_00-00_02.bntx.zs"});
         assert(logs() == lines);
         unsigned calls;
         {
             std::scoped_lock lock{hf.romfs_mutex};
             calls = hf.romfs_calls;
         }
-        // 30 Mals probes, the user file, the Common probe, 15 suffixes per tile of 3 layers.
-        assert(calls == 30 * 101 + 1 + 101 + 3 * 120 * 15);
+        // 30 Mals probes, the user files, the Common probe, 15 suffixes per tile of 3 layers,
+        // the two LocationArea files.
+        assert(calls == 30 * 101 + 1 + 101 + 1 + 3 * 120 * 15 + 2);
         for (int i = 0; i < 5; ++i)
             PollNow(unnamed);
         SampleClean(m, unnamed, hf);
@@ -1239,16 +1241,12 @@ int main() {
         PollNow(early);
         {
             std::scoped_lock lock{hd.log_mutex};
-            assert((hd.logs ==
-                    std::vector<std::string>{
-                        "totk dump mals 120",
-                        "totk dump failed: no UI/LayoutArchive/Common.Product.<100-200>",
-                        "totk: map tiles G: 0/120, first missing "
-                        "romfs:/UI/Map/MainField/G_00-00_02.bntx.zs",
-                        "totk: map tiles S: 0/120, first missing "
-                        "romfs:/UI/Map/MainField/S_00-00_02.bntx.zs",
-                        "totk: map tiles U: 0/120, first missing "
-                        "romfs:/UI/Map/MainField/U_00-00_02.bntx.zs"}));
+            assert((hd.logs == totk::test::WithTravelMissing(
+                                   {"totk dump mals 120",
+                                    "totk dump failed: no UI/LayoutArchive/Common.Product.<100-200>",
+                                    "totk: map tiles G" + no_tile + "G_00-00_02.bntx.zs",
+                                    "totk: map tiles S" + no_tile + "S_00-00_02.bntx.zs",
+                                    "totk: map tiles U" + no_tile + "U_00-00_02.bntx.zs"})));
         }
         m->destroy(early);
     }

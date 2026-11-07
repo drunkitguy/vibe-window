@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Live status reader: hearts, stamina, rupees and battery through the Offsets chains
-// (docs/PLAN.md §T3a), Link's position (§T3b) and the GameData loading gate (§A1). Fails closed:
+// (docs/PLAN.md §T3a), Link's position (§T3b), the GameData loading gate (§A1) and the GameData
+// hash probe (§A2). Fails closed:
 // an empty chain reads nothing; an unmapped or misaligned slot, a null or low pointer, an
 // overflowing address, an actor not named "Player", a torn read or an implausible value gives an
 // invalid Status or Position.
@@ -41,7 +42,9 @@ bool Read(const EdenDsmodHostApi& h, std::uint64_t at, T& out) {
 }
 
 // The final address of `c` from `base`, or 0. From main_base the first slot must lie in main.
-inline std::uint64_t Walk(const EdenDsmodHostApi& h, std::uint64_t base, const Chain& c) {
+// `got`, when given, receives the pointer each hop read (got[i - 1] for hop i).
+inline std::uint64_t Walk(const EdenDsmodHostApi& h, std::uint64_t base, const Chain& c,
+                          std::uint64_t* got = nullptr) {
     constexpr auto kMax = std::numeric_limits<std::uint64_t>::max();
     if (c.n == 0 || c.n > c.hop.size() || base == 0 || base > kMax - c.hop[0])
         return 0;
@@ -52,6 +55,8 @@ inline std::uint64_t Walk(const EdenDsmodHostApi& h, std::uint64_t base, const C
         std::uint64_t p = 0;
         if (at % 8 != 0 || !Read(h, at, p) || p < kMinPointer || p > kMax - c.hop[i])
             return 0;
+        if (got)
+            got[i - 1] = p;
         at = p + c.hop[i];
     }
     return at;
@@ -130,8 +135,14 @@ inline Status ReadStatus(const EdenDsmodHostApi& h, const Offsets& o) {
     return s;
 }
 
-// Two passes compared bitwise, then the bounds: x and z inside T7's map area [S28 §2], y in
-// [-1500, 3500] [S28 runtime/world_survey.c:53-56]; NaN and infinity fail them.
+// The world bounds: x and z inside T7's map area [S28 §2], y in [-1500, 3500] [S28
+// runtime/world_survey.c:53-56]; NaN and infinity fail them. Link's position and every A2 vec3
+// (romfs Trans, the medallion, its destination) must pass.
+inline bool InWorld(float x, float y, float z) {
+    return x >= -6000 && x <= 6000 && y >= -1500 && y <= 3500 && z >= -5000 && z <= 5000;
+}
+
+// Two passes compared bitwise, then InWorld.
 inline Position ReadPosition(const EdenDsmodHostApi& h, const Offsets& o) {
     if (!o.actor.n || !o.name.n || !o.position.n)
         return {};
@@ -139,8 +150,7 @@ inline Position ReadPosition(const EdenDsmodHostApi& h, const Offsets& o) {
     if (!detail::ReadPositionOnce(h, o, a) || !detail::ReadPositionOnce(h, o, b) || a != b)
         return {};
     const Position p{true, detail::Float(a[0]), detail::Float(a[1]), detail::Float(a[2])};
-    if (!(p.x >= -6000 && p.x <= 6000 && p.y >= -1500 && p.y <= 3500 && p.z >= -5000 &&
-          p.z <= 5000))
+    if (!InWorld(p.x, p.y, p.z))
         return {};
     return p;
 }
@@ -155,12 +165,14 @@ inline constexpr const char* kUnknownText[] = {"", "managers differ", "count unr
 // flags' 0x02 bit is clear; 1 when that bit is set; -1 (unknown) on anything else, with `why`
 // naming the cause (and `n` the count for Unknown::count). A manager or holder walk that fails
 // counts as "managers differ". Any empty chain gives -1 with no host call and leaves `why` none.
+// `mgr` receives the manager the walk read (0: none), which A2's precondition 1 compares.
 inline int ReadLoading(const EdenDsmodHostApi& h, std::uint64_t base, const Offsets& o,
-                       Unknown& why, std::uint32_t& n) {
+                       Unknown& why, std::uint32_t& n, std::uint64_t& mgr) {
     why = Unknown::none;
+    mgr = 0;
     if (!o.gmd_mgr.n || !o.gmd_holder.n || !o.gmd_count.n || !o.gmd_loading.n)
         return -1;
-    const std::uint64_t mgr = detail::Walk(h, base, o.gmd_mgr);
+    mgr = detail::Walk(h, base, o.gmd_mgr);
     if (!mgr || mgr != detail::Walk(h, base, o.gmd_holder))
         why = Unknown::managers_differ;
     else if (!detail::ReadWord(h, base, o.gmd_count, n))
@@ -177,6 +189,57 @@ inline int ReadLoading(const EdenDsmodHostApi& h, std::uint64_t base, const Offs
         return -1;
     }
     return flags & 0x02 ? 1 : 0;
+}
+
+// The GameData hash probe [S28 gamedata_live.c:4-7,36-46] over the table at `at` (mgr +
+// v3a_table or int_table): {u64 table, u32 count at +kTableCount, u32 size at +kTableSize}; the
+// table holds {u32 hash, u32 index}, slot hash % size, the next slot on a clash, hash 0 empty. A
+// table pointer below kMinPointer, count 0, count > size or size above kMaxTable is refused with
+// no probe read, an unmapped table range after one RangeMapped (which also refuses size 0 and a
+// wrapping range); then at most `size` slot reads; an index >= count is a miss. Every result keeps
+// the raw header it read, so a refused size still reaches the log.
+// shortcut: fixed cap so a garbage size cannot spin the tick thread, set from the size T8c logs.
+inline constexpr std::uint32_t kMaxTable = 0x10000;
+enum class ProbeFail : std::uint8_t { none, header, pointer, count_zero, count_over_size,
+                                      size_over_cap, unmapped, slot, missing, index };
+inline constexpr const char* kProbeText[] = {"",           "header unreadable", "table pointer",
+                                             "count 0",    "count > size",      "size > cap",
+                                             "table unmapped", "slot unreadable", "hash missing",
+                                             "index >= count"};
+struct Probe {
+    ProbeFail fail = ProbeFail::header;
+    std::uint64_t table = 0;
+    std::uint32_t count = 0, size = 0, index = 0;
+};
+inline Probe FindHash(const EdenDsmodHostApi& h, std::uint64_t at, std::uint32_t hash) {
+    Probe r;
+    if (!detail::Read(h, at, r.table) || !detail::Read(h, at + kTableCount, r.count) ||
+        !detail::Read(h, at + kTableSize, r.size))
+        return r;
+    r.fail = r.table < detail::kMinPointer ? ProbeFail::pointer
+             : r.count == 0                ? ProbeFail::count_zero
+             : r.count > r.size            ? ProbeFail::count_over_size
+             : r.size > kMaxTable          ? ProbeFail::size_over_cap
+             : !dsmod_sdk::RangeMapped(h, r.table, std::uint64_t(r.size) * 8)
+                 ? ProbeFail::unmapped
+                 : ProbeFail::missing;
+    if (r.fail != ProbeFail::missing)
+        return r;
+    for (std::uint32_t i = 0, s = hash % r.size; i < r.size; ++i, s = s + 1 == r.size ? 0 : s + 1) {
+        std::array<std::uint32_t, 2> e{};
+        if (!detail::Read(h, r.table + std::uint64_t(s) * 8, e)) {
+            r.fail = ProbeFail::slot;
+            return r;
+        }
+        if (e[0] == 0)
+            return r;
+        if (e[0] == hash) {
+            r.index = e[1];
+            r.fail = e[1] < r.count ? ProbeFail::none : ProbeFail::index;
+            return r;
+        }
+    }
+    return r;
 }
 
 // Link's map layer (totk.map.layer: 0 surface, 1 sky, 2 depths) from his height [S28

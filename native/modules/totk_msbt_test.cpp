@@ -150,12 +150,18 @@ int main() {
     // PouchContent.msbt: a size query and one read of exactly that size.
     {
         Host h;
-        const char* why = nullptr;
-        assert(!msbt::LoadNames(h.api, 120, labels, why) && why && h.romfs_calls == 1);
+        std::string why;
+        assert(!msbt::LoadNames(h.api, 120, labels, why) && h.romfs_calls == 1 &&
+               why == "PouchContent.msbt unreadable (Eden Duo patch 0009 missing?)");
         const std::string member = "romfs:Mals/USen.Product.120.sarc.zs#ActorMsg/PouchContent.msbt";
         h.PutRomfs(member, {1, 2, 3});
-        why = nullptr;
-        assert(!msbt::LoadNames(h.api, 120, labels, why) && why && labels.empty());
+        assert(!msbt::LoadNames(h.api, 120, labels, why) && labels.empty() &&
+               why == "PouchContent.msbt is not a UTF-16LE MSBT");
+        // Another member: its own path, and `why` names it.
+        assert(!msbt::LoadNames(h.api, 120, labels, why, "LocationMsg/Location.msbt") &&
+               why == "Location.msbt unreadable (Eden Duo patch 0009 missing?)" &&
+               h.romfs_paths.back() ==
+                   "romfs:Mals/USen.Product.120.sarc.zs#LocationMsg/Location.msbt");
         h.PutRomfs(member, file);
         h.romfs_calls = 0;
         assert(msbt::LoadNames(h.api, 120, labels, why) && labels.size() == 6 &&
@@ -173,8 +179,8 @@ int main() {
         };
         msbt::Labels partial;
         assert(msbt::Parse(std::span(g_romfs_file.data(), g_romfs_file.size() - 1), partial));
-        why = nullptr;
-        assert(!msbt::LoadNames(short_read, 120, labels, why) && why);
+        why.clear();
+        assert(!msbt::LoadNames(short_read, 120, labels, why) && !why.empty());
     }
 
     std::puts("totk_msbt_test: ok");

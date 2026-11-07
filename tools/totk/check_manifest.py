@@ -12,9 +12,9 @@ Fails (exit 1) when
   other field (any_nonzero, select, cmp... replace expr in the runtime), its chord is not
   L+RStick(x,y), it has a field beyond kind/button/frames/enabled_bind (repeat, counter...
   re-press without the gate) or frames is not WHEEL_FRAMES, or enforce names it (PLAN.md CA7b);
-- an on_tap/on_hold/on_swipe_*/drop_action/enforce names an undefined action, a page action or
-  page bind an undefined page, a widget scroll an undefined region; a page id or derived name
-  is defined twice;
+- an on_tap/on_hold/on_swipe_*/drop_action/on_marker_tap/enforce names an undefined action, a
+  page action or page bind an undefined page, a widget scroll an undefined region; a page id or
+  derived name is defined twice;
 - a rect is not 4 numbers or leaves the canvas; centre- or right-aligned literal text, measured
   from its anchor (rect x) with the built-in font's 4 px x text_scale advance, leaves the canvas;
 - hide_eq is not an integer, a numeric field is not a number, a colour does not parse, a
@@ -49,7 +49,7 @@ NUMBER = r"-?\d+(?:\.\d+)?"
 WHEEL_CHORD = re.compile(rf"L\+RStick\({NUMBER},{NUMBER}\)")
 WHEEL_FIELDS = {"kind", "button", "frames", "enabled_bind"}  # repeat, gap, counter... re-press ungated
 ACTION_REFS = ("on_tap", "on_hold", "on_swipe_left", "on_swipe_right", "on_swipe_up",
-               "on_swipe_down", "drop_action")
+               "on_swipe_down", "drop_action", "on_marker_tap")
 # Objects whose keys are names (actions, text_map values, ...), not runtime keys.
 NAME_MAPS = {"actions", "text_map", "tables", "sprite_map", "flags", "areas"}
 TOKEN = re.compile(r"(?<![A-Za-z0-9_.])totk\.[A-Za-z0-9_.{}]*[A-Za-z0-9_}]")

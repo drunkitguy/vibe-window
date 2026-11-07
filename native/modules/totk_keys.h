@@ -55,6 +55,18 @@ inline constexpr char kMapX[] = "totk.map.x";
 inline constexpr char kMapY[] = "totk.map.y";
 inline constexpr char kNamesValid[] = "totk.names.valid";
 inline constexpr char kLoading[] = "totk.loading";
+// The Map page's travel destinations and medallion move (A2; published only on that page).
+inline constexpr char kTravelCount[] = "totk.travel.count";
+inline constexpr char kTravelIcon[] = "totk.travel.icon";
+inline constexpr char kTravelSelValid[] = "totk.travel.sel.valid";
+inline constexpr char kTravelSelName[] = "totk.travel.sel.name";
+inline constexpr char kTravelSelOpen[] = "totk.travel.sel.open";
+inline constexpr char kTravelSelKind[] = "totk.travel.sel.kind";
+inline constexpr char kTravelMoved[] = "totk.travel.moved";
+inline constexpr char kTravelOldX[] = "totk.travel.old.x";
+inline constexpr char kTravelOldY[] = "totk.travel.old.y";
+inline constexpr char kTravelOldZ[] = "totk.travel.old.z";
+inline constexpr char kTravelMsg[] = "totk.travel.msg";
 
 inline constexpr const char* kFixed[] = {
     kReady,          kUiPage,         kInvTab,           kInvSel,          kMapLayer,
@@ -64,7 +76,9 @@ inline constexpr const char* kFixed[] = {
     kInvSelIcon,     kInvSelName,     kInvSelKind,       kInvSelValue,     kInvSelFuseName,
     kInvSelEffect,   kInvSelHearts,   kInvSelEquipped,   kInvSelCaption,   kMapValid,
     kMapSource,      kMapX,           kMapY,             kNamesValid,      kStatusBattery,
-    kLoading};
+    kLoading,        kTravelCount,    kTravelIcon,       kTravelSelValid,  kTravelSelName,
+    kTravelSelOpen,  kTravelSelKind,  kTravelMoved,      kTravelOldX,      kTravelOldY,
+    kTravelOldZ,     kTravelMsg};
 
 // ---- key families -------------------------------------------------------------------------------
 enum GearField { kPresent, kId, kName, kIcon, kLife, kCount, kFuse, kFuseName, kFuseIcon, kEffect,
@@ -82,18 +96,26 @@ inline constexpr const char* kItemKeys[kItemFields] = {
 inline constexpr char kTabCount[] = "totk.inv.tab{k}.count";
 // Map tile n of the selected layer: the overview and the detail picture (totk_map.h).
 inline constexpr const char* kTileKeys[] = {"totk.map.tile.{i}", "totk.map.tile.{i}.d"};
+// Travel destination i (A2): x and -z as totk.map.x/.y, kind (-1 off the selected layer), dim.
+enum TravelField { kTravelX, kTravelY, kTravelKind, kTravelDim, kTravelFields };
+inline constexpr const char* kTravelKeys[kTravelFields] = {
+    "totk.travel.{i}.x", "totk.travel.{i}.y", "totk.travel.{i}.kind", "totk.travel.{i}.dim"};
 
 // ---- module actions (on_action) -----------------------------------------------------------------
-// UI actions touch only module state; game actions are refused until T3 finds verified offsets.
+// UI actions touch only module state; game actions are refused until T3 finds verified offsets,
+// except A2's travel.go and travel.restore behind their fail-closed checks.
 enum Action { kActPage, kActInvTab, kActInvTabNext, kActInvSelect, kActMapLayer, kActGearSwap,
-              kActInvUse, kActAbilitySelect, kActions };
+              kActInvUse, kActAbilitySelect, kActTravelSelect, kActTravelGo, kActTravelRestore,
+              kActions };
 inline constexpr const char* kActionNames[kActions] = {
     "totk.ui.page",  "totk.inv.tab",  "totk.inv.tab_next",  "totk.inv.select",
-    "totk.map.layer", "totk.gear.swap", "totk.inv.use", "totk.ability.select"};
-// Argument range [0, n) per action; 0: any argument (tab_next ignores it, select and use take
-// the slot index from "$payload"). ui.page: 0 home, 1 abilities, 2 map; inv.tab:
-// the 8 tabs; map.layer: 0 surface, 1 sky, 2 depths; gear.swap: <s>; ability.select: <a>.
-inline constexpr int kActionArgs[kActions] = {3, 8, 0, 0, 3, 4, 0, 7};
+    "totk.map.layer", "totk.gear.swap", "totk.inv.use", "totk.ability.select",
+    "totk.travel.select", "totk.travel.go", "totk.travel.restore"};
+// Argument range [0, n) per action; 0: any argument (tab_next, travel.go and travel.restore ignore
+// it; the selects and use take the slot index from "$payload" and check it themselves). ui.page:
+// 0 home, 1 abilities, 2 map; inv.tab: the 8 tabs; map.layer: 0 surface, 1 sky, 2 depths;
+// gear.swap: <s>; ability.select: <a>.
+inline constexpr int kActionArgs[kActions] = {3, 8, 0, 0, 3, 4, 0, 7, 0, 0, 0};
 static_assert(kActionArgs[kActGearSwap] == std::size(kGearSlotNames) &&
               kActionArgs[kActAbilitySelect] == std::size(kAbilityNames));
 
@@ -161,6 +183,9 @@ inline bool Listed(std::string_view key) {
         if (detail::Matches(f, key))
             return true;
     for (const char* f : kTileKeys)
+        if (detail::Matches(f, key))
+            return true;
+    for (const char* f : kTravelKeys)
         if (detail::Matches(f, key))
             return true;
     return detail::Matches(kAbilityOwned, key) || detail::Matches(kTabCount, key);

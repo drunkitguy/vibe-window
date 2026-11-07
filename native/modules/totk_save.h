@@ -15,6 +15,7 @@
 
 #include "core/mods/dsmod_module_extensions.h"
 #include "totk_gamedata.h"
+#include "totk_travel.h"
 
 namespace totk {
 
@@ -212,6 +213,9 @@ struct Snapshot {
     std::array<bool, kAbilities> owned{};
     std::array<std::vector<Item>, kTabs> tabs; // game order, at most kMaxItems each
     std::optional<std::array<double, 2>> position; // map (x, -z)
+    // A2's destinations (the worker's romfs list with this save's unlock state); empty until
+    // the romfs list loaded.
+    std::vector<travel::Dest> travel;
 };
 
 namespace detail {

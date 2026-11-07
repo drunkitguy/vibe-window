@@ -54,13 +54,19 @@ int main() {
            pub::Listed("totk.inv.sel.caption"));
     assert(pub::Listed("totk.inv.tab0.count") && pub::Listed("totk.inv.tab7.count"));
     assert(pub::Listed("totk.map.tile.0") && pub::Listed("totk.map.tile.119.d"));
+    for (const char* f : pub::kTravelKeys)
+        assert(pub::Listed(pub::Expand(f, "0")) && pub::Listed(pub::Expand(f, "319")));
+    assert(pub::ActionIndex("totk.travel.go") == pub::kActTravelGo &&
+           pub::kActionArgs[pub::kActTravelSelect] == 0 && pub::kActionArgs[pub::kActTravelGo] == 0 &&
+           pub::kActionArgs[pub::kActTravelRestore] == 0);
     for (const char* bad :
          {"totk.gear.head.present", "totk.gear..present", "totk.gear.weapon.colour",
           "totk.gear.<s>.present", "totk.ability.dash.owned", "totk.ability.fuse.name",
           "totk.inv.01.icon", "totk.inv.x.icon", "totk.inv..icon", "totk.inv.{i}.icon",
           "totk.inv.-1.icon", "totk.inv.0.name", "totk.inv.tab8.count", "totk.inv.tab10.count",
           "totk.inv.tab.count", "totk.names.valid.x", "totk.map.tile.01", "totk.map.tile.0.e",
-          "totk.map.tile.x", "totk.gear.swap",
+          "totk.map.tile.x", "totk.gear.swap", "totk.travel.01.x", "totk.travel.0.z",
+          "totk.travel.go",
           "totk.ready.", "totk.ready ", "", "totk"})
         assert(!pub::Listed(bad));
 

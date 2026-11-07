@@ -3237,6 +3237,10 @@
      "marker_x_bind": "totk.map.x",
      "marker_y_bind": "totk.map.y",
      "need_bind": "totk.map.valid",
+     "on_marker_tap": "travel_select",
+     "marker_tap_groups": [
+      "travel"
+     ],
      "overlays": [
       {
        "src_bind": "totk.map.tile.0",
@@ -4609,6 +4613,223 @@
     {
      "type": "rect",
      "rect": [
+      16,
+      884,
+      1068,
+      152
+     ],
+     "bg": "#E6121815",
+     "color": "#FF3E4A36",
+     "need_bind": "totk.travel.sel.valid"
+    },
+    {
+     "type": "label",
+     "rect": [
+      32,
+      892,
+      720,
+      36
+     ],
+     "bind_text": "totk.travel.sel.name",
+     "text_scale": 6,
+     "color": "#FFECE5C8",
+     "wrap_width": 720,
+     "max_lines": 1,
+     "fit_text": true,
+     "text_min_scale": 4,
+     "need_bind": "totk.travel.sel.valid"
+    },
+    {
+     "type": "label",
+     "rect": [
+      32,
+      932,
+      200,
+      24
+     ],
+     "text_bind": "totk.travel.sel.kind",
+     "text_map": {
+      "0": "Shrine",
+      "1": "Lightroot",
+      "2": "Tower"
+     },
+     "text_scale": 4,
+     "color": "#FF8F907F",
+     "need_bind": "totk.travel.sel.valid"
+    },
+    {
+     "type": "label",
+     "rect": [
+      240,
+      932,
+      200,
+      24
+     ],
+     "text": "Locked",
+     "text_scale": 4,
+     "color": "#FF8F907F",
+     "need_bind": "ui.travel.locked"
+    },
+    {
+     "type": "label",
+     "rect": [
+      240,
+      932,
+      200,
+      24
+     ],
+     "text": "Unknown",
+     "text_scale": 4,
+     "color": "#FF8F907F",
+     "need_bind": "ui.travel.unknown"
+    },
+    {
+     "type": "label",
+     "rect": [
+      32,
+      960,
+      720,
+      24
+     ],
+     "text": "Close the game's map and menus first",
+     "text_scale": 4,
+     "color": "#FF8F907F",
+     "need_bind": "totk.travel.sel.valid"
+    },
+    {
+     "type": "label",
+     "text_scale": 4,
+     "wrap_width": 720,
+     "max_lines": 2,
+     "rect": [
+      32,
+      986,
+      720,
+      48
+     ],
+     "bind_text": "totk.travel.msg",
+     "color": "#FFE9C46A",
+     "need_bind": "totk.travel.sel.valid"
+    },
+    {
+     "type": "button",
+     "text_scale": 4,
+     "align": "center",
+     "border": 2,
+     "bg": "#E6121815",
+     "color": "#FFECE5C8",
+     "rect": [
+      768,
+      924,
+      308,
+      72
+     ],
+     "text": "Move medallion here",
+     "on_tap": "travel_go",
+     "need_bind": "ui.travel.can_go"
+    },
+    {
+     "type": "rect",
+     "rect": [
+      16,
+      96,
+      1068,
+      152
+     ],
+     "bg": "#E6121815",
+     "color": "#FF3E4A36",
+     "need_bind": "totk.travel.moved"
+    },
+    {
+     "type": "label",
+     "rect": [
+      32,
+      104,
+      400,
+      30
+     ],
+     "text": "Medallion was at",
+     "text_scale": 5,
+     "color": "#FFECE5C8",
+     "need_bind": "totk.travel.moved"
+    },
+    {
+     "type": "value",
+     "rect": [
+      32,
+      140,
+      200,
+      28
+     ],
+     "bind": "ui.travel.old.x",
+     "text": "x ",
+     "text_scale": 5,
+     "color": "#FFE9C46A",
+     "need_bind": "totk.travel.moved"
+    },
+    {
+     "type": "value",
+     "rect": [
+      240,
+      140,
+      200,
+      28
+     ],
+     "bind": "ui.travel.old.y",
+     "text": "y ",
+     "text_scale": 5,
+     "color": "#FFE9C46A",
+     "need_bind": "totk.travel.moved"
+    },
+    {
+     "type": "value",
+     "rect": [
+      448,
+      140,
+      200,
+      28
+     ],
+     "bind": "ui.travel.old.z",
+     "text": "z ",
+     "text_scale": 5,
+     "color": "#FFE9C46A",
+     "need_bind": "totk.travel.moved"
+    },
+    {
+     "type": "label",
+     "text_scale": 4,
+     "wrap_width": 720,
+     "max_lines": 2,
+     "rect": [
+      32,
+      176,
+      720,
+      48
+     ],
+     "bind_text": "totk.travel.msg",
+     "color": "#FFE9C46A",
+     "need_bind": "totk.travel.moved"
+    },
+    {
+     "type": "button",
+     "text_scale": 4,
+     "align": "center",
+     "border": 2,
+     "bg": "#E6121815",
+     "color": "#FFECE5C8",
+     "rect": [
+      768,
+      136,
+      308,
+      72
+     ],
+     "text": "Put medallion back",
+     "on_tap": "travel_restore",
+     "need_bind": "totk.travel.moved"
+    },
+    {
+     "type": "rect",
+     "rect": [
       0,
       0,
       1240,
@@ -4893,6 +5114,11 @@
    "action": "totk.ability.select",
    "argument": 6
   },
+  "travel_select": {
+   "kind": "module",
+   "action": "totk.travel.select",
+   "argument": "$payload"
+  },
   "map_layer_1": {
    "kind": "module",
    "action": "totk.map.layer",
@@ -4911,6 +5137,16 @@
   "map_centre": {
    "kind": "view_reset",
    "view": "totk_map"
+  },
+  "travel_go": {
+   "kind": "module",
+   "action": "totk.travel.go",
+   "argument": 0
+  },
+  "travel_restore": {
+   "kind": "module",
+   "action": "totk.travel.restore",
+   "argument": 0
   }
  },
  "derived": [
@@ -5105,6 +5341,34 @@
   {
    "name": "ui.map.z",
    "expr": "round(-totk.map.y)"
+  },
+  {
+   "name": "ui.travel.can_go",
+   "expr": "totk.travel.sel.open == 1"
+  },
+  {
+   "name": "ui.travel.locked",
+   "cmp": "eq",
+   "a": "totk.travel.sel.open",
+   "b": 0
+  },
+  {
+   "name": "ui.travel.unknown",
+   "cmp": "eq",
+   "a": "totk.travel.sel.open",
+   "b": -1
+  },
+  {
+   "name": "ui.travel.old.x",
+   "expr": "round(totk.travel.old.x)"
+  },
+  {
+   "name": "ui.travel.old.y",
+   "expr": "round(totk.travel.old.y)"
+  },
+  {
+   "name": "ui.travel.old.z",
+   "expr": "round(totk.travel.old.z)"
   }
  ],
  "map": {
@@ -5119,7 +5383,21 @@
      5000
     ],
     "image": "file:assets/map-blank.png",
-    "clamp_view": true
+    "clamp_view": true,
+    "dynamic_markers": [
+     {
+      "group": "travel",
+      "count": 320,
+      "x": "totk.travel.{i}.x",
+      "y": "totk.travel.{i}.y",
+      "kind": "totk.travel.{i}.kind",
+      "hide_when_kind": -1,
+      "dim_bind": "totk.travel.{i}.dim",
+      "icon_src_bind": "totk.travel.icon",
+      "size": 28,
+      "selected_size": 40
+     }
+    ]
    }
   },
   "style": {

@@ -3,7 +3,7 @@
 """Generate the Tears of the Kingdom companion package files (docs/PLAN.md T4, T4v, R5).
 
 Writes packages/TearsOfTheKingdom/dualscreen/manifest.json, assets/map-blank.png,
-ASSETS.provenance.json and totk_font.txt. With --check, compares them with what is committed
+assets/travel-dot.png, ASSETS.provenance.json and totk_font.txt. With --check, compares them with what is committed
 instead (exit 1 on a difference). Std-lib only; run with `python3 -I`. Nothing from the game is
 written: pictures, names and the font come from the player's own files through the module at
 runtime.
@@ -506,10 +506,63 @@ def abilities_page(derived):
     return widgets
 
 
+TRAVEL_KINDS = {"0": "Shrine", "1": "Lightroot", "2": "Tower"}  # totk.travel.<i>.kind (A2)
+TRAVEL_DOT = 32  # px, the code-drawn marker picture assets/travel-dot.png
+
+
+def travel_panels(derived, actions):
+    """A2 over the map: the selected destination (name, kind, Locked or Unknown, the last result
+    line, the fixed reminder, "Move medallion here" only while it is open) while
+    totk.travel.sel.valid, then, on totk.travel.moved alone (so a cleared selection never hides
+    it), the medallion's old spot with "Put medallion back"."""
+    actions["travel_go"] = {"kind": "module", "action": "totk.travel.go", "argument": 0}
+    actions["travel_restore"] = {"kind": "module", "action": "totk.travel.restore", "argument": 0}
+    derived += [{"name": "ui.travel.can_go", "expr": "totk.travel.sel.open == 1"},
+                {"name": "ui.travel.locked", "cmp": "eq", "a": "totk.travel.sel.open", "b": 0},
+                {"name": "ui.travel.unknown", "cmp": "eq", "a": "totk.travel.sel.open", "b": -1},
+                *({"name": f"ui.travel.old.{c}", "expr": f"round(totk.travel.old.{c})"}
+                  for c in "xyz")]
+    sel, moved = {"need_bind": "totk.travel.sel.valid"}, {"need_bind": "totk.travel.moved"}
+    line = {"type": "label", "text_scale": 4, "wrap_width": 720, "max_lines": 2}
+    button = {"type": "button", "text_scale": 4, "align": "center", "border": 2, "bg": PANEL,
+              "color": TEXT}
+    widgets = panel([16, 884, 1068, 152], **sel) + [
+        {"type": "label", "rect": [32, 892, 720, 36], "bind_text": "totk.travel.sel.name",
+         "text_scale": 6, "color": TEXT, "wrap_width": 720, "max_lines": 1, "fit_text": True,
+         "text_min_scale": 4, **sel},
+        {"type": "label", "rect": [32, 932, 200, 24], "text_bind": "totk.travel.sel.kind",
+         "text_map": TRAVEL_KINDS, "text_scale": 4, "color": DIM, **sel},
+        {"type": "label", "rect": [240, 932, 200, 24], "text": "Locked", "text_scale": 4,
+         "color": DIM, "need_bind": "ui.travel.locked"},
+        {"type": "label", "rect": [240, 932, 200, 24], "text": "Unknown", "text_scale": 4,
+         "color": DIM, "need_bind": "ui.travel.unknown"},
+        # The module cannot see the game's map or menus (PLAN.md A2 limits).
+        {"type": "label", "rect": [32, 960, 720, 24], "text": "Close the game's map and menus "
+         "first", "text_scale": 4, "color": DIM, **sel},
+        {**line, "rect": [32, 986, 720, 48], "bind_text": "totk.travel.msg", "color": VALUE,
+         **sel},
+        {**button, "rect": [768, 924, 308, 72], "text": "Move medallion here",
+         "on_tap": "travel_go", "need_bind": "ui.travel.can_go"},
+    ]
+    widgets += panel([16, 96, 1068, 152], **moved) + [
+        {"type": "label", "rect": [32, 104, 400, 30], "text": "Medallion was at",
+         "text_scale": 5, "color": TEXT, **moved},
+        *({"type": "value", "rect": [32 + 208 * k, 140, 200, 28], "bind": f"ui.travel.old.{c}",
+           "text": f"{c} ", "text_scale": 5, "color": VALUE, **moved}
+          for k, c in enumerate("xyz")),
+        {**line, "rect": [32, 176, 720, 48], "bind_text": "totk.travel.msg", "color": VALUE,
+         **moved},
+        {**button, "rect": [768, 136, 308, 72], "text": "Put medallion back",
+         "on_tap": "travel_restore", **moved},
+    ]
+    return widgets
+
+
 def map_page(derived, actions):
     """Link's position (live, else the last save's) on the selected layer's tiles (pan and
-    zoom), the layer pills, Centre and the position line. Nothing but "No save data yet" without
-    a position (totk.map.valid), so no tiles either."""
+    zoom), the layer pills, Centre and the position line, the travel destinations (A2) with their
+    two panels. Nothing but "No save data yet" without a position (totk.map.valid), so no tiles
+    either."""
     valid, shown = {"need_bind": "totk.map.valid"}, {"hide_bind": "totk.map.valid", "hide_eq": 0}
     overlays = []
     for n in range(TILE_COLS * TILE_ROWS):
@@ -518,9 +571,18 @@ def map_page(derived, actions):
         overlays.append({"src_bind": f"totk.map.tile.{n}",
                          "src_detail_bind": f"totk.map.tile.{n}.d", "detail_threshold": 360,
                          "x0": x0, "x1": x0 + TILE_SIZE, "y0": y1 - TILE_SIZE, "y1": y1})
+    # A tap on a destination selects it in the module (the runtime's tap also deselects).
+    # shortcut: the widget also runs the action on the tap that deselects a marker, and drops its
+    # selection on an empty tap or a page change without telling the module, so the panel keeps
+    # showing the last tapped destination, which is the one "Move medallion here" acts on; a
+    # module-side toggle would drift the other way after an empty tap; upgrade when the host lets
+    # a module read @map_sel:travel.
+    actions["travel_select"] = {"kind": "module", "action": "totk.travel.select",
+                                "argument": "$payload"}
     widget = {"type": "map", "id": "totk_map", "rect": [0, 76, 1240, 972], "area": "MainField",
               "area_label": False, "pan_zoom": True, "marker_x_bind": "totk.map.x",
-              "marker_y_bind": "totk.map.y", **valid, "overlays": overlays}
+              "marker_y_bind": "totk.map.y", **valid, "on_marker_tap": "travel_select",
+              "marker_tap_groups": ["travel"], "overlays": overlays}
     if TEX["player_pin"]:  # else the runtime's own pin
         widget["marker_src"] = TEX["player_pin"]["src"]
     widgets = [widget]
@@ -557,7 +619,7 @@ def map_page(derived, actions):
         {"type": "value", "rect": [320, 1052, 130, 24], "bind": "ui.map.z", "text": "z ",
          "text_scale": 4, "color": VALUE, **valid},
     ]
-    return widgets
+    return widgets + travel_panels(derived, actions)
 
 
 def manifest():
@@ -593,7 +655,14 @@ def manifest():
         "map": {"areas": {"MainField": {
             "min": [TILE_X0, TILE_Z0], "max": [TILE_X0 + TILE_COLS * TILE_SIZE,
                                                TILE_Z0 + TILE_ROWS * TILE_SIZE],
-            "image": "file:assets/map-blank.png", "clamp_view": True}},
+            "image": "file:assets/map-blank.png", "clamp_view": True,
+            # A2's destinations: one slot per published totk.travel.<i>; kind -1 (off the
+            # selected layer) hides a slot, dim unless open; every slot draws the one dot key.
+            "dynamic_markers": [{
+                "group": "travel", "count": 320, "x": "totk.travel.{i}.x",
+                "y": "totk.travel.{i}.y", "kind": "totk.travel.{i}.kind", "hide_when_kind": -1,
+                "dim_bind": "totk.travel.{i}.dim", "icon_src_bind": "totk.travel.icon",
+                "size": 28, "selected_size": 40}]}},
             "style": {"background": BG}},
         # BotW's page_binds values [S2]: the module's totk.ui.page picks the page.
         "page_binds": [{"point": "totk.ui.page", "equals": k,
@@ -603,23 +672,44 @@ def manifest():
     }
 
 
-def blank_png():
-    """1x1 fully transparent RGBA PNG."""
+def png(width, height, pixel):
+    """RGBA PNG whose pixel (x, y) is the 4 bytes pixel(x, y)."""
     def chunk(kind, data):
         return (struct.pack(">I", len(data)) + kind + data +
                 struct.pack(">I", zlib.crc32(kind + data) & 0xFFFFFFFF))
+    rows = b"".join(b"\x00" + b"".join(pixel(x, y) for x in range(width)) for y in range(height))
     return (b"\x89PNG\r\n\x1a\n" +
-            chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 6, 0, 0, 0)) +
-            chunk(b"IDAT", zlib.compress(b"\x00\x00\x00\x00\x00", 9)) +
-            chunk(b"IEND", b""))
+            chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0)) +
+            chunk(b"IDAT", zlib.compress(rows, 9)) + chunk(b"IEND", b""))
+
+
+def blank_png():
+    """1x1 fully transparent RGBA PNG."""
+    return png(1, 1, lambda x, y: b"\x00\x00\x00\x00")
+
+
+def travel_dot_png():
+    """The destination marker: a VALUE disc with a 3 px BG ring, transparent outside (code-drawn,
+    no game art; the runtime dims a locked one)."""
+    def pixel(x, y):
+        r = TRAVEL_DOT / 2
+        d = ((x + 0.5 - r) ** 2 + (y + 0.5 - r) ** 2) ** 0.5
+        colour = VALUE if d <= r - 3 else BG if d <= r else CLEAR
+        a, rgb = colour[1:3], colour[3:]
+        return bytes.fromhex(rgb + a)
+    return png(TRAVEL_DOT, TRAVEL_DOT, pixel)
 
 
 def outputs():
     def dump(value):
         return (json.dumps(value, indent=1, ensure_ascii=False) + "\n").encode("utf-8")
-    provenance = {"format": 1, "files": {"assets/map-blank.png": {
-        "origin": "generated", "source": "tools/totk/gen_manifest.py -- 1x1 transparent"}}}
+    provenance = {"format": 1, "files": {
+        "assets/map-blank.png": {"origin": "generated",
+                                 "source": "tools/totk/gen_manifest.py -- 1x1 transparent"},
+        "assets/travel-dot.png": {"origin": "generated",
+                                  "source": "tools/totk/gen_manifest.py -- 32x32 code-drawn dot"}}}
     return {"manifest.json": dump(manifest()), "assets/map-blank.png": blank_png(),
+            "assets/travel-dot.png": travel_dot_png(),
             "ASSETS.provenance.json": dump(provenance),
             "totk_font.txt": f"{FONT_SPEC}\n".encode()}
 

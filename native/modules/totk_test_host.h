@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Fake EdenDsmodHostApi for the totk_*_test programs: byte-map guest memory, call counters,
-// recorded publishes and logs, an in-memory romfs; a fake save directory (EdenDsmodHostSaveApi), a
-// GameData save builder, SARC/MSBT/.bfotf builders and system font files for the font tests.
+// recorded publishes and logs (with their levels), an in-memory romfs, a write_batch
+// (EdenDsmodHostWriteApi) over the same memory; a fake save directory (EdenDsmodHostSaveApi), a
+// GameData save builder, SARC/MSBT/BYML/.bfotf builders and system font files for the font tests.
 // Test-only; never part of the module.
 #pragma once
 
@@ -16,8 +17,10 @@
 #include <cstdio>
 #include <cstring>
 #include <initializer_list>
+#include <functional>
 #include <map>
 #include <mutex>
+#include <set>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -27,8 +30,10 @@
 #include "core/mods/dsmod_module_abi.h"
 #include "core/mods/dsmod_module_extensions.h"
 #include "totk_build.h"
+#include "totk_byml.h"
 #include "totk_gamedata.h"
 #include "totk_offsets.h"
+#include "totk_travel.h"
 
 namespace totk::test {
 
@@ -49,7 +54,18 @@ struct Host {
     Texts texts;
     Floats floats;
     std::vector<std::string> logs; // read it only while the module's worker is idle
+    std::vector<std::uint32_t> levels; // each line's level, in step with `logs`
     std::mutex log_mutex;           // the worker logs too
+    // write_batch: every call counted; each op recorded; `before_batch` runs first (the guest
+    // changing under the module); then every expect is checked, and only then every op stored.
+    struct Op {
+        std::uint64_t address;
+        std::vector<std::uint8_t> expect, value;
+    };
+    unsigned batch_calls = 0;
+    std::vector<std::vector<Op>> batches;
+    std::function<void(Host&)> before_batch;
+    EdenDsmodHostWriteApi write{};
     // read_romfs: path (with any "<prefix>:" and "#member" part) -> bytes, the runtime's
     // semantics [S1 mod_module_host.cpp:406-445]: null output -> size; past the end -> 0.
     std::mutex romfs_mutex;
@@ -104,10 +120,39 @@ struct Host {
         api.publish_f64 = [](void* u, const char* name, double value) {
             Set(static_cast<Host*>(u)->floats, name, value);
         };
-        api.log = [](void* u, std::uint32_t, const char* message) {
+        api.log = [](void* u, std::uint32_t level, const char* message) {
             auto& h = *static_cast<Host*>(u);
             std::scoped_lock lock{h.log_mutex};
             h.logs.emplace_back(message);
+            h.levels.push_back(level);
+        };
+        write.version = EDEN_DSMOD_WRITE_EXT_VERSION;
+        write.struct_size = sizeof(EdenDsmodHostWriteApi);
+        write.abi_hash = EDEN_DSMOD_WRITE_EXT_HASH;
+        write.userdata = this;
+        write.write_batch = [](void* u, const EdenDsmodWriteOp* ops,
+                               std::uint32_t count) -> EdenDsmodBool {
+            auto& h = *static_cast<Host*>(u);
+            ++h.batch_calls;
+            auto& batch = h.batches.emplace_back();
+            for (std::uint32_t i = 0; i < count; ++i) {
+                const auto* e = static_cast<const std::uint8_t*>(ops[i].expect);
+                const auto* v = static_cast<const std::uint8_t*>(ops[i].value);
+                batch.push_back({ops[i].address,
+                                 e ? std::vector(e, e + ops[i].size) : std::vector<std::uint8_t>{},
+                                 std::vector(v, v + ops[i].size)});
+            }
+            if (h.before_batch)
+                h.before_batch(h);
+            for (const Op& op : batch)
+                for (std::size_t i = 0; i < op.value.size(); ++i)
+                    if (!h.memory.contains(op.address + i) ||
+                        (!op.expect.empty() && h.memory.at(op.address + i) != op.expect[i]))
+                        return false;
+            for (const Op& op : batch)
+                for (std::size_t i = 0; i < op.value.size(); ++i)
+                    h.memory[op.address + i] = op.value[i];
+            return true;
         };
         api.read_romfs = [](void* u, const char* path, std::uint64_t offset, void* out,
                             std::size_t size) -> std::size_t {
@@ -232,6 +277,141 @@ inline std::uint64_t PutLoading(Host& h, std::uint8_t flags = 0, std::uint32_t n
     h.Put(at, flags);
     return at;
 }
+
+// The log lines of a romfs without the LocationArea files (totk_travel.h Load), after `before`.
+inline std::vector<std::string> WithTravelMissing(std::vector<std::string> before) {
+    for (const char* f : travel::kFiles)
+        before.push_back(std::string("totk travel: ") + f + " missing");
+    return before;
+}
+
+// BYML trees for the travel tests (invented values; no game data) and a little-endian v7 writer,
+// adapted from the Wonder catalog's test writer [S2 wonder_catalog_test.cpp:21-110] to write a
+// byml::Node instead of JSON.
+inline byml::Node Num(float v) {
+    byml::Node n;
+    n.type = byml::Node::Type::Float;
+    n.num.f = v;
+    return n;
+}
+inline byml::Node Int(std::int32_t v) {
+    byml::Node n;
+    n.type = byml::Node::Type::Int;
+    n.num.i = v;
+    return n;
+}
+inline byml::Node Str(std::string v) {
+    byml::Node n;
+    n.type = byml::Node::Type::String;
+    n.str = std::move(v);
+    return n;
+}
+inline byml::Node Arr(std::vector<byml::Node> v) {
+    byml::Node n;
+    n.type = byml::Node::Type::Array;
+    n.array = std::move(v);
+    return n;
+}
+inline byml::Node Dict(std::vector<byml::Entry> v) {
+    byml::Node n;
+    n.type = byml::Node::Type::Dict;
+    n.dict = std::move(v);
+    return n;
+}
+
+struct BymlWriter {
+    std::vector<std::uint8_t> bytes = std::vector<std::uint8_t>(16);
+    std::set<std::string> key_set, string_set;
+    std::vector<std::string> keys, strings;
+    void Put(std::size_t offset, std::uint64_t value, int size = 4) {
+        for (int i = 0; i < size; ++i)
+            bytes.at(offset + i) = static_cast<std::uint8_t>(value >> (8 * i));
+    }
+    std::uint32_t Allocate(std::size_t size) {
+        while (bytes.size() % 4)
+            bytes.push_back(0);
+        const auto offset = static_cast<std::uint32_t>(bytes.size());
+        bytes.resize(bytes.size() + size);
+        return offset;
+    }
+    void Collect(const byml::Node& n) {
+        if (n.type == byml::Node::Type::String)
+            string_set.insert(n.str);
+        for (const auto& e : n.dict) {
+            key_set.insert(e.key);
+            Collect(e.value);
+        }
+        for (const auto& v : n.array)
+            Collect(v);
+    }
+    std::uint32_t Table(const std::vector<std::string>& values) {
+        const auto offset = Allocate(4 + (values.size() + 1) * 4);
+        Put(offset, 0xC2 | (values.size() << 8));
+        for (std::size_t i = 0; i < values.size(); ++i) {
+            Put(offset + 4 + i * 4, bytes.size() - offset);
+            bytes.insert(bytes.end(), values[i].begin(), values[i].end());
+            bytes.push_back(0);
+        }
+        Put(offset + 4 + values.size() * 4, bytes.size() - offset);
+        return offset;
+    }
+    static std::uint32_t Index(const std::vector<std::string>& list, const std::string& s) {
+        return std::uint32_t(std::find(list.begin(), list.end(), s) - list.begin());
+    }
+    std::pair<std::uint8_t, std::uint32_t> Encode(const byml::Node& n) {
+        using T = byml::Node::Type;
+        switch (n.type) {
+        case T::String:
+            return {0xA0, Index(strings, n.str)};
+        case T::Float: {
+            const float f = float(n.num.f);
+            std::uint32_t bits;
+            std::memcpy(&bits, &f, 4);
+            return {0xD2, bits};
+        }
+        case T::Int:
+            return {0xD1, std::uint32_t(std::int32_t(n.num.i))};
+        case T::Bool:
+            return {0xD0, n.num.b ? 1U : 0U};
+        case T::Array: {
+            const auto type_bytes = (n.array.size() + 3) & ~std::size_t{3};
+            const auto offset = Allocate(4 + type_bytes + n.array.size() * 4);
+            Put(offset, 0xC0 | (n.array.size() << 8));
+            for (std::size_t i = 0; i < n.array.size(); ++i) {
+                const auto [type, value] = Encode(n.array[i]);
+                bytes[offset + 4 + i] = type;
+                Put(offset + 4 + type_bytes + i * 4, value);
+            }
+            return {0xC0, offset};
+        }
+        case T::Dict: {
+            const auto offset = Allocate(4 + n.dict.size() * 8);
+            Put(offset, 0xC1 | (n.dict.size() << 8));
+            for (std::size_t i = 0; i < n.dict.size(); ++i) {
+                const auto [type, value] = Encode(n.dict[i].value);
+                Put(offset + 4 + i * 8, Index(keys, n.dict[i].key) | (std::uint32_t(type) << 24));
+                Put(offset + 8 + i * 8, value);
+            }
+            return {0xC1, offset};
+        }
+        default:
+            return {0xFF, 0};
+        }
+    }
+    std::vector<std::uint8_t> Write(const byml::Node& root) {
+        Collect(root);
+        keys.assign(key_set.begin(), key_set.end());
+        strings.assign(string_set.begin(), string_set.end());
+        bytes[0] = 'Y';
+        bytes[1] = 'B';
+        bytes[2] = 7;
+        Put(4, Table(keys));
+        Put(8, Table(strings));
+        Put(12, Encode(root).second);
+        assert(byml::Parse(bytes));
+        return bytes;
+    }
+};
 
 // A save directory in memory with the runtime's read_save_file semantics [S1
 // mod_module_services.cpp:222-242]: output null -> size; offset past the end -> 0; else

@@ -10,6 +10,7 @@ import copy
 import json
 import os
 import re
+import struct
 import tempfile
 import unittest
 from pathlib import Path
@@ -90,7 +91,8 @@ class CheckManifestTest(unittest.TestCase):
         self.assertEqual(self.actions, {
             "totk.ui.page": 3, "totk.inv.tab": 8, "totk.inv.tab_next": 0, "totk.inv.select": 0,
             "totk.map.layer": 3, "totk.gear.swap": 4, "totk.inv.use": 0,
-            "totk.ability.select": 7})
+            "totk.ability.select": 7, "totk.travel.select": 0, "totk.travel.go": 0,
+            "totk.travel.restore": 0})
         self.assertNotIn("totk.", self.patterns)  # the header's comments are not keys
         listed = lambda k: any(r.fullmatch(k) for r in self.patterns.values())
         for key in ("totk.ready", "totk.gear.arrow.count", "totk.ability.travel.owned",
@@ -170,6 +172,9 @@ class CheckManifestTest(unittest.TestCase):
         self.fails(lambda m: self.home(m)[0].update(on_tap="nope"), "on_tap 'nope'")
         self.fails(lambda m: self.home(m)[0].update(on_swipe_left="nope"), "on_swipe_left")
         self.fails(lambda m: self.home(m)[0].update(drop_action="nope"), "drop_action")
+        self.fails(lambda m: next(w for p in m["pages"] for w in p["widgets"]
+                                  if w["type"] == "map").update(on_marker_tap="nope"),
+                   "on_marker_tap 'nope'")
         self.fails(lambda m: m["page_binds"][1]["when_equal"].update(page="nowhere"),
                    "page 'nowhere'")
         self.fails(lambda m: m["actions"].update(go={"kind": "page", "page": "nowhere"}),
@@ -306,7 +311,11 @@ class GenManifestTest(unittest.TestCase):
                 return None
             return int({"eq": a == b, "ne": a != b, "ge": a >= b, "gt": a > b,
                         "le": a <= b, "lt": a < b}[d["cmp"]])
-        # The generator's only expr form: "k * 0 + ... + 1" (1 while every k exists).
+        if " == " in d["expr"]:  # "k == n" (A2's ui.travel.can_go)
+            k, n = d["expr"].split(" == ")
+            v = self.value(k, snap)
+            return None if v is None else int(v == int(n))
+        # The generator's other expr form: "k * 0 + ... + 1" (1 while every k exists).
         self.assertRegex(d["expr"], r"^(?:[\w.]+ \* 0 \+ )+1$")
         names = check_manifest.expr_names(d["expr"])
         return None if any(self.value(n, snap) is None for n in names) else 1
@@ -704,12 +713,20 @@ class GenManifestTest(unittest.TestCase):
         ws = self.page("map")
         self.assertEqual(self.m["map"], {"areas": {"MainField": {
             "min": [-6000, -5000], "max": [6000, 5000], "image": "file:assets/map-blank.png",
-            "clamp_view": True}}, "style": {"background": gen_manifest.BG}})
+            "clamp_view": True, "dynamic_markers": [{
+                "group": "travel", "count": 320, "x": "totk.travel.{i}.x",
+                "y": "totk.travel.{i}.y", "kind": "totk.travel.{i}.kind", "hide_when_kind": -1,
+                "dim_bind": "totk.travel.{i}.dim", "icon_src_bind": "totk.travel.icon",
+                "size": 28, "selected_size": 40}]}},
+            "style": {"background": gen_manifest.BG}})
         widget = self.one(ws, type="map")
         self.assertEqual({k: v for k, v in widget.items() if k != "overlays"}, {
             "type": "map", "id": "totk_map", "rect": [0, 76, 1240, 972], "area": "MainField",
             "area_label": False, "pan_zoom": True, "marker_x_bind": "totk.map.x",
-            "marker_y_bind": "totk.map.y", "need_bind": "totk.map.valid"})
+            "marker_y_bind": "totk.map.y", "need_bind": "totk.map.valid",
+            "on_marker_tap": "travel_select", "marker_tap_groups": ["travel"]})
+        self.assertEqual(self.action("travel_select"), {
+            "kind": "module", "action": "totk.travel.select", "argument": "$payload"})
         overlays = widget["overlays"]
         self.assertEqual(len(overlays), 120)
         for n, (x0, y0) in ((0, (-6000, 4000)), (11, (5000, 4000)), (53, (-1000, 0)),
@@ -740,6 +757,68 @@ class GenManifestTest(unittest.TestCase):
             parts = [widget, centre, nosave, *line, *pills]
             self.assertEqual([w for w in parts if self.visible(w, snap)],
                              [w for w in parts if any(w is e for e in expect)], valid)
+
+    def test_travel_panels(self):
+        """A2: the selection panel while totk.travel.sel.valid (name, kind word, Locked or
+        Unknown, the result line, the fixed reminder; "Move medallion here" only while open), the
+        moved panel on totk.travel.moved alone (old x/y/z, the result line, "Put medallion back");
+        both after the map widget, selection first, moved last; neither overlaps the pills,
+        Centre or the position line; the dot asset is a 32x32 PNG."""
+        ws = self.page("map")
+        sel = [w for w in ws if w.get("need_bind") in ("totk.travel.sel.valid", "ui.travel.locked",
+                                                       "ui.travel.unknown", "ui.travel.can_go")]
+        moved = [w for w in ws if w.get("need_bind") == "totk.travel.moved"]
+        go = self.one(ws, text="Move medallion here")
+        back = self.one(ws, text="Put medallion back")
+        self.assertEqual((go["need_bind"], self.action(go["on_tap"])), ("ui.travel.can_go", {
+            "kind": "module", "action": "totk.travel.go", "argument": 0}))
+        self.assertEqual((back["need_bind"], self.action(back["on_tap"])), ("totk.travel.moved", {
+            "kind": "module", "action": "totk.travel.restore", "argument": 0}))
+        self.assertIn(back, moved)
+        self.assertEqual(self.derived["ui.travel.can_go"],
+                         {"name": "ui.travel.can_go", "expr": "totk.travel.sel.open == 1"})
+        self.assertEqual(self.one(ws, text_bind="totk.travel.sel.kind")["text_map"],
+                         {"0": "Shrine", "1": "Lightroot", "2": "Tower"})
+        self.one(ws, text="Close the game's map and menus first", need_bind="totk.travel.sel.valid")
+        self.assertEqual([w["rect"] for w in ws if w.get("bind_text") == "totk.travel.msg"],
+                         [[32, 986, 720, 48], [32, 176, 720, 48]])
+        self.assertEqual([w["bind"] for w in moved if w["type"] == "value"],
+                         ["ui.travel.old.x", "ui.travel.old.y", "ui.travel.old.z"])
+        index = {id(w): i for i, w in enumerate(ws)}
+        map_at = index[id(self.one(ws, type="map"))]
+        self.assertTrue(map_at < min(index[id(w)] for w in sel))
+        self.assertTrue(max(index[id(w)] for w in sel) < min(index[id(w)] for w in moved))
+        self.assertEqual(max(index[id(w)] for w in moved), max(index[id(w)] for w in ws
+                                                              if "need_bind" in w and
+                                                              w["need_bind"].startswith(
+                                                                  ("totk.travel", "ui.travel"))))
+        for w in sel:
+            x, y, wd, ht = w["rect"]
+            self.assertTrue(16 <= x and x + wd <= 1084 and 884 <= y and y + ht <= 1036, w)
+        for w in moved:
+            x, y, wd, ht = w["rect"]
+            self.assertTrue(16 <= x and x + wd <= 1084 and 96 <= y and y + ht <= 248, w)
+        name = self.one(ws, bind_text="totk.travel.sel.name")
+        locked, unknown = self.one(ws, text="Locked"), self.one(ws, text="Unknown")
+        for snap, shown in (({}, []),
+                            ({"totk.travel.sel.valid": 0}, []),
+                            ({"totk.travel.sel.valid": 1, "totk.travel.sel.open": 1},
+                             [name, go]),
+                            ({"totk.travel.sel.valid": 1, "totk.travel.sel.open": 0},
+                             [name, locked]),
+                            ({"totk.travel.sel.valid": 1, "totk.travel.sel.open": -1},
+                             [name, unknown]),
+                            ({"totk.travel.moved": 1}, [back]),
+                            ({"totk.travel.moved": 1, "totk.travel.sel.valid": 1,
+                              "totk.travel.sel.open": 1}, [name, go, back])):
+            snap = {"totk.ready": 1, **snap}
+            self.assertEqual([w for w in (name, locked, unknown, go, back)
+                              if self.visible(w, snap)], shown, snap)
+        dot = gen_manifest.travel_dot_png()
+        self.assertEqual((dot[:8], struct.unpack(">II", dot[16:24])),
+                         (b"\x89PNG\r\n\x1a\n", (32, 32)))
+        self.assertIn("assets/travel-dot.png", json.loads(gen_manifest.outputs()[
+            "ASSETS.provenance.json"])["files"])
 
     def test_layer_pills(self):
         """Pills top to bottom Sky, Surface, Depths send totk.map.layer 1, 0, 2; the selected
