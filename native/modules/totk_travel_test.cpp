@@ -1078,21 +1078,28 @@ int main() {
                                            {line, EDEN_DSMOD_LOG_INFO}}));
         assert(w.Lines("totk travel: v3a_table").size() == 1 && w.h.batch_calls == 0);
     }
-    // Its memory calls alone (the A2 report off): is_mapped + read for capacity and buffer with
-    // the file, none without it, with an empty one or with ia_queue 0; an unreadable store (its
-    // first is_mapped fails) still gives the address.
+    // Its memory calls alone (the A2 report off, also with only one of its two tables): is_mapped
+    // + read for capacity and buffer with the file, none without it, with an empty one or with
+    // ia_queue 0; an unreadable store (its first is_mapped fails) still gives the address.
     struct Case {
         int re;
         std::uint64_t ia_queue;
         bool store;
         unsigned reads;
         const char* what;
+        std::uint64_t totk::Offsets::*kept = nullptr; // the one A2 table left set
     };
     for (const Case c : {Case{1, 0x128, true, 4, "capacity 512, buffer 0x9a000000"},
                          Case{1, 0x128, false, 1, "store unreadable"}, Case{0, 0x128, true, 0, ""},
-                         Case{2, 0x128, true, 0, ""}, Case{1, 0, true, 0, ""}}) {
+                         Case{2, 0x128, true, 0, ""}, Case{1, 0, true, 0, ""},
+                         Case{1, 0x128, true, 4, "capacity 512, buffer 0x9a000000",
+                              &totk::Offsets::v3a_table},
+                         Case{1, 0x128, true, 4, "capacity 512, buffer 0x9a000000",
+                              &totk::Offsets::int_table}}) {
         World w({.re = c.re});
         w.In().offsets.v3a_table = w.In().offsets.int_table = 0;
+        if (c.kept)
+            w.In().offsets.*c.kept = kO.*c.kept;
         w.In().offsets.ia_queue = c.ia_queue;
         if (c.store) {
             w.h.Put<std::int32_t>(w.mgr + 0x150, 512);
@@ -1106,7 +1113,8 @@ int main() {
             reads += w.h.MemoryCalls() - before;
         }
         const auto lines = w.Lines("totk re:");
-        assert(reads == c.reads && lines.size() == (*c.what ? 1u : 0u));
+        assert(reads == c.reads && lines.size() == (*c.what ? 1u : 0u) &&
+               w.Lines("totk travel:").empty());
         char head[128];
         std::snprintf(head, sizeof head, "totk re: IntArray queue control at 0x%llx (%s); hashes ",
                       static_cast<unsigned long long>(w.mgr + 0x160), c.what);

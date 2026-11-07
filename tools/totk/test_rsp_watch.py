@@ -13,8 +13,12 @@ from unittest import mock
 import rsp_watch
 
 MAIN = 0x80004000
-INFO = ("Process:     0x51 (Game)\nModules:\n  0x0080000000 - 0x0080003fff rtld\n"
-        "  0x0080004000 - 0x0085ffffff main\n  0x0086000000 - 0x0086ffffff sdk\n")
+# Eden's monitor info text [src/core/debugger/gdbstub.cpp:676-695]
+INFO = ("Process:     0x51 (Game)\nProgram Id:  0x0100f2c0115b6000\nLayout:\n"
+        "  Alias: 0x0100000000 - 0x10ffffffff\n  Heap:  0x1100000000 - 0x117fffffff\n"
+        "  Aslr:  0x0008000000 - 0x7fffffffff\n  Stack: 0x1180000000 - 0x11bfffffff\nModules:\n"
+        "  0x0080000000 - 0x0080003fff rtld\n  0x0080004000 - 0x0085ffffff main\n"
+        "  0x0086000000 - 0x0086ffffff sdk\n")
 ADDR, HASH = 0x9A100160, 0xB80E3DBB
 
 
@@ -88,13 +92,15 @@ class RspWatch(unittest.TestCase):
         script = [
             ("qRcmd," + b"info".hex(), INFO.encode().hex()),
             ("Z2," + z, "OK"),
-            ("c", stop),  # stop 1: the flush, no hash in x0-x15
-            ("g", g_reply([1, 2, 3], MAIN + 0x74240, 0x85FFFFFF, 0)),  # lr: main's last byte
+            ("c", stop),  # stop 1: the flush, the hash only in x16; lr: main's last byte
+            ("g", g_reply([1, 2, 3] + [0] * 13 + [HASH], MAIN + 0x74240, 0x85FFFFFF, 0)),
             ("z2," + z, "OK"),
             ("s", "T05thread:5a;"),
             ("Z2," + z, "OK"),
-            ("c", stop, 1.0),  # stop 2, past ACK_TIMEOUT: the push, the hash in x12's low 32 bits
-            ("g", g_reply([7] + [0] * 11 + [0xFFFF0000_00000000 | HASH], MAIN + 0x100,
+            # stop 2, past ACK_TIMEOUT: the push, the hash in x12's low 32 bits and in x15 (the
+            # first is printed)
+            ("c", stop, 1.0),
+            ("g", g_reply([7] + [0] * 11 + [0xFFFF0000_00000000 | HASH, 0, 0, HASH], MAIN + 0x100,
                           MAIN + 0x200, 0x10E000)),
             ("m10e000,10", le(frames[0][0]) + le(frames[0][1])),
             ("m10f000,10", le(frames[1][0]) + le(frames[1][1])),
@@ -139,20 +145,29 @@ class RspWatch(unittest.TestCase):
         z = "%x,4" % ADDR
         info = ("qRcmd," + b"info".hex(), INFO.encode().hex())
         g = ("g", g_reply([HASH], MAIN + 0x10, MAIN + 0x20, 0x10E000))
-        for script in (
-            [("qRcmd," + b"info".hex(), b"Process: 0x51\nModules:\n".hex())],  # no module
-            [info, ("Z2," + z, "E01")],  # Eden refuses the range: nothing armed
+        match = "match stop 1: pc=main+10 lr=main+20 hash in x"
+        for script, want in (
+            # one module: no main (Eden's qOffsets would take it as main; TotK never has one)
+            ([("qRcmd," + b"info".hex(),
+               b"Modules:\n  0x0080000000 - 0x0080003fff rtld\n".hex())], []),
+            ([info, ("Z2," + z, "E01")], []),  # Eden refuses the range: nothing armed
             # an error past the Z2 (a refused z2): the best-effort z2 and c still go out; the
             # walk stops at a misaligned fp without reading it
-            [info, ("Z2," + z, "OK"), ("c", "T05thread:5a;"), g,
-             ("m10e000,10", le(0x10E004) + le(MAIN + 0x30)), ("z2," + z, "E01"),
-             ("z2," + z, "OK"), ("c", None)],
+            ([info, ("Z2," + z, "OK"), ("c", "T05thread:5a;"), g,
+              ("m10e000,10", le(0x10E004) + le(MAIN + 0x30)), ("z2," + z, "E01"),
+              ("z2," + z, "OK"), ("c", None)], [match + "0", "frame 0: main+30"]),
+            # the hash only in x15, fp 0 (a root frame): no frame read; a refused z2 ends it
+            ([info, ("Z2," + z, "OK"), ("c", "T05thread:5a;"),
+              ("g", g_reply([0] * 15 + [HASH], MAIN + 0x10, MAIN + 0x20, 0)), ("z2," + z, "E01"),
+              ("z2," + z, "OK"), ("c", None)], [match + "15"]),
         ):
             stub = FakeStub(script)
             code, out = run(["127.0.0.1:%d" % stub.port, hex(ADDR), "4", hex(HASH)])
             stub.join(5)
             self.assertEqual((code, stub.got, stub.closed), (1, [p[0] for p in script], True))
             self.assertIn("; if the game stays frozen, run the go line;", out.splitlines()[-1])
+            lines = [s for s in out.splitlines() if s.startswith(("match", "frame"))]
+            self.assertEqual(lines, want)
 
     def test_nack_and_dead_stub(self):
         # a nack (Eden's answer to a bad checksum) fails the packet

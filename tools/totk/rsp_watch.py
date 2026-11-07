@@ -83,17 +83,18 @@ def connect(hostport):
 
 
 def main_module(stub):
-    """(base, end, name) of main from `monitor info`: the second module when there are two or
-    more, else the first, as Eden's own qOffsets picks it [S1 src/core/arm/debug.cpp:318-328]."""
+    """(base, end, name) of main from `monitor info`: the second module, as Eden's own qOffsets
+    picks it from two or more [S1 src/core/arm/debug.cpp:318-328]; TotK always has rtld, main,
+    subsdk and sdk, so fewer is an error."""
     text = bytes.fromhex(stub.ask("qRcmd," + b"info".hex())).decode("latin-1")
     mods = []
-    for line in text.split("Modules:", 1)[-1].splitlines():
+    for line in text.splitlines():  # module lines only: "Alias:" and the like are no address
         parts = line.split()
         if len(parts) >= 4 and parts[1] == "-":
             mods.append((int(parts[0], 16), int(parts[2], 16) + 1, " ".join(parts[3:])))
-    if not mods:
-        raise ConnectionError("monitor info lists no module")
-    return mods[1] if len(mods) >= 2 else mods[0]
+    if len(mods) < 2:
+        raise ConnectionError("monitor info lists no main module")
+    return mods[1]
 
 
 def regs(stub):

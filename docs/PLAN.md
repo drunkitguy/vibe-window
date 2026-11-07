@@ -2710,16 +2710,20 @@ queue their writes go through (step 1 says why not the arrays), then call them f
    are shared, hence the backup (a game frozen at a stop and then killed can lose unsaved
    progress). The guest waits at boot for the debugger (fact, G1): right after the launch, in a
    second window, `py -3 C:\duo\rsp_watch.py 127.0.0.1:6543 go` (it waits up to 60 s for the stub;
-   on its `no gdbstub` message, run it again before restarting). Load the save. Then in the
-   second window (`cd C:\duo; $d = "$env:APPDATA\eden"`):
+   on its `no gdbstub` message, run it again before restarting). Load the save. To **relaunch**
+   (below): in the first window (the one that ran these lines; `$env:EDEN_DSMOD_CMD` is still set
+   there) run only the `.\eden-cli.exe` line again, not the backup, `Copy-Item`, `New-Item` or
+   `Remove-Item` lines; open a new second window, run `cd C:\duo; $d = "$env:APPDATA\eden"` and
+   the `go` line, load the save, read the new `totk re:` address as below, and go on with the next
+   row. Then in the second window (`cd C:\duo; $d = "$env:APPDATA\eden"`):
    `Select-String -Path "$d\log\eden_log.txt" -Pattern 'totk re:' | ForEach-Object Line` prints
    the queue address and the four hashes (the address changes every boot; it is the same for
    every row of one boot). Each row in this order: (1) in game, get to the last button press
    (for the + menu rows: menu open, cursor on the item); (2) in the second window run
    `py -3 C:\duo\rsp_watch.py 127.0.0.1:6543 <addr> 4 <hash> | Tee-Object C:\duo\watch-<row>.txt`
    with that row's hash; (3) do the action; (4) wait until the script ends; if the script prints
-   nothing 30 s after the action, close its window, write down the row, quit eden-cli and relaunch
-   (a closed script leaves its watchpoint armed until eden-cli exits). Rows: (a) equip
+   nothing 30 s after the action, close its window, write down the row, quit eden-cli and
+   relaunch as above (a closed script leaves its watchpoint armed until eden-cli exits). Rows: (a) equip
    another weapon from the + menu (hash `Pouch.Weapon.EquipIndex`); (b) the same from the D-pad
    quick menu (hold right, flick the stick, let go); (c) a shield (`Pouch.Shield.EquipIndex`);
    (d) a bow (`Pouch.Bow.EquipIndex`); (e) eat one food from the + menu
@@ -2728,7 +2732,7 @@ queue their writes go through (step 1 says why not the arrays), then call them f
    sends `c` (`AcceptConnection` calls `PauseEmulation` [S1 `src/core/debugger/debugger.cpp:159-167`]),
    and the stub takes a new connection after each close (`AsyncAccept` re-arms after every
    accept [S1 `debugger.cpp:49-56`]). If the game stays frozen after a script ended, run the `go`
-   line once; if it freezes again, quit eden-cli and relaunch. Last,
+   line once; if it freezes again, write down the row, quit eden-cli and relaunch as above. Last,
    `Set-Content -Encoding ascii C:\duo\dsmod-cmd.txt 'chain 0'` (its bracketed address is the main
    base), quit eden-cli, and
    `Remove-Item "$d\dualscreen\user\0100F2C0115B6000\totk-re"`.
