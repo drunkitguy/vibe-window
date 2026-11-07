@@ -131,6 +131,7 @@ class RspWatch(unittest.TestCase):
                   ("Z2," + z, "OK"), ("c", "T05thread:5a;"), g, ("z2," + z, "OK"), ("c", None)]
         stub = FakeStub(script)
         saved = rsp_watch.MAX_STOPS
+        self.assertEqual(saved, 200)  # the spec's cap; the run below patches it
         rsp_watch.MAX_STOPS = 2
         try:
             code, out = run(["127.0.0.1:%d" % stub.port, hex(ADDR), "4", hex(HASH)])
@@ -141,11 +142,26 @@ class RspWatch(unittest.TestCase):
         self.assertEqual(out.splitlines()[1:], ["skip pc=main+10 lr=main+20"] * 2 +
                          ["no match after 2 stops"])
 
+    def test_frame_walk_stops_at_16(self):
+        # a self-referencing x29 chain ([fp] == fp) ends at the cap; lr == main base is main+0
+        z = "%x,4" % ADDR
+        script = [("qRcmd," + b"info".hex(), INFO.encode().hex()), ("Z2," + z, "OK"),
+                  ("c", "T05thread:5a;"), ("g", g_reply([HASH], MAIN + 0x10, MAIN, 0x10E000))]
+        script += [("m10e000,10", le(0x10E000) + le(MAIN + 0x40))] * 16
+        script += [("z2," + z, "OK"), ("c", None)]
+        stub = FakeStub(script)
+        code, out = run(["127.0.0.1:%d" % stub.port, hex(ADDR), "4", hex(HASH)])
+        stub.join(5)
+        self.assertEqual((code, stub.got, stub.closed), (0, [p[0] for p in script], True))
+        self.assertEqual(out.splitlines()[1], "match stop 1: pc=main+10 lr=main+0 hash in x0")
+        self.assertEqual(out.splitlines()[3:], ["frame %d: main+40" % i for i in range(16)])
+
     def test_errors(self):
         z = "%x,4" % ADDR
         info = ("qRcmd," + b"info".hex(), INFO.encode().hex())
         g = ("g", g_reply([HASH], MAIN + 0x10, MAIN + 0x20, 0x10E000))
         match = "match stop 1: pc=main+10 lr=main+20 hash in x"
+        skip = ("g", g_reply([0], MAIN + 0x10, MAIN + 0x20, 0))
         for script, want in (
             # one module: no main (Eden's qOffsets would take it as main; TotK never has one)
             ([("qRcmd," + b"info".hex(),
@@ -160,6 +176,12 @@ class RspWatch(unittest.TestCase):
             ([info, ("Z2," + z, "OK"), ("c", "T05thread:5a;"),
               ("g", g_reply([0] * 15 + [HASH], MAIN + 0x10, MAIN + 0x20, 0)), ("z2," + z, "E01"),
               ("z2," + z, "OK"), ("c", None)], [match + "15"]),
+            # a skip stop whose z2 is refused: no step; the best-effort z2 and c
+            ([info, ("Z2," + z, "OK"), ("c", "T05thread:5a;"), skip, ("z2," + z, "E01"),
+              ("z2," + z, "OK"), ("c", None)], []),
+            # a skip stop whose re-arm is refused: no c without a watchpoint; best-effort z2, c
+            ([info, ("Z2," + z, "OK"), ("c", "T05thread:5a;"), skip, ("z2," + z, "OK"),
+              ("s", "T05thread:5a;"), ("Z2," + z, "E01"), ("z2," + z, "E01"), ("c", None)], []),
         ):
             stub = FakeStub(script)
             code, out = run(["127.0.0.1:%d" % stub.port, hex(ADDR), "4", hex(HASH)])
@@ -176,6 +198,11 @@ class RspWatch(unittest.TestCase):
         stub.join(5)
         self.assertEqual((code, stub.got), (1, ["qRcmd," + b"info".hex()]))
         self.assertIn("error: gdbstub refused qRcmd,", out)
+        stub = FakeStub([], ack=b"-")  # the same in go mode: the message, no traceback
+        code, out = run(["127.0.0.1:%d" % stub.port, "go"])
+        stub.join(5)
+        self.assertEqual((code, stub.got), (1, ["c"]))
+        self.assertIn("error: gdbstub refused c; if the game stays frozen, run the go line;", out)
         # a bad g reply, and the stub gone at the best-effort z2: the c fails silently, the
         # first error is the one printed
         z = "%x,4" % ADDR

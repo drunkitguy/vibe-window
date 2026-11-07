@@ -15,6 +15,9 @@ py -3 rsp_watch.py <host:port> <addr> <len> <hash>
     the client is gone, and its next hit would freeze the game with nobody to continue it.
 shortcut: the hash filter assumes the push still holds the hash in a register (UNVERIFIED),
 print every stop's frames if no row matches.
+shortcut: Eden's step clears the exclusive monitor [S1 src/core/arm/dynarmic/arm_dynarmic_64.cpp:
+359-361], so a skip at an LDXR/STXR store repeats at one pc until 200 stops; upgrade the skip to
+z2, c, the 0x03 interrupt byte, Z2, c if a row shows it.
 Exit 0 after a match or go, 2 for bad arguments, 1 otherwise.
 """
 import contextlib
@@ -174,13 +177,13 @@ def main(argv):
         return 1
     with sock:
         stub = Stub(sock)
-        if args is None:
-            stub.send("c")
-            return 0
-        sock.settimeout(None)  # a stop comes when the player acts
         try:
+            if args is None:
+                stub.send("c")
+                return 0
+            sock.settimeout(None)  # a stop comes when the player acts
             return watch(stub, *args)
-        except (ConnectionError, ValueError) as e:
+        except (OSError, ValueError) as e:  # OSError: also the go mode's 10 s ack timeout
             print("error: %s; if the game stays frozen, run the go line; if it freezes again, quit "
                   "eden-cli and relaunch" % e)
             return 1

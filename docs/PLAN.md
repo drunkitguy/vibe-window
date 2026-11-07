@@ -2687,7 +2687,10 @@ queue their writes go through (step 1 says why not the arrays), then call them f
      error past the `Z2` it still sends a best-effort `z2` and `c` (Eden keeps a watchpoint in its
      KProcess slots after the client is gone, so its next hit would freeze the game with no client).
      `shortcut: the hash filter assumes the push still holds the hash in a register (UNVERIFIED),
-     print every stop's frames if no row matches`. Tests: a fake RSP server feeds two stops, the
+     print every stop's frames if no row matches`. `shortcut: Eden's step clears the exclusive
+     monitor [S1 src/core/arm/dynarmic/arm_dynarmic_64.cpp:359-361], so a skip at an LDXR/STXR
+     store repeats at one pc until 200 stops; upgrade the skip to z2, c, \x03 (Eden's interrupt),
+     Z2, c if a row shows it`. Tests: a fake RSP server feeds two stops, the
      first without the hash (one `skip` line, then `z2`, `s`, `Z2`, `c` in that order) and the
      second with it (the frames printed, then `z2`, `c`, the close); in `go` mode it receives
      exactly one `c` and then the close, with no packet after `c`, also when the fake server
@@ -2722,7 +2725,7 @@ queue their writes go through (step 1 says why not the arrays), then call them f
    (for the + menu rows: menu open, cursor on the item); (2) in the second window run
    `py -3 C:\duo\rsp_watch.py 127.0.0.1:6543 <addr> 4 <hash> | Tee-Object C:\duo\watch-<row>.txt`
    with that row's hash; (3) do the action; (4) wait until the script ends; if the script prints
-   nothing 30 s after the action, close its window, write down the row, quit eden-cli and
+   no line after `main base ...` within 30 s of the action, close its window, write down the row, quit eden-cli and
    relaunch as above (a closed script leaves its watchpoint armed until eden-cli exits). Rows: (a) equip
    another weapon from the + menu (hash `Pouch.Weapon.EquipIndex`); (b) the same from the D-pad
    quick menu (hold right, flick the stick, let go); (c) a shield (`Pouch.Shield.EquipIndex`);
@@ -2747,7 +2750,10 @@ queue their writes go through (step 1 says why not the arrays), then call them f
    pattern matches the 1.4.3 roles (x1 = category, x2 = slot, x3 = -1 for equip; category 5 or 6
    for eat). **If no row matched its hash, or every row's chain is the same past the internals**
    (the watch saw only the flush or one per-frame writer), there is no candidate: equip and eat
-   stay refused and the coder says so in the report. The one other known route is the quick-menu
+   stay refused and the coder says so in the report. A row that ended with 200 `skip` lines at
+   one pc is a tool failure (the exclusive-store shortcut in step 1), not a row without a match:
+   it does not count toward this decision; the coder makes the skip upgrade named there and the
+   user reruns that row. The one other known route is the quick-menu
    input with readback (hold the D-pad, flick the stick, read `EquipIndex` back; Thor-tested on
    1.4.3 for weapons, not bows or food [S28 BOTTOM_SCREEN §5 H]); it is not what D3 was told, so
    it needs a new user decision. Otherwise the coder sends two files: `data.json` for the installed package,
