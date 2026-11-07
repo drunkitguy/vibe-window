@@ -231,6 +231,26 @@ int main() {
         assert(h.MemoryCalls() == 0);
     }
 
+    // §T8a's 200-character cap: a long layout name makes the member, pane, frame and failed lines
+    // longer; each is cut to exactly 200.
+    {
+        Host h;
+        full(h);
+        const std::string good = "blyt/Pause" + std::string(200, 'G') + ".bflyt",
+                          bad = "blyt/Pause" + std::string(200, 'B') + ".bflyt";
+        h.PutRomfs(kCommon110 + "#",
+                   Sarc({{good, flyt}, {bad, {'F', 'L', 'Y', 'X'}}, {"timg/__Combined.bntx", bntx}}));
+        totk::dump::Run(h.api, 120);
+        const auto logs = Logs(h);
+        const std::string kinds[] = {"member ", "member ", "pane ",  "pane ",
+                                     "pane ",   "frame ",  "frame ", "failed: "};
+        assert(logs.size() == 13); // head, three members, two textures, the good layout, failed
+        for (std::size_t i = 0; i < std::size(kinds); ++i) {
+            const std::string& line = i < 2 ? logs[2 + i] : logs[5 + i];
+            assert(line.starts_with("totk dump " + kinds[i]) && line.size() == 200);
+        }
+    }
+
     // No user file: one size query, nothing else read, nothing logged. No read_romfs or no log:
     // nothing at all.
     {

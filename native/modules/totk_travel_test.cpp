@@ -69,7 +69,7 @@ void PutPlaces(Host& h) {
                     {"Stable", Arr({Place("Stable001", {V(1, 2, 3)})})}})));
     h.PutRomfs(totk::travel::kFiles[1],
                BymlWriter{}.Write(
-                   Dict({{"CheckPoint", Arr({Place("CheckPoint001", {V(-500, -600, 700)})})}})));
+                   Dict({{"CheckPoint", Arr({Place("CheckPoint001", {V(-4321.98779f, -989.654297f, -2345.67896f)})})}})));
     h.PutRomfs("romfs:Mals/USen.Product.121.sarc.zs", {1});
     h.PutRomfs("romfs:Mals/USen.Product.121.sarc.zs#LocationMsg/Location.msbt",
                Msbt({{"Dungeon001", u"First Shrine"}, {"CheckPoint001", u"Root One"}}));
@@ -168,8 +168,10 @@ struct World {
             Layout();
         dir.Put("slot_00/caption.sav", Caption(2024, 1, 2, 8, 0, false));
         dir.Put("slot_00/progress.sav", TravelSave(opt.owned).Build());
-        if (!opt.log)
+        if (!opt.log) {
             h.api.log = nullptr;
+            h.romfs.erase(totk::travel::kFiles[1]); // Load's "missing" line then meets the null log
+        }
         instance = m->create(&h.api, "{}");
         assert(instance);
         if (opt.write)
@@ -330,7 +332,7 @@ int main() {
                              {"Dungeon002", "", 0, 0, 300, 20, 400, 0},
                              {"Dungeon003", "", 0, 1, 3000, 3499, 1000, 1},
                              {"Tower01", "", 2, 0, 1000, 300, -1000, -1},
-                             {"CheckPoint001", "Root One", 1, 2, -500, -600, 700, 1}};
+                             {"CheckPoint001", "Root One", 1, 2, -4321.98779f, -989.654297f, -2345.67896f, 1}};
         assert(list.size() == std::size(want));
         for (std::size_t i = 0; i < list.size(); ++i) {
             const Dest& d = list[i];
@@ -576,6 +578,19 @@ int main() {
         w.instance = nullptr;
         assert(w.Lines("totk travel: medallion still").empty() && w.h.write_calls == 0);
     }
+    // A "moved from" line with 9-digit in-world floats is over 200 characters and logged whole.
+    {
+        World w;
+        w.h.Put(w.p, ToBits(-4567.12305f, -1234.56787f, -3456.78906f));
+        w.Settle();
+        assert(w.Go(5) && w.h.batch_calls == 1);
+        const std::string line =
+            kMovedFrom + "x=-4567.12305 y=-1234.56787 z=-3456.78906 to CheckPoint001 "
+                         "x=-4321.98779 y=-987.654297 z=-2345.67896; if Eden closes before Put "
+                         "back, place it again by hand at the old x/z";
+        const auto moved = w.Lines(kMovedFrom);
+        assert(line.size() > 200 && moved.size() == 1 && moved[0].first == line);
+    }
 
     // The vec3 chain: a later move from the spot the companion set prints that spot exactly as
     // the earlier line's destination.
@@ -643,9 +658,9 @@ int main() {
             assert(refused(w, 0, "This Eden build cannot write game memory (no write extension)"));
         }
         {
-            World w({.log = false}); // no "moved from" line possible
+            World w({.log = false}); // no "moved from" line possible; Load's "missing" Say runs
             w.Settle();
-            assert(refused(w, 0, "This Eden build gives the module no log"));
+            assert(refused(w, 0, "This Eden build gives the module no log") && w.h.logs.empty());
         }
         {
             World w({.owned = false});
