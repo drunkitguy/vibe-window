@@ -627,7 +627,18 @@ failed load. On the user's Windows build of the patched fork:
    0,0,1920,1080 --aux-rect 0,1080,1240,1080 -g "<TotK nsp>"`). `eden_log.txt` must hold
    `Duo config: qt-config.ini + custom/0100F2C0115B6000.ini` (or `Duo config: qt-config.ini` when
    Eden Qt has no per-game settings for TotK), and the graphics API (Vulkan or OpenGL, as set in
-   Eden Qt's Graphics page) and the controller must match Eden Qt. Then
+   Eden Qt's Graphics page) and the controller must match Eden Qt. If it says `Duo config:
+   eden-cli's own config only (no readable qt-config.ini)`, the two keep their data in different
+   dirs: Eden Qt is portable (a `user` folder next to `eden.exe`), or eden-cli is (`C:\duo\user`
+   exists and hides `%APPDATA%\eden`) [S1 `src/common/fs/path_util.cpp:114-118`]. For a portable
+   Eden Qt, with no `C:\duo\user` yet, run `New-Item -ItemType Junction -Path C:\duo\user -Target
+   "<Eden Qt folder>\user"` (no admin needed; both builds keep their own folders and DLLs, and `$d`
+   is then `C:\duo\user`); for a portable eden-cli alone, rename `C:\duo\user`. Rerun check 6.
+   `eden_log.txt` must also hold `ExeFS: Update (<version>) applied successfully` [S1
+   `src/core/file_sys/patch_manager.cpp:326`] with the version Eden Qt shows for TotK in its game
+   list. If the line is missing or the version differs, the update sits in an Eden Qt game folder,
+   which eden-cli does not scan (§H1d Limits): install it to Eden Qt's NAND (File > Install Files
+   to NAND...) and rerun check 6. Then
    `Select-String -Path "$d\config\qt-config.ini" -Pattern '^(nand|sdmc|load|dump|save)_directory='`
    (`$d` as §T8a): `nand_directory`, `sdmc_directory`, `load_directory` and `dump_directory` must
    each show a path under `$d` (`nand`, `sdmc`, `load`, `dump`), and `save_directory` must be
@@ -712,10 +723,22 @@ dump and save directories: `ReadDataStorageValues` calls `SetEdenPath` for each 
 `src/frontend_common/config.cpp:272-296`] and Eden Qt's Filesystem page sets all five [S1
 `src/yuzu/configuration/configure_filesystem.cpp:81-90`], while `--install` reads only
 `sdl2-config.ini` [S1 `src/yuzu_cmd/dsmod_harness.cpp:974`, `InstallPackage` `:234-247`]; H1c check
-6 shows whether they differ from the `$d` defaults. Limits: `qt-config.ini` is looked up in
-eden-cli's config dir, so a portable `C:\duo\user` hides `%APPDATA%\eden\config\qt-config.ini`; Qt
-keyboard bindings are Qt key codes [S1 `qt_config.cpp:12-18`] and do not mean the same keys in
-eden-cli (controller bindings do); program id 0 (homebrew) gets no per-game file. Check on the PC:
+6 shows whether they differ from the `$d` defaults. Limits (each a `shortcut:` comment in 0013):
+`qt-config.ini` is looked up only in eden-cli's config dir, so a portable `C:\duo\user` hides
+`%APPDATA%\eden\config\qt-config.ini` and a portable Eden Qt (`user` next to `eden.exe`) keeps its
+`qt-config.ini` where eden-cli never looks [S1 `src/common/fs/path_util.cpp:114-118`] (H1c check 6
+gives the junction fix); Qt keyboard bindings are Qt key codes [S1 `qt_config.cpp:12-18`] while
+eden-cli feeds SDL scancodes to the keyboard engine [S1
+`src/yuzu_cmd/emu_window/emu_window_sdl3.cpp:136-138`], so a non-default Qt key binding maps to
+another key (controller bindings match); updates and DLC that Eden Qt registers from its game
+dirs are not loaded: its game-list worker scans `[UI] Paths\gamedirs` and, with
+`ext_content_from_game_dirs` on (default true [S1 `src/common/settings.h:863`]), adds every NSP/XCI
+there to the FrontendManual content provider [S1 `src/qt_common/game_list/worker.cpp:376-379`,
+`src/qt_common/qt_common.cpp:303`] (Android likewise [S1
+`src/android/app/src/main/jni/native.cpp:252`]); 0013 reads the setting but eden-cli scans no game
+dir, so an update kept only there runs in Eden Qt and not in eden-cli (another game version and
+build id, so the companion's build gate stays shut; H1c check 6 catches it, the fix is to install
+the update to Eden Qt's NAND); program id 0 (homebrew) gets no per-game file. Check on the PC:
 §H1c check 6.
 
 ### H2 (host: apollo2-vibe window-host, verify first)

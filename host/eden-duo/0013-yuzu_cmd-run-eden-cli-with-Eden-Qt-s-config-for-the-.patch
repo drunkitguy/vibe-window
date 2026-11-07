@@ -1,4 +1,4 @@
-From 07dd43368060e7c8e4b303109685a515a6f963ee Mon Sep 17 00:00:00 2001
+From a6a6a720e9602c7e416877f98b58ca59f37ed683 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Sat, 7 Nov 2026 17:56:52 +0000
 Subject: [PATCH] yuzu_cmd: run eden-cli with Eden Qt's config for the game
@@ -49,8 +49,15 @@ refused with one error line. A hard link to a Qt file under another
 name is not caught. The check sits in the option parser, so --install
 and --dump-il2cpp are covered too.
 
-Program id 0 (homebrew) gets no per-game file; Eden Qt names that one
-after the file.
+Known limits, each a shortcut comment: program id 0 (homebrew) gets no
+per-game file (Eden Qt names that one after the file); Qt keyboard
+bindings are Qt key codes, not the SDL scancodes eden-cli's keyboard
+gets, so a non-default Qt key binding maps to another key; updates and
+DLC that Eden Qt registers from its game dirs
+(ext_content_from_game_dirs) are not loaded, only those in the NAND and
+the external content dirs; qt-config.ini is looked up only in
+eden-cli's own config dir, so a portable Eden Qt or eden-cli does not
+see the other's files.
 
 Test (vibe-window host/eden-duo/test/qt_config_test.cpp, natively and
 under wine): own config, qt-config.ini, then custom/<id>.ini; use_global
@@ -67,13 +74,13 @@ Claude-Session: https://claude.ai/code/session_01XgyuSR8o8AbzxuWHYqLwsv
 ---
  .upstream/duo-touched.tsv      |  6 ++-
  src/yuzu_cmd/dsmod_harness.cpp |  8 +++
- src/yuzu_cmd/sdl_config.cpp    | 90 +++++++++++++++++++++++++++++++++-
- src/yuzu_cmd/sdl_config.h      | 17 ++++++-
- src/yuzu_cmd/yuzu.cpp          | 66 ++++++++++++++++++++++---
- 5 files changed, 175 insertions(+), 12 deletions(-)
+ src/yuzu_cmd/sdl_config.cpp    | 96 +++++++++++++++++++++++++++++++++-
+ src/yuzu_cmd/sdl_config.h      | 17 +++++-
+ src/yuzu_cmd/yuzu.cpp          | 69 +++++++++++++++++++++---
+ 5 files changed, 184 insertions(+), 12 deletions(-)
 
 diff --git a/.upstream/duo-touched.tsv b/.upstream/duo-touched.tsv
-index 303de36d..cff832ba 100644
+index 303de36d..e47710ce 100644
 --- a/.upstream/duo-touched.tsv
 +++ b/.upstream/duo-touched.tsv
 @@ -13,7 +13,6 @@ duo-only	A	-	10	0	src/video_core/host_shaders/duo_shaders.cmake
@@ -96,7 +103,7 @@ index 303de36d..cff832ba 100644
  duo-only	A	-	-	-	src/tests/core/mods/golden/Persona5Royal/waiting.png
  upstream-hook	M	29	206	37	src/android/app/src/main/java/org/yuzu/yuzu_emu/fragments/EmulationFragment.kt
  upstream-hook	M	22	70	6	src/android/app/src/main/jni/native.cpp
-+upstream-hook	M	21	89	19	src/yuzu_cmd/yuzu.cpp
++upstream-hook	M	21	92	19	src/yuzu_cmd/yuzu.cpp
  upstream-hook	M	20	56	3	src/core/file_sys/registered_cache.cpp
 -upstream-hook	M	17	33	13	src/yuzu_cmd/yuzu.cpp
  upstream-hook	M	17	45	27	src/android/app/src/main/java/org/yuzu/yuzu_emu/ui/GamesFragment.kt
@@ -114,7 +121,7 @@ index 303de36d..cff832ba 100644
  upstream-hook	M	4	8	1	src/core/hle/service/ipc_helpers.h
  upstream-hook	M	4	8	1	src/video_core/renderer_vulkan/renderer_vulkan.h
  upstream-hook	M	4	9	6	src/video_core/renderer_opengl/renderer_opengl.cpp
-+upstream-hook	M	4	89	1	src/yuzu_cmd/sdl_config.cpp
++upstream-hook	M	4	95	1	src/yuzu_cmd/sdl_config.cpp
  upstream-hook	M	4	7	1	src/yuzu_cmd/emu_window/emu_window_sdl3_gl.cpp
  upstream-hook	M	3	10	0	src/input_common/drivers/android.cpp
  upstream-hook	M	3	13	3	src/common/fs/file.cpp
@@ -138,7 +145,7 @@ index 59611024..9a683f5e 100644
                  break;
              case 'f':
 diff --git a/src/yuzu_cmd/sdl_config.cpp b/src/yuzu_cmd/sdl_config.cpp
-index b06a5a69..7067da45 100644
+index b06a5a69..c5b93922 100644
 --- a/src/yuzu_cmd/sdl_config.cpp
 +++ b/src/yuzu_cmd/sdl_config.cpp
 @@ -8,6 +8,10 @@
@@ -152,7 +159,7 @@ index b06a5a69..7067da45 100644
  #include "common/logging.h"
  #include "input_common/main.h"
  #include "sdl_config.h"
-@@ -55,8 +59,70 @@ SdlConfig::SdlConfig(const std::optional<std::string> config_path) {
+@@ -55,8 +59,76 @@ SdlConfig::SdlConfig(const std::optional<std::string> config_path) {
      SaveSdlValues();
  }
  
@@ -172,6 +179,12 @@ index b06a5a69..7067da45 100644
 +    }
 +}
 +
++// shortcut: Qt keyboard bindings are Qt::Key codes but eden-cli feeds SDL scancodes to the
++// keyboard engine, so a non-default Qt key binding maps to another key; translate them if
++// keyboard play from the Qt config is ever needed.
++// shortcut: updates and DLC that Eden Qt registers from its game dirs (ext_content_from_game_dirs)
++// are not loaded; read [UI] Paths\gamedirs and call ManualContentProvider::
++// AddEntriesFromContainer on each NSP/XCI there if an update outside NAND must be supported.
 +bool SdlConfig::ReadQtConfig(const std::filesystem::path& path, const ConfigType config_type) {
 +    const std::string data = Common::FS::ReadStringFromFile(path, Common::FS::FileType::BinaryFile);
 +    auto ini = std::make_unique<CSimpleIniA>();
@@ -224,7 +237,7 @@ index b06a5a69..7067da45 100644
          SdlConfig::SaveAllValues();
      }
  }
-@@ -170,6 +236,28 @@ void SdlConfig::ReadDebugControlValues() {
+@@ -170,6 +242,28 @@ void SdlConfig::ReadDebugControlValues() {
      }
  }
  
@@ -302,7 +315,7 @@ index 1fd1c692..9888bffc 100644
      static const std::array<int, Settings::NativeButton::NumButtons> default_buttons;
      static const std::array<int, Settings::NativeMotion::NumMotions> default_motions;
 diff --git a/src/yuzu_cmd/yuzu.cpp b/src/yuzu_cmd/yuzu.cpp
-index 6ba95b0e..ad8c56d1 100644
+index 6ba95b0e..deed20aa 100644
 --- a/src/yuzu_cmd/yuzu.cpp
 +++ b/src/yuzu_cmd/yuzu.cpp
 @@ -7,6 +7,7 @@
@@ -330,7 +343,7 @@ index 6ba95b0e..ad8c56d1 100644
  #include "core/hle/service/am/applet_manager.h"
  #include "core/hle/service/filesystem/filesystem.h"
  #include "core/loader/loader.h"
-@@ -199,18 +203,67 @@ extern "C" SDL_AppResult SDL_AppInit(void **appstate, int argc, char **argv) {
+@@ -199,18 +203,70 @@ extern "C" SDL_AppResult SDL_AppInit(void **appstate, int argc, char **argv) {
  #ifdef _WIN32
      LocalFree(argv_w);
  #endif
@@ -343,6 +356,9 @@ index 6ba95b0e..ad8c56d1 100644
 +    // custom/<program id>.ini below, unless -c names a config. eden-cli's own config is saved first
 +    // so no Qt value lands in it; the launch params are applied after both, so a command-line flag
 +    // always wins.
++    // shortcut: only eden-cli's own config dir is searched, so a portable eden-cli or Eden Qt
++    // (a user dir next to the exe) does not see the other's files; look in Eden Qt's dir too if a
++    // portable Eden Qt must be supported.
 +    const auto config_dir = Common::FS::GetEdenPath(Common::FS::EdenPath::ConfigDir);
 +    bool qt_config = false;
 +    if (!lp.config_path && Common::FS::IsFile(config_dir / "qt-config.ini")) {
@@ -403,7 +419,7 @@ index 6ba95b0e..ad8c56d1 100644
      state->system.Initialize();
  
      // Apply the command line arguments
-@@ -241,9 +294,6 @@ extern "C" SDL_AppResult SDL_AppInit(void **appstate, int argc, char **argv) {
+@@ -241,9 +297,6 @@ extern "C" SDL_AppResult SDL_AppInit(void **appstate, int argc, char **argv) {
  #endif
  
      state->system.SetInputSubsystem(&state->input_subsystem);
