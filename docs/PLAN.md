@@ -730,7 +730,7 @@ dump and save directories: `ReadDataStorageValues` calls `SetEdenPath` for each 
 gives the junction fix); Qt keyboard bindings do not carry over: Eden Qt saves a binding equal to
 its own Qt key default with `\default=true` [S1 `qt_config.cpp:12-18`], the reader then returns
 eden-cli's SDL scancode default [S1 `src/frontend_common/config.cpp:810-812`,
-`src/yuzu_cmd/sdl_config.cpp:19-23,186-190`], and a custom Qt key code reaches the keyboard engine
+`src/yuzu_cmd/sdl_config.cpp:19-23,114-121`], and a custom Qt key code reaches the keyboard engine
 as an SDL scancode [S1 `src/yuzu_cmd/emu_window/emu_window_sdl3.cpp:136-138`], so Qt-default keys
 become eden-cli's SDL defaults and custom keys map to other keys (controller bindings match);
 updates and DLC that Eden Qt registers from its game dirs are not loaded: its game-list worker scans `[UI] Paths\gamedirs` and, with
