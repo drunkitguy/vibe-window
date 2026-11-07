@@ -22,6 +22,10 @@ Fails (exit 1) when
 - a bind or gate (bind, bind_text, text_bind, *_bind, need_bind without "!", page_binds point,
   derived a/b and expr names) is not a totk_keys.h key, a derived name or a runtime key; a
   "totk." name anywhere is not in totk_keys.h; a derived expr does not parse;
+- a derived name starts with "totk." or is a runtime key (it would overwrite the module's or
+  runtime's value of that name, e.g. a wheel gate input);
+- the data.json beside the manifest is not {} (its points and derived merge past every rule
+  here; shortcut in check());
 - the file is over 4 MiB.
 Warns when a key listed in totk_keys.h is bound nowhere. Std-lib only.
 """
