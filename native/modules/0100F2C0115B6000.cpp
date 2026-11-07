@@ -5,7 +5,8 @@
 // Every callback catches all exceptions: nothing may unwind into the host.
 // Data: the last save through the save extension (a worker thread polls it every 2 s) and, on
 // 1.2.1 only, the live status and position read in sample through kOffsets121's chains
-// (read-only; on 1.2.0 every chain is empty and guest memory is never touched). The worker also
+// (read-only; on 1.2.0 every chain is empty and guest memory is never touched), and there the
+// GameData loading gate that permits the manifest's wheel buttons (totk.loading, §A1). The worker also
 // loads the item names from the game's romfs (totk_msbt.h) and, once per session when the player
 // asks for it, logs T8a's texture dump (totk_dump.h), and finds the map's tile files once
 // (totk_map.h).
@@ -13,6 +14,7 @@
 // actions are refused; load_image serves only the font atlas (icons are romfs: paths the runtime
 // reads). Font extension: decode_font builds that atlas from the game's own font (totk_font.h).
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cmath>
@@ -52,6 +54,9 @@ constexpr int kPageMap = 2;
 // to the save.
 // shortcut: N samples grace, tune after T8c.
 constexpr int kLiveGrace = 30;
+// Clear loading-gate samples in a row before totk.loading turns 0.
+// shortcut: 1 s settle after loading, tune after T8c.
+constexpr int kLoadSettle = 60;
 static_assert(pub::kActionArgs[pub::kActMapLayer] == totk::map::kLayerCount);
 
 // Every key sample publishes with a computed name, built once in create so sample never allocates.
@@ -103,6 +108,10 @@ struct Instance {
     // one (-1: none yet), so totk.map.layer follows him only when it changes.
     totk::Position pos;
     int pos_misses = kLiveGrace, pos_layer = -1;
+    // The loading gate: clear samples in a row (capped at kLoadSettle), the published
+    // totk.loading (-1: none yet) and the once-per-session unknown line.
+    int load_clear = 0, loading = -1;
+    bool load_unknown_logged = false;
 
     std::mutex mutex; // guards everything below; sample holds it only to copy `snapshot`
     std::condition_variable wake;
@@ -478,6 +487,28 @@ const totk::Position* LivePosition(Instance& in, const EdenDsmodHostApi& h) {
     return in.pos_misses < kLiveGrace ? &in.pos : nullptr;
 }
 
+// totk.loading: 0 only after kLoadSettle clear samples in a row, else 1. Unknown counts as loading:
+// !totk.loading permits the wheel's input, and an unreadable gate cannot tell a load screen from
+// play. One line per change of the published value (none for the first) and one for the
+// session's first unknown cause; ReadLoading names none for an empty chain (1.2.0).
+int Loading(Instance& in, const EdenDsmodHostApi& h) {
+    char why[32] = "", line[64];
+    const int gate = totk::ReadLoading(h, h.main_base, in.offsets, why);
+    in.load_clear = gate == 0 ? std::min(in.load_clear + 1, kLoadSettle) : 0;
+    const int loading = in.load_clear < kLoadSettle ? 1 : 0;
+    if (*why && !in.load_unknown_logged) {
+        in.load_unknown_logged = true;
+        std::snprintf(line, sizeof line, "totk loading: unknown (%s)", why);
+        if (h.log)
+            h.log(h.userdata, EDEN_DSMOD_LOG_INFO, line);
+    }
+    if (in.loading >= 0 && loading != in.loading && h.log) {
+        std::snprintf(line, sizeof line, "totk loading: %d -> %d", in.loading, loading);
+        h.log(h.userdata, EDEN_DSMOD_LOG_INFO, line);
+    }
+    return in.loading = loading;
+}
+
 // The live position (source 2) or the save's (1); without either, totk.map.valid 0 and nothing
 // else. The selected layer's tiles are heavy: only while the map page is open.
 void PublishMap(const Out& o, const Instance& in, const totk::Position* live,
@@ -580,6 +611,7 @@ void Sample(void* instance, const EdenDsmodHostApi* host) {
         }
         // Status first, then the position (which may move the layer before it is published).
         const totk::Status* status = LiveStatus(in, *host, snap.get());
+        const int loading = Loading(in, *host);
         const totk::Position* pos = LivePosition(in, *host);
         const Out o{*host};
         o.I(pub::kReady, 1);
@@ -588,6 +620,7 @@ void Sample(void* instance, const EdenDsmodHostApi* host) {
         o.I(pub::kInvTab, in.tab);
         o.I(pub::kInvSel, in.sel);
         o.I(pub::kMapLayer, in.layer);
+        o.I(pub::kLoading, loading);
         PublishStatus(o, status, snap.get());
         PublishMap(o, in, pos, snap.get(), tiles.get());
         if (!snap) { // no save read yet: every other save domain is empty
@@ -617,8 +650,14 @@ void Tick(void* instance, const EdenDsmodHostApi* host) {
             if (!(in->refused & bit) || (in->logged & bit))
                 continue;
             in->logged |= bit;
-            char line[160];
-            if (a >= pub::kActGearSwap)
+            char line[224];
+            if (a == pub::kActAbilitySelect) // the manifest sends it only for the medallion
+                std::snprintf(line, sizeof line,
+                              "totk: %s disabled: the Travel Medallion is placed in the + menu "
+                              "and used from the game's map; the companion's medallion move "
+                              "(Map page) waits for T8c",
+                              pub::kActionNames[a]);
+            else if (a >= pub::kActGearSwap)
                 std::snprintf(line, sizeof line, "totk: %s disabled: no verified offsets",
                               pub::kActionNames[a]);
             else

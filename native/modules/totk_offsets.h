@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Named pointer chains for the live status (docs/PLAN.md §L2, §T3a). Offsets{} (1.2.0 and any
+// Named pointer chains for the live status (docs/PLAN.md §L2, §T3a) and the loading gate (§A1).
+// Offsets{} (1.2.0 and any
 // other build) is all empty: every chain UNKNOWN, so ReadStatus reads nothing. kOffsets121 holds
 // the 1.2.1 leads, each UNVERIFIED until T8c checks it with the console's `chain` command.
 // Walk rule (totk_status.h): address = base + hop[0]; then for each next hop, address = u64 at
@@ -38,6 +39,15 @@ struct Offsets {
     Chain max_battery;
     // UNKNOWN: actor-relative chain to the f32[3] world position (x, y, z).
     Chain position;
+    // The GameData loading gate (docs/PLAN.md §A1, totk_status.h ReadLoading).
+    // UNKNOWN: main-relative chain giving the GameDataMgr pointer.
+    Chain gmd_mgr;
+    // UNKNOWN: main-relative chain giving the GameData holder's manager pointer.
+    Chain gmd_holder;
+    // UNKNOWN: main-relative chain to the u32 GameData file count.
+    Chain gmd_count;
+    // UNKNOWN: main-relative chain to the u8 file flags (0x02: loading).
+    Chain gmd_loading;
 };
 
 // 1.2.1 (decoded from Eiffel2018's set [S40], same codes in [S9] key 9B4E43650501A4D4).
@@ -67,6 +77,17 @@ inline constexpr Offsets kOffsets121{
     // [S7 Totk121Offsets.hpp][S28 game_version.h:83][S38 engineActor.hpp:210] mPosition at
     // actor+0x2B4 (the cheat actor with this layout is UNVERIFIED). UNVERIFIED until T8c.
     .position = {1, {0x2B4}},
+    // [S38 GameDataMgr.py:4-8] main+0x4721B98 holds the GameDataMgr; +0x0 returns it.
+    // UNVERIFIED until T8c.
+    .gmd_mgr = {2, {0x4721B98, 0x0}},
+    // [S7 Totk121Offsets.hpp:30-33] [[main+0x462E3D8]]. UNVERIFIED until T8c.
+    .gmd_holder = {3, {0x462E3D8, 0x0, 0x0}},
+    // [S7 botw-abilities/src/champions/GameData.cpp:64-73] mgr +0xCC0: u32 n.
+    // UNVERIFIED until T8c.
+    .gmd_count = {2, {0x4721B98, 0xCC0}},
+    // [S7 botw-abilities/src/champions/GameData.cpp:64-73] mgr +0xCC8 is the file pointer (null
+    // fails the walk), +0x78 its u8 flags. UNVERIFIED until T8c.
+    .gmd_loading = {3, {0x4721B98, 0xCC8, 0x78}},
 };
 
 } // namespace totk

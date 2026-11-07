@@ -219,6 +219,20 @@ inline void PutLive(Host& h, const Live& v = {}, const Offsets& o = kOffsets121)
         h.Put(PutChain(h, actor, o.position), std::array<float, 3>{v.x, v.y, v.z});
 }
 
+// The loading gate of `o` (ReadLoading): the holder's manager slot holds the GameDataMgr pointer,
+// the file count `n`, the file's `flags`. Returns the flags' address.
+inline std::uint64_t PutLoading(Host& h, std::uint8_t flags = 0, std::uint32_t n = 1,
+                                const Offsets& o = kOffsets121) {
+    const std::uint64_t main = h.api.main_base, mgr = PutChain(h, main, o.gmd_mgr);
+    Chain slot = o.gmd_holder;
+    --slot.n; // the holder chain up to the slot that holds the manager pointer
+    h.Put(PutChain(h, main, slot), mgr);
+    h.Put(PutChain(h, main, o.gmd_count), n);
+    const std::uint64_t at = PutChain(h, main, o.gmd_loading);
+    h.Put(at, flags);
+    return at;
+}
+
 // A save directory in memory with the runtime's read_save_file semantics [S1
 // mod_module_services.cpp:222-242]: output null -> size; offset past the end -> 0; else
 // min(size, file size - offset) bytes. Thread-safe: the module's worker calls it.

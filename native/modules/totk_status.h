@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Live status reader: hearts, stamina, rupees and battery through the Offsets chains
-// (docs/PLAN.md §T3a), and Link's position (§T3b). Fails closed: an empty chain reads nothing;
+// (docs/PLAN.md §T3a), Link's position (§T3b) and the GameData loading gate (§A1). Fails closed: an empty chain reads nothing;
 // an unmapped or misaligned slot, a null or low pointer, an overflowing address, an actor not
 // named "Player", a torn read or an implausible value gives an invalid Status or Position.
 // Reads only through ReadGuest<Reject>; never writes.
@@ -8,6 +8,7 @@
 
 #include <array>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <limits>
 
@@ -142,6 +143,38 @@ inline Position ReadPosition(const EdenDsmodHostApi& h, const Offsets& o) {
           p.z <= 5000))
         return {};
     return p;
+}
+
+// The GameData loading gate [S7 botw-abilities/src/champions/GameData.cpp:64-73]: 0 when the
+// holder's manager is the GameDataMgr, its file count n is 1-16, the file walk succeeds and the
+// flags' 0x02 bit is clear; 1 when that bit is set; -1 (unknown) on anything else, with `why`
+// naming the cause. A manager or holder walk that fails counts as "managers differ". Any empty
+// chain gives -1 with no host call and leaves `why` as it was (no chain to report).
+inline int ReadLoading(const EdenDsmodHostApi& h, std::uint64_t base, const Offsets& o,
+                       char (&why)[32]) {
+    if (!o.gmd_mgr.n || !o.gmd_holder.n || !o.gmd_count.n || !o.gmd_loading.n)
+        return -1;
+    const std::uint64_t mgr = detail::Walk(h, base, o.gmd_mgr);
+    if (!mgr || mgr != detail::Walk(h, base, o.gmd_holder)) {
+        std::snprintf(why, sizeof why, "managers differ");
+        return -1;
+    }
+    std::uint32_t n = 0;
+    if (!detail::ReadWord(h, base, o.gmd_count, n)) {
+        std::snprintf(why, sizeof why, "count unreadable");
+        return -1;
+    }
+    if (n < 1 || n > 16) {
+        std::snprintf(why, sizeof why, "count %u", unsigned(n));
+        return -1;
+    }
+    const std::uint64_t file = detail::Walk(h, base, o.gmd_loading);
+    std::uint8_t flags = 0;
+    if (!file || !detail::Read(h, file, flags)) {
+        std::snprintf(why, sizeof why, "file walk");
+        return -1;
+    }
+    return flags & 0x02 ? 1 : 0;
 }
 
 // Link's map layer (totk.map.layer: 0 surface, 1 sky, 2 depths) from his height [S28

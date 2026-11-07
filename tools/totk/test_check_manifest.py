@@ -94,6 +94,39 @@ class CheckManifestTest(unittest.TestCase):
         for kind in ("write", "slot_write", "call", "sequence", "button", "flag", None):
             self.fails(lambda m: m["actions"]["ui_page_0"].update(kind=kind), "kind")
 
+    def test_wheel_buttons(self):
+        """CA7b: button only for the six wheel_<a>, gated on ui.wheel.<a> whose expr is exactly
+        owned && !loading, with an L+RStick(x,y) chord."""
+        wheel = {"kind": "button", "button": "L+RStick(0,1)", "frames": 20,
+                 "enabled_bind": "ui.wheel.ascend"}
+        self.fails(lambda m: m["actions"].update(wheel_travel={
+            **wheel, "enabled_bind": "ui.wheel.travel"}), "kind 'button' is only for wheel_<a>")
+        self.fails(lambda m: m["actions"].update(press_a={**wheel, "button": "A"}),
+                   "kind 'button' is only for wheel_<a>")
+        self.fails(lambda m: m["actions"]["wheel_ascend"].pop("enabled_bind"),
+                   "enabled_bind None is not 'ui.wheel.ascend'")
+        self.fails(lambda m: m["actions"]["wheel_ascend"].update(enabled_bind="ui.wheel.fuse"),
+                   "is not 'ui.wheel.ascend'")
+
+        def expr(text):
+            return lambda m: next(d for d in m["derived"]
+                                  if d["name"] == "ui.wheel.ascend").update(expr=text)
+        for text in ("totk.ability.ascend.owned", "totk.ability.ascend.owned || !totk.loading",
+                     "!totk.loading && totk.ability.ascend.owned",
+                     "totk.ability.fuse.owned && !totk.loading"):
+            self.fails(expr(text), "derived 'ui.wheel.ascend' expr")
+        self.fails(lambda m: m["derived"].remove(next(
+            d for d in m["derived"] if d["name"] == "ui.wheel.ascend")),
+            "derived 'ui.wheel.ascend' expr []")
+        for chord in ("L+RStick(0,1)+A", "ZL+RStick(0,1)", "RStick(0,1)", "L+LStick(0,1)",
+                      "L+RY+", "L+RStick(x,1)", "L", 7):
+            self.fails(lambda m: m["actions"]["wheel_ascend"].update(button=chord),
+                       "is not L+RStick(x,y)")
+        for chord in ("L+RStick(0.71,-0.71)", "L+RStick(-1,0)"):
+            m = copy.deepcopy(self.manifest)
+            m["actions"]["wheel_ascend"]["button"] = chord
+            self.assertEqual(self.errors(m), [])
+
     def test_unknown_module_action(self):
         self.fails(lambda m: m["actions"]["gear_swap_0"].update(action="totk.gear.drop"),
                    "module action 'totk.gear.drop'")
@@ -506,14 +539,36 @@ class GenManifestTest(unittest.TestCase):
             shown = sorted(r for r, w in roles.items() if self.visible(w, full))
             self.assertEqual(shown, sorted(expect), state)
 
+    def tap(self, k, a):
+        """Ability k's tap: wheel_<a> for the six of WHEEL, the refused module action for 6."""
+        if a in gen_manifest.WHEEL:
+            x, y = gen_manifest.WHEEL[a]
+            return {"kind": "button", "button": f"L+RStick({x},{y})", "frames": 20,
+                    "enabled_bind": f"ui.wheel.{a}"}
+        return {"kind": "module", "action": "totk.ability.select", "argument": k}
+
+    def test_wheel(self):
+        """Six wheel buttons (not the medallion), each gated on owned && !loading; no
+        ability_select_0-5 left."""
+        self.assertEqual(sorted(gen_manifest.WHEEL), sorted(a for a, _, _ in
+                                                           gen_manifest.ABILITIES[:6]))
+        self.assertEqual(gen_manifest.WHEEL_FRAMES, 20)
+        buttons = {n: a for n, a in self.m["actions"].items() if a["kind"] == "button"}
+        self.assertEqual(sorted(buttons), sorted(f"wheel_{a}" for a in gen_manifest.WHEEL))
+        for a in gen_manifest.WHEEL:
+            self.assertEqual(self.derived[f"ui.wheel.{a}"]["expr"],
+                             f"totk.ability.{a}.owned && !totk.loading")
+        self.assertEqual([n for n in self.m["actions"] if n.startswith("ability_select_")],
+                         ["ability_select_6"])
+
     def test_ability_bar(self):
-        """Ability k taps totk.ability.select k; its icon and name show owned or locked."""
+        """Ability k taps its wheel button (the medallion: totk.ability.select 6); its icon and
+        name show owned or locked."""
         home = self.page("home")
         for k, (a, name, x) in enumerate(gen_manifest.ABILITIES):
             rect = [18 + 172 * k + 54, 946, 64, 64]
             frame = next(w for w in home if w["rect"] == rect and w["type"] == "rect")
-            self.assertEqual(self.action(frame["on_tap"]), {
-                "kind": "module", "action": "totk.ability.select", "argument": k})
+            self.assertEqual(self.action(frame["on_tap"]), self.tap(k, a))
             parts = [w for w in home if w["rect"] in (rect, [18 + 172 * k + 86, 1014, 0, 22])
                      and w is not frame]
             self.assertEqual(len(parts), 4, a)
@@ -536,7 +591,7 @@ class GenManifestTest(unittest.TestCase):
 
     def test_abilities_page(self):
         """Seven 290x400 tiles in R5's two rows (Ultrahand, Fuse, Ascend, Recall; Autobuild,
-        Camera, Travel); tapping tile k sends totk.ability.select k (refused). Per state: no save
+        Camera, Travel); tapping tile k is the home bar's tap. Per state: no save
         (totk.ability.valid absent or 0) only "No save data yet"; owned: the tile, the full-colour
         icon and the name in text; not owned or no owned key: the locked-tint icon, the name dim
         and "Locked". With every TEX role named the tile texture follows the tile's gate."""
@@ -547,8 +602,7 @@ class GenManifestTest(unittest.TestCase):
         nosave = self.one(ws, text="No save data yet")
         for k, ((a, name, obj), (x, y)) in enumerate(zip(gen_manifest.ABILITIES, self.TILES)):
             tile = self.one(ws, type="rect", rect=[x, y, 290, 400])
-            self.assertEqual(self.action(tile["on_tap"]), {
-                "kind": "module", "action": "totk.ability.select", "argument": k})
+            self.assertEqual(self.action(tile["on_tap"]), self.tap(k, a))
             frame = self.one(ws, type="rect", rect=[x + 65, y + 40, 160, 160])
             icons = [w for w in ws if w["type"] == "image" and w["rect"] == frame["rect"]]
             self.assertEqual([w["src"] for w in icons],
@@ -579,6 +633,15 @@ class GenManifestTest(unittest.TestCase):
         tex = [w for w in named["widgets"] if w.get("src") == "romfs:/T8A/tile"]
         self.assertEqual([w["rect"] for w in tex], [[x, y, 290, 400] for x, y in self.TILES])
         self.assertTrue(all(w["need_bind"] == "totk.ability.valid" for w in tex))
+
+    def test_wheel_locked(self):
+        """The dim "Wheel locked" line shows only while totk.loading is 1 (the module publishes 1
+        for an unknown gate too)."""
+        line = self.one(self.page("abilities"), text="Wheel locked: game loading or not readable",
+                        rect=[620, 900, 0, 22], color=gen_manifest.DIM)
+        for loading, shown in ((None, False), (0, False), (1, True)):
+            snap = {"totk.ready": 1, **({} if loading is None else {"totk.loading": loading})}
+            self.assertEqual(self.visible(line, snap), shown, loading)
 
     def test_battery_strip(self):
         """The abilities page's battery strip: caption while totk.status.valid, the value (div

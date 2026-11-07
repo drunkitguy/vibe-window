@@ -6,7 +6,10 @@ python3 -I tools/totk/check_manifest.py --eden <eden-duo checkout>
 Fails (exit 1) when
 - an object key (not starting with "_") is not a "key" string literal in $E/src/core/mods/*.cpp;
 - an action kind is not page, module or view_reset; a module action is not in kActionNames, or
-  its argument is not an integer in kActionArgs' range or "$payload";
+  its argument is not an integer in kActionArgs' range or "$payload"; a button action is not
+  wheel_<a> for an <a> in gen_manifest.WHEEL, its enabled_bind is not ui.wheel.<a>, that derived
+  expr is not exactly "totk.ability.<a>.owned && !totk.loading", or its chord is not
+  L+RStick(x,y) (PLAN.md CA7b);
 - an on_tap/on_hold/on_swipe_*/drop_action/enforce names an undefined action, a page action or
   page bind an undefined page, a widget scroll an undefined region; a page id or derived name
   is defined twice;
@@ -27,12 +30,17 @@ import re
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # -I leaves the script's folder out
+from gen_manifest import WHEEL  # noqa: E402
+
 ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = ROOT / "packages/TearsOfTheKingdom/dualscreen/manifest.json"
 KEYS_HEADER = ROOT / "native/modules/totk_keys.h"
 MAX_BYTES = 4 << 20
 GLYPH_ADVANCE = 4  # built-in font: 3 px glyph + 1 px gap per character, times text_scale
-KINDS = {"page", "module", "view_reset"}
+KINDS = {"page", "module", "view_reset", "button"}  # button: only CA7b's wheel actions
+NUMBER = r"-?\d+(?:\.\d+)?"
+WHEEL_CHORD = re.compile(rf"L\+RStick\({NUMBER},{NUMBER}\)")
 ACTION_REFS = ("on_tap", "on_hold", "on_swipe_left", "on_swipe_right", "on_swipe_up",
                "on_swipe_down", "drop_action")
 # Objects whose keys are names (actions, text_map values, ...), not runtime keys.
@@ -54,7 +62,7 @@ NUMERIC = {"format", "min_runtime", "canvas_w", "canvas_h", "text_scale", "wrap_
            "max_lines", "line_gap", "text_min_scale", "text_center_h", "hold_ms", "swipe_px",
            "duration_ms", "equals", "frame", "border", "text_inset", "outline_px", "pad", "div",
            "mul", "add", "repeat", "repeat_dx", "repeat_dy", "repeat_cols", "repeat_row_dy",
-           "row_h", "cols", "every_ms", "detail_threshold"}
+           "row_h", "cols", "every_ms", "detail_threshold", "frames"}
 COLOR_KEYS = {"color", "bg", "background", "bar", "bar_track", "tint", "highlight_color",
               "outline", "drag_under_color", "drag_under_tint"}
 COLOR = re.compile(r"#?[0-9A-Fa-f]{1,8}")
@@ -244,6 +252,23 @@ def check(manifest, literals, patterns, module_actions, size=0):
                                      0 <= arg < module_actions[module_action])):
                 errors.append(f"action '{name}': argument {arg!r} is not \"$payload\" or an "
                               f"integer in {module_action}'s range (kActionArgs)")
+        if kind == "button":
+            a = name[len("wheel_"):] if name.startswith("wheel_") else None
+            gate = f"ui.wheel.{a}"
+            exprs = [d.get("expr") for d in manifest.get("derived", []) if d.get("name") == gate]
+            if a not in WHEEL:
+                errors.append(f"action '{name}': kind 'button' is only for wheel_<a>, <a> in "
+                              f"WHEEL {sorted(WHEEL)}")
+            elif action.get("enabled_bind") != gate:
+                errors.append(f"action '{name}': enabled_bind {action.get('enabled_bind')!r} is "
+                              f"not '{gate}'")
+            elif exprs != [f"totk.ability.{a}.owned && !totk.loading"]:
+                errors.append(f"action '{name}': derived '{gate}' expr {exprs} is not "
+                              f"'totk.ability.{a}.owned && !totk.loading'")
+            if not (isinstance(action.get("button"), str) and
+                    WHEEL_CHORD.fullmatch(action["button"])):
+                errors.append(f"action '{name}': chord {action.get('button')!r} is not "
+                              "L+RStick(x,y)")
         if kind == "page" and action.get("page") not in page_ids:
             errors.append(f"action '{name}': page '{action.get('page')}' is not defined")
     for i, entry in enumerate(manifest.get("enforce", [])):

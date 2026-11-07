@@ -215,7 +215,7 @@ int main() {
     const Host::Ints empty{
         {"totk.ready", 1},        {"totk.ui.page", 0},       {"totk.inv.tab", 0},
         {"totk.inv.sel", 0},      {"totk.map.layer", 0},     {"totk.status.valid", 0},
-        {"totk.map.valid", 0},    {"totk.names.valid", 0},
+        {"totk.map.valid", 0},    {"totk.names.valid", 0},   {"totk.loading", 1},
         {"totk.gear.valid", 0},   {"totk.ability.valid", 0}, {"totk.inv.valid", 0}};
     assert(h.ints == empty && h.texts.empty() && h.floats.empty());
 
@@ -262,6 +262,7 @@ int main() {
         {"totk.inv.tab", 0},
         {"totk.inv.sel", 0},
         {"totk.map.layer", 0},
+        {"totk.loading", 1},
         {"totk.names.valid", 0},
         {"totk.status.valid", 1},
         {"totk.status.source", 1},
@@ -689,14 +690,14 @@ int main() {
     }
     for (std::int64_t bad : {std::int64_t(-1), std::int64_t(3), kMin, kMax})
         assert(!act("totk.map.layer", bad));
-    // Game actions are refused for every argument, valid or not (CA7d).
-    for (std::int64_t k : {std::int64_t(-1), std::int64_t(0), std::int64_t(1), std::int64_t(2),
-                           std::int64_t(3), std::int64_t(4), kMin, kMax})
-        assert(!act("totk.gear.swap", k) && !act("totk.inv.use", k));
-    for (std::int64_t k : {kMin, std::int64_t(-1), std::int64_t(0), std::int64_t(1),
-                           std::int64_t(2), std::int64_t(3), std::int64_t(4), std::int64_t(5),
-                           std::int64_t(6), std::int64_t(7), kMax}) // 0-6 and out of range
-        assert(!act("totk.ability.select", k));
+    // Game actions are refused for every argument, valid or not (CA7d): -1-7, kMin and kMax.
+    const auto game_refused = [&](std::int64_t k) {
+        return !act("totk.gear.swap", k) && !act("totk.inv.use", k) &&
+               !act("totk.ability.select", k);
+    };
+    assert(game_refused(kMin) && game_refused(kMax));
+    for (std::int64_t k = -1; k <= 7; ++k)
+        assert(game_refused(k));
     // Unknown names, null name or instance.
     assert(!act("totk.bogus", 0) && !act("", 0) && !act("totk.ui.pagex", 0));
     assert(!ext->on_action(instance, nullptr, 0) && !ext->on_action(nullptr, "totk.ui.page", 0));
@@ -714,8 +715,9 @@ int main() {
         "totk: totk.map.layer refused: argument out of range",
         "totk: totk.gear.swap disabled: no verified offsets",
         "totk: totk.inv.use disabled: no verified offsets",
-        "totk: totk.ability.select disabled: no verified offsets"}; // unknown names: no line
-    assert(h.logs == lines);
+        "totk: totk.ability.select disabled: the Travel Medallion is placed in the + menu and "
+        "used from the game's map; the companion's medallion move (Map page) waits for T8c"};
+    assert(h.logs == lines); // unknown names: no line
     assert(!act("totk.gear.swap", 0) && !act("totk.other", 0) && !act("totk.ui.page", 9));
     m->tick(instance, &h.api);
     m->tick(instance, &h.api);
@@ -901,7 +903,8 @@ int main() {
         Configure(se, i0, d);
         PollNow(i0);
         SampleClean(m, i0, h0);
-        assert(h0.ints.at("totk.status.source") == 1 && h0.MemoryCalls() == 0);
+        assert(h0.ints.at("totk.status.source") == 1 && h0.ints.at("totk.loading") == 1 &&
+               h0.MemoryCalls() == 0);
         m->destroy(i0);
         assert(g_nothrow_live == nullptr);
     }

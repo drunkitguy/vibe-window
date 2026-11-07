@@ -60,6 +60,12 @@ ABILITIES = [("ultrahand", "Ultrahand", "UltraHand"), ("fuse", "Fuse", "OneTouch
              ("ascend", "Ascend", "Tooreroof"), ("recall", "Recall", "ReverseRecorder"),
              ("autobuild", "Autobuild", "AutoBuilder"), ("camera", "Camera", "Camera"),
              ("travel", "Travel", "Warp")]
+# The game's ability wheel (PLAN.md A1): hold L and point the right stick at the slot.
+# shortcut: forum order (clockwise from the top: Ascend, Camera, Ultrahand, Autobuild, Fuse,
+# Amiibo, Recall, Map), UNVERIFIED on 1.2.1; replace after the user's look (Next steps 10).
+WHEEL = {"ascend": (0, 1), "camera": (0.71, 0.71), "ultrahand": (1, 0),
+         "autobuild": (0.71, -0.71), "fuse": (0, -1), "recall": (-1, 0)}
+WHEEL_FRAMES = 20  # shortcut: hold time UNVERIFIED (research: 15-30 ticks), tune after the look
 
 # The game's UI textures by role [PLAN.md R2, R5 "Asset list"]: extra image keys (src, fill,
 # slice, tint), drawn over the role's widget fallback. Every entry is UNVERIFIED until the T8a
@@ -433,34 +439,49 @@ def ability_parts(a, icon, label, name, scale):
                       {**text, "color": DIM, **locked}], locked
 
 
-def ability_bar(actions):
-    """Bottom: the seven abilities, owned at full colour, others dimmed; taps are refused."""
+def ability_tap(k, a):
+    """Ability k's tap: its wheel button, or the refused totk.ability.select k (the medallion)."""
+    return f"wheel_{a}" if a in WHEEL else f"ability_select_{k}"
+
+
+def ability_bar(derived, actions):
+    """Bottom: the seven abilities, owned at full colour, others dimmed. A tap on one of the six
+    wheel abilities holds L and its stick direction, only while it is owned and the game is not
+    loading (the runtime refuses it otherwise); the Travel Medallion's tap is refused."""
     widgets = panel([0, 940, 1240, 108], "bar_bg")
     for k, (a, name, _) in enumerate(ABILITIES):
         x = 18 + 172 * k
-        actions[f"ability_select_{k}"] = {"kind": "module", "action": "totk.ability.select",
+        if a in WHEEL:
+            actions[ability_tap(k, a)] = {"kind": "button",
+                                          "button": "L+RStick({},{})".format(*WHEEL[a]),
+                                          "frames": WHEEL_FRAMES, "enabled_bind": f"ui.wheel.{a}"}
+            derived.append({"name": f"ui.wheel.{a}",
+                            "expr": f"totk.ability.{a}.owned && !totk.loading"})
+        else:
+            actions[ability_tap(k, a)] = {"kind": "module", "action": "totk.ability.select",
                                           "argument": k}
         icon = [x + 54, 946, 64, 64]
         widgets.append({"type": "rect", "rect": icon, "bg": CLEAR, "color": EDGE,
-                        "on_tap": f"ability_select_{k}"})
+                        "on_tap": ability_tap(k, a)})
         widgets += ability_parts(a, icon, [x + 86, 1014, 0, 22], name, 4)[0]
     return widgets
 
 
 def home_page(derived, actions):
     return (inventory_side(derived, actions) + status_column(derived, actions) +
-            equipment(derived, actions) + ability_bar(actions))
+            equipment(derived, actions) + ability_bar(derived, actions))
 
 
 def abilities_page(derived):
     """Seven tiles (row 1: Ultrahand, Fuse, Ascend, Recall; row 2: Autobuild, Camera, Travel
-    Medallion): icon and name owned or locked, "Locked" under a locked one; a tap is the refused
-    totk.ability.select (the home bar's actions). Then the battery strip."""
+    Medallion): icon and name owned or locked, "Locked" under a locked one; a tap is the home
+    bar's action (the wheel button, or the refused totk.ability.select). "Wheel locked" while
+    totk.loading is 1. Then the battery strip."""
     valid = {"need_bind": "totk.ability.valid"}
     widgets = []
     for k, (a, name, _) in enumerate(ABILITIES):
         x, y = (16 + 306 * k, 92) if k < 4 else (169 + 306 * (k - 4), 508)
-        widgets += panel([x, y, 290, 400], "tile", on_tap=f"ability_select_{k}", **valid)
+        widgets += panel([x, y, 290, 400], "tile", on_tap=ability_tap(k, a), **valid)
         icon = [x + 65, y + 40, 160, 160]
         widgets.append({"type": "rect", "rect": icon, "bg": CLEAR, "color": EDGE, **valid})
         parts, locked = ability_parts(a, icon, [x + 145, y + 228, 0, 34], name, 6)
@@ -470,6 +491,8 @@ def abilities_page(derived):
     widgets += [
         {"type": "label", "rect": [620, 480, 0, 40], "text": "No save data yet",
          "text_scale": 5, "align": "center", "color": DIM, "need_bind": "!totk.ability.valid"},
+        {"type": "label", "rect": [620, 900, 0, 22], "text": "Wheel locked: game loading or not "
+         "readable", "text_scale": 4, "align": "center", "color": DIM, "need_bind": "totk.loading"},
         *panel([16, 924, 1208, 72]),
         *textured("battery", [32, 940, 40, 40], []),
         {"type": "label", "rect": [88, 934, 200, 20], "text": "Battery", "text_scale": 4,

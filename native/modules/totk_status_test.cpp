@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <functional>
 #include <limits>
+#include <string_view>
 
 namespace {
 
@@ -16,6 +17,7 @@ using totk::test::Host;
 using totk::test::Live;
 using totk::test::PutChain;
 using totk::test::PutLive;
+using totk::test::PutLoading;
 constexpr auto kMax = std::numeric_limits<std::uint64_t>::max();
 
 totk::Status Read(Host& h, const totk::Offsets& o = kOffsets121) {
@@ -40,6 +42,14 @@ void WrapRupees(Host& h, const totk::Offsets& o) {
     const std::uint64_t old = h.Get<std::uint64_t>(slot);
     h.Put<std::uint64_t>(slot, kMax - 7);
     h.Put<std::uint64_t>(kMax - 7 + o.rupees.hop[1], h.Get<std::uint64_t>(old + o.rupees.hop[1]));
+}
+
+// ReadLoading on `h`, asserting the unknown cause it names ("" for none).
+int Gate(Host& h, std::string_view cause = "", const totk::Offsets& o = kOffsets121) {
+    char why[32] = "";
+    const int r = totk::ReadLoading(h.api, h.api.main_base, o, why);
+    assert(why == cause);
+    return r;
 }
 
 } // namespace
@@ -343,6 +353,66 @@ int main() {
     // Layer: below -100 Depths, above 1000 Sky, else Surface (each side of both thresholds).
     assert(totk::Layer(-100.01f) == 2 && totk::Layer(-100.f) == 0 && totk::Layer(1000.f) == 0 &&
            totk::Layer(1000.01f) == 1 && totk::Layer(-1500.f) == 2 && totk::Layer(3500.f) == 1);
+
+    // The loading gate (§A1): 0 on the full layout, 1 only with flag 0x02, -1 with its cause.
+    {
+        Host h;
+        const std::uint64_t flags = PutLoading(h);
+        assert(Gate(h) == 0 && h.read_calls > 0 && h.write_calls == 0);
+        h.Put<std::uint8_t>(flags, 0x02);
+        assert(Gate(h) == 1);
+        h.Put<std::uint8_t>(flags, 0x04); // another bit
+        assert(Gate(h) == 0);
+        PutLoading(h, 0, 16);
+        assert(Gate(h) == 0);
+        PutLoading(h, 0, 0);
+        assert(Gate(h, "count 0") == -1);
+        PutLoading(h, 0, 17);
+        assert(Gate(h, "count 17") == -1);
+    }
+    // Each unknown cause on a fresh layout: a null file pointer, another manager in the holder,
+    // then an unmapped hop (one byte gone from each chain's slots and values).
+    using Change = std::function<void(Host&, std::uint64_t mgr, std::uint64_t holder)>;
+    const auto& o = kOffsets121;
+    const std::pair<const char*, Change> unknown[] = {
+        {"file walk", [&](Host& h, auto mgr, auto) {
+             h.Put<std::uint64_t>(mgr + o.gmd_loading.hop[1], 0);
+         }},
+        {"managers differ", [&](Host& h, auto mgr, auto holder) { h.Put(holder, mgr + 8); }},
+        {"managers differ", [&](Host& h, auto, auto) { h.memory.clear(); }}, // both walks fail
+        {"managers differ", [&](Host& h, auto, auto) {
+             h.memory.erase(Host::kMainBase + o.gmd_mgr.hop[0]);
+         }},
+        {"managers differ", [&](Host& h, auto, auto) {
+             h.memory.erase(Host::kMainBase + o.gmd_holder.hop[0] + 7);
+         }},
+        {"managers differ", [&](Host& h, auto, auto holder) { h.memory.erase(holder + 7); }},
+        {"count unreadable", [&](Host& h, auto mgr, auto) {
+             h.memory.erase(mgr + o.gmd_count.hop[1] + 3);
+         }},
+        {"file walk", [&](Host& h, auto mgr, auto) {
+             h.memory.erase(mgr + o.gmd_loading.hop[1] + 7);
+         }},
+        {"file walk", [&](Host& h, auto, auto) { h.memory.erase(PutLoading(h)); }}, // the flags
+    };
+    for (const auto& [cause, change] : unknown) {
+        Host h;
+        PutLoading(h);
+        change(h, h.Get<std::uint64_t>(Host::kMainBase + o.gmd_mgr.hop[0]),
+               h.Get<std::uint64_t>(Host::kMainBase + o.gmd_holder.hop[0]));
+        assert(Gate(h, cause) == -1 && h.write_calls == 0);
+    }
+    { // Offsets{} (1.2.0) and any one empty chain: unknown, no cause, no host call.
+        Host h;
+        PutLoading(h);
+        assert(Gate(h, "", totk::Offsets{}) == -1 && h.MemoryCalls() == 0);
+        for (auto field : {&totk::Offsets::gmd_mgr, &totk::Offsets::gmd_holder,
+                           &totk::Offsets::gmd_count, &totk::Offsets::gmd_loading}) {
+            totk::Offsets o = kOffsets121;
+            o.*field = {};
+            assert(Gate(h, "", o) == -1 && h.MemoryCalls() == 0);
+        }
+    }
 
     std::puts("totk_status_test: ok");
     return 0;

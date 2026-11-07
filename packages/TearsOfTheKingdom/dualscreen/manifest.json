@@ -1660,7 +1660,7 @@
      ],
      "bg": "#00000000",
      "color": "#FF3E4A36",
-     "on_tap": "ability_select_0"
+     "on_tap": "wheel_ultrahand"
     },
     {
      "type": "image",
@@ -1727,7 +1727,7 @@
      ],
      "bg": "#00000000",
      "color": "#FF3E4A36",
-     "on_tap": "ability_select_1"
+     "on_tap": "wheel_fuse"
     },
     {
      "type": "image",
@@ -1794,7 +1794,7 @@
      ],
      "bg": "#00000000",
      "color": "#FF3E4A36",
-     "on_tap": "ability_select_2"
+     "on_tap": "wheel_ascend"
     },
     {
      "type": "image",
@@ -1861,7 +1861,7 @@
      ],
      "bg": "#00000000",
      "color": "#FF3E4A36",
-     "on_tap": "ability_select_3"
+     "on_tap": "wheel_recall"
     },
     {
      "type": "image",
@@ -1928,7 +1928,7 @@
      ],
      "bg": "#00000000",
      "color": "#FF3E4A36",
-     "on_tap": "ability_select_4"
+     "on_tap": "wheel_autobuild"
     },
     {
      "type": "image",
@@ -1995,7 +1995,7 @@
      ],
      "bg": "#00000000",
      "color": "#FF3E4A36",
-     "on_tap": "ability_select_5"
+     "on_tap": "wheel_camera"
     },
     {
      "type": "image",
@@ -2320,7 +2320,7 @@
      ],
      "bg": "#E6121815",
      "color": "#FF3E4A36",
-     "on_tap": "ability_select_0",
+     "on_tap": "wheel_ultrahand",
      "need_bind": "totk.ability.valid"
     },
     {
@@ -2416,7 +2416,7 @@
      ],
      "bg": "#E6121815",
      "color": "#FF3E4A36",
-     "on_tap": "ability_select_1",
+     "on_tap": "wheel_fuse",
      "need_bind": "totk.ability.valid"
     },
     {
@@ -2512,7 +2512,7 @@
      ],
      "bg": "#E6121815",
      "color": "#FF3E4A36",
-     "on_tap": "ability_select_2",
+     "on_tap": "wheel_ascend",
      "need_bind": "totk.ability.valid"
     },
     {
@@ -2608,7 +2608,7 @@
      ],
      "bg": "#E6121815",
      "color": "#FF3E4A36",
-     "on_tap": "ability_select_3",
+     "on_tap": "wheel_recall",
      "need_bind": "totk.ability.valid"
     },
     {
@@ -2704,7 +2704,7 @@
      ],
      "bg": "#E6121815",
      "color": "#FF3E4A36",
-     "on_tap": "ability_select_4",
+     "on_tap": "wheel_autobuild",
      "need_bind": "totk.ability.valid"
     },
     {
@@ -2800,7 +2800,7 @@
      ],
      "bg": "#E6121815",
      "color": "#FF3E4A36",
-     "on_tap": "ability_select_5",
+     "on_tap": "wheel_camera",
      "need_bind": "totk.ability.valid"
     },
     {
@@ -2995,6 +2995,20 @@
      "align": "center",
      "color": "#FF8F907F",
      "need_bind": "!totk.ability.valid"
+    },
+    {
+     "type": "label",
+     "rect": [
+      620,
+      900,
+      0,
+      22
+     ],
+     "text": "Wheel locked: game loading or not readable",
+     "text_scale": 4,
+     "align": "center",
+     "color": "#FF8F907F",
+     "need_bind": "totk.loading"
     },
     {
      "type": "rect",
@@ -4838,35 +4852,41 @@
    "action": "totk.gear.swap",
    "argument": 2
   },
-  "ability_select_0": {
-   "kind": "module",
-   "action": "totk.ability.select",
-   "argument": 0
+  "wheel_ultrahand": {
+   "kind": "button",
+   "button": "L+RStick(1,0)",
+   "frames": 20,
+   "enabled_bind": "ui.wheel.ultrahand"
   },
-  "ability_select_1": {
-   "kind": "module",
-   "action": "totk.ability.select",
-   "argument": 1
+  "wheel_fuse": {
+   "kind": "button",
+   "button": "L+RStick(0,-1)",
+   "frames": 20,
+   "enabled_bind": "ui.wheel.fuse"
   },
-  "ability_select_2": {
-   "kind": "module",
-   "action": "totk.ability.select",
-   "argument": 2
+  "wheel_ascend": {
+   "kind": "button",
+   "button": "L+RStick(0,1)",
+   "frames": 20,
+   "enabled_bind": "ui.wheel.ascend"
   },
-  "ability_select_3": {
-   "kind": "module",
-   "action": "totk.ability.select",
-   "argument": 3
+  "wheel_recall": {
+   "kind": "button",
+   "button": "L+RStick(-1,0)",
+   "frames": 20,
+   "enabled_bind": "ui.wheel.recall"
   },
-  "ability_select_4": {
-   "kind": "module",
-   "action": "totk.ability.select",
-   "argument": 4
+  "wheel_autobuild": {
+   "kind": "button",
+   "button": "L+RStick(0.71,-0.71)",
+   "frames": 20,
+   "enabled_bind": "ui.wheel.autobuild"
   },
-  "ability_select_5": {
-   "kind": "module",
-   "action": "totk.ability.select",
-   "argument": 5
+  "wheel_camera": {
+   "kind": "button",
+   "button": "L+RStick(0.71,0.71)",
+   "frames": 20,
+   "enabled_bind": "ui.wheel.camera"
   },
   "ability_select_6": {
    "kind": "module",
@@ -5035,6 +5055,30 @@
   {
    "name": "ui.gear.shield.has_value",
    "expr": "totk.gear.shield.life * 0 + 1"
+  },
+  {
+   "name": "ui.wheel.ultrahand",
+   "expr": "totk.ability.ultrahand.owned && !totk.loading"
+  },
+  {
+   "name": "ui.wheel.fuse",
+   "expr": "totk.ability.fuse.owned && !totk.loading"
+  },
+  {
+   "name": "ui.wheel.ascend",
+   "expr": "totk.ability.ascend.owned && !totk.loading"
+  },
+  {
+   "name": "ui.wheel.recall",
+   "expr": "totk.ability.recall.owned && !totk.loading"
+  },
+  {
+   "name": "ui.wheel.autobuild",
+   "expr": "totk.ability.autobuild.owned && !totk.loading"
+  },
+  {
+   "name": "ui.wheel.camera",
+   "expr": "totk.ability.camera.owned && !totk.loading"
   },
   {
    "name": "ui.map.layer1",

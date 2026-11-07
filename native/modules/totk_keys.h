@@ -54,6 +54,7 @@ inline constexpr char kMapSource[] = "totk.map.source";
 inline constexpr char kMapX[] = "totk.map.x";
 inline constexpr char kMapY[] = "totk.map.y";
 inline constexpr char kNamesValid[] = "totk.names.valid";
+inline constexpr char kLoading[] = "totk.loading";
 
 inline constexpr const char* kFixed[] = {
     kReady,          kUiPage,         kInvTab,           kInvSel,          kMapLayer,
@@ -62,7 +63,8 @@ inline constexpr const char* kFixed[] = {
     kAbilityValid,   kAbilitySource,  kInvValid,         kInvSource,       kInvCount,
     kInvSelIcon,     kInvSelName,     kInvSelKind,       kInvSelValue,     kInvSelFuseName,
     kInvSelEffect,   kInvSelHearts,   kInvSelEquipped,   kInvSelCaption,   kMapValid,
-    kMapSource,      kMapX,           kMapY,             kNamesValid,      kStatusBattery};
+    kMapSource,      kMapX,           kMapY,             kNamesValid,      kStatusBattery,
+    kLoading};
 
 // ---- key families -------------------------------------------------------------------------------
 enum GearField { kPresent, kId, kName, kIcon, kLife, kCount, kFuse, kFuseName, kFuseIcon, kEffect,
