@@ -1,4 +1,4 @@
-From e1a5e009b793e4009f7ce9accc0f6acab57f37aa Mon Sep 17 00:00:00 2001
+From e03ddceee4649d7513a95447d32539e8451cd4b2 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Sat, 7 Nov 2026 17:56:52 +0000
 Subject: [PATCH] yuzu_cmd: run eden-cli with Eden Qt's config for the game
@@ -60,10 +60,10 @@ Claude-Session: https://claude.ai/code/session_01XgyuSR8o8AbzxuWHYqLwsv
 ---
  .upstream/duo-touched.tsv      |  6 ++-
  src/yuzu_cmd/dsmod_harness.cpp |  8 +++
- src/yuzu_cmd/sdl_config.cpp    | 91 +++++++++++++++++++++++++++++++++-
- src/yuzu_cmd/sdl_config.h      | 16 +++++-
- src/yuzu_cmd/yuzu.cpp          | 63 ++++++++++++++++++++---
- 5 files changed, 172 insertions(+), 12 deletions(-)
+ src/yuzu_cmd/sdl_config.cpp    | 89 +++++++++++++++++++++++++++++++++-
+ src/yuzu_cmd/sdl_config.h      | 17 ++++++-
+ src/yuzu_cmd/yuzu.cpp          | 63 +++++++++++++++++++++---
+ 5 files changed, 171 insertions(+), 12 deletions(-)
 
 diff --git a/.upstream/duo-touched.tsv b/.upstream/duo-touched.tsv
 index 303de36d..fa52b1be 100644
@@ -131,7 +131,7 @@ index 59611024..9a683f5e 100644
                  break;
              case 'f':
 diff --git a/src/yuzu_cmd/sdl_config.cpp b/src/yuzu_cmd/sdl_config.cpp
-index b06a5a69..47c2a089 100644
+index b06a5a69..9d1d26a3 100644
 --- a/src/yuzu_cmd/sdl_config.cpp
 +++ b/src/yuzu_cmd/sdl_config.cpp
 @@ -8,6 +8,10 @@
@@ -141,11 +141,11 @@ index b06a5a69..47c2a089 100644
 +#include <cwctype>
 +
 +#include "common/fs/file.h"
-+#include "common/fs/path_util.h"
++#include "common/fs/fs_util.h"
  #include "common/logging.h"
  #include "input_common/main.h"
  #include "sdl_config.h"
-@@ -55,8 +59,72 @@ SdlConfig::SdlConfig(const std::optional<std::string> config_path) {
+@@ -55,8 +59,70 @@ SdlConfig::SdlConfig(const std::optional<std::string> config_path) {
      SaveSdlValues();
  }
  
@@ -182,7 +182,9 @@ index b06a5a69..47c2a089 100644
 +namespace {
 +// Absolute, "..", slashes and symlinks resolved; case-folded on Windows, where names are not
 +// case-sensitive. shortcut: ASCII folding only (towlower in the C locale), use
-+// CompareStringOrdinal if a non-ASCII case variant of the config dir ever matters.
++// CompareStringOrdinal if a non-ASCII case variant of an Eden Qt file name ever matters.
++// shortcut: a hard link to an Eden Qt file under another name is not detected, compare file ids
++// (GetFileInformationByHandle) if a -c hard link ever matters.
 +std::optional<std::filesystem::path> Resolved(const std::filesystem::path& path) {
 +    std::error_code ec;
 +    const auto absolute = std::filesystem::absolute(path, ec);
@@ -204,14 +206,10 @@ index b06a5a69..47c2a089 100644
 +}
 +} // namespace
 +
++// By name, not by eden-cli's config dir: in portable mode Eden Qt's files live elsewhere.
 +bool SdlConfig::IsEdenQtFile(const std::string& path) {
-+    const auto dir = Resolved(Common::FS::GetEdenPath(Common::FS::EdenPath::ConfigDir));
 +    const auto file = Resolved(Common::FS::ToU8String(path));
-+    if (!dir || !file) {
-+        return true;
-+    }
-+    const auto relative = file->lexically_relative(*dir);
-+    return relative == "qt-config.ini" || (!relative.empty() && *relative.begin() == "custom");
++    return !file || file->filename() == "qt-config.ini" || file->parent_path().filename() == "custom";
 +}
 +
 +SdlConfig::~SdlConfig() {
@@ -219,7 +217,7 @@ index b06a5a69..47c2a089 100644
          SdlConfig::SaveAllValues();
      }
  }
-@@ -170,6 +238,27 @@ void SdlConfig::ReadDebugControlValues() {
+@@ -170,6 +236,27 @@ void SdlConfig::ReadDebugControlValues() {
      }
  }
  
@@ -248,7 +246,7 @@ index b06a5a69..47c2a089 100644
      const std::string default_param = InputCommon::GenerateAnalogParamFromKeys(
          0, 0, default_ringcon_analogs[0], default_ringcon_analogs[1], 0, 0.05f);
 diff --git a/src/yuzu_cmd/sdl_config.h b/src/yuzu_cmd/sdl_config.h
-index 1fd1c692..f723ce26 100644
+index 1fd1c692..9888bffc 100644
 --- a/src/yuzu_cmd/sdl_config.h
 +++ b/src/yuzu_cmd/sdl_config.h
 @@ -3,6 +3,8 @@
@@ -260,7 +258,7 @@ index 1fd1c692..f723ce26 100644
  #include "frontend_common/config.h"
  
  class SdlConfig final : public Config {
-@@ -13,13 +15,22 @@ public:
+@@ -13,13 +15,23 @@ public:
      void ReloadAllValues() override;
      void SaveAllValues() override;
  
@@ -269,8 +267,9 @@ index 1fd1c692..f723ce26 100644
 +    // untouched, when the file is absent, empty or unreadable.
 +    static bool ReadQtConfig(const std::filesystem::path& path, ConfigType config_type);
 +
-+    // Duo: true when path (a -c argument, UTF-8, as Config opens it) is <config dir>/qt-config.ini
-+    // or under <config dir>/custom/, or does not resolve. eden-cli writes its -c file back.
++    // Duo: true when path (a -c argument, UTF-8, as Config opens it) resolves to a file named
++    // qt-config.ini or one in a dir named custom, in any dir, or does not resolve. eden-cli writes
++    // its -c file back.
 +    static bool IsEdenQtFile(const std::string& path);
 +
  protected:
@@ -284,7 +283,7 @@ index 1fd1c692..f723ce26 100644
      void ReadShortcutValues() override {}
      void ReadUIValues() override {}
      void ReadUIGamelistValues() override {}
-@@ -40,6 +51,9 @@ protected:
+@@ -40,6 +52,9 @@ protected:
  
      std::vector<Settings::BasicSetting*>& FindRelevantList(Settings::Category category) override;
  

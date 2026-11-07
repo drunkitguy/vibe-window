@@ -684,14 +684,17 @@ User request: eden-cli runs the game with the settings tuned in Eden Qt. Facts [
 - `-c <file>` hands the path to `Config::Initialize`, which writes the file at once and again at
   the end of start-up with the launch params in it [S1 `src/yuzu_cmd/dsmod_harness.cpp:846-847,
   970,974`, `config.cpp:55-61`, `src/core/launch_params.cpp:172-179`], so 0013 refuses a `-c`
-  that resolves (absolute, `..`, symlinks; case-folded on Windows) to `qt-config.ini` or under
-  `custom/` in the config dir, or does not resolve: one error line, exit 1.
+  that resolves (absolute, `..`, symlinks; case-folded on Windows) to a file named
+  `qt-config.ini` or one in a dir named `custom`, in any dir (portable mode moves eden-cli's config
+  dir to `user\config` but not Eden Qt's [S1 `src/common/fs/path_util.cpp:114-118`]), or does not
+  resolve: one error line, exit 1. A hard link under another name is not caught.
 What 0013 does when `<config dir>\qt-config.ini` exists and no `-c` is given (else nothing changes;
 `-c <file>` runs on that file alone, as its help line says, unless it names an Eden Qt file):
 save eden-cli's own config, read `qt-config.ini` (all shared sections, player maps, debug pad,
 ring controller, external content dirs; its `DisabledAddOns` replace eden-cli's), read
-`custom/<id>.ini` if present, then apply the launch params, so `-n`, `-s`, `-u` and the input
-profile beat both Qt files (Eden Qt parses the same flags [S1 `src/yuzu/main_window.cpp:527`]
+`custom/<id>.ini` if present, then apply the launch params, so `-n`, `-s` and `-u` beat both Qt files
+(`-p` only sets the profile name [S1 `src/core/launch_params.cpp:165-167`]; eden-cli loads no input
+profile file, so the controls are Eden Qt's) (Eden Qt parses the same flags [S1 `src/yuzu/main_window.cpp:527`]
 but applies only `-g`, `-f` and the applet launches;
 `ApplyLaunchParams` [S1 `src/core/launch_params.cpp:155-181`] is eden-cli's only, its one caller is
 `yuzu_cmd/yuzu.cpp`), then `Initialize` and the renderer pick. A file without `[Controls]` (Eden Qt

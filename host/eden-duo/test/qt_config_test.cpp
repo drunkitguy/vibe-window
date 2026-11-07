@@ -170,15 +170,17 @@ int main() {
     assert(Tree(qt_dir) == tree);
     assert(g_saves == 0);
 
-    // -c may not name Eden Qt's files, however spelled; eden-cli's own and other files are fine.
+    // -c may not name Eden Qt's files, however spelled and wherever they are (portable mode moves
+    // eden-cli's config dir, not Eden Qt's); eden-cli's own and other files are fine.
     const fs::path config_dir = Common::FS::GetEdenPath(Common::FS::EdenPath::ConfigDir);
     const auto utf8 = [](const fs::path& path) { return Common::FS::PathToUTF8String(path); };
     assert(SdlConfig::IsEdenQtFile(utf8(config_dir / "qt-config.ini")));
     assert(SdlConfig::IsEdenQtFile(utf8(config_dir / "custom" / "0100F2C0115B6000.ini")));
     assert(SdlConfig::IsEdenQtFile(utf8(config_dir / "input" / ".." / "qt-config.ini")));
-    assert(SdlConfig::IsEdenQtFile(utf8(config_dir) + "/custom/x/y.ini"));
+    assert(SdlConfig::IsEdenQtFile(utf8(qt_global)));
+    assert(SdlConfig::IsEdenQtFile(utf8(qt_game)));
     assert(!SdlConfig::IsEdenQtFile(utf8(config_dir / "sdl2-config.ini")));
-    assert(!SdlConfig::IsEdenQtFile(utf8(qt_global)));
+    assert(!SdlConfig::IsEdenQtFile(utf8(qt_dir / "sdl2-config.ini")));
     assert(!SdlConfig::IsEdenQtFile("sdl2-config.ini"));
 #ifdef _WIN32
     std::string upper = utf8(config_dir / "qt-config.ini");
