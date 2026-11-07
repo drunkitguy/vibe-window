@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Live status reader: hearts, stamina, rupees and battery through the Offsets chains
-// (docs/PLAN.md §T3a), Link's position (§T3b) and the GameData loading gate (§A1). Fails closed: an empty chain reads nothing;
-// an unmapped or misaligned slot, a null or low pointer, an overflowing address, an actor not
-// named "Player", a torn read or an implausible value gives an invalid Status or Position.
+// (docs/PLAN.md §T3a), Link's position (§T3b) and the GameData loading gate (§A1). Fails closed:
+// an empty chain reads nothing; an unmapped or misaligned slot, a null or low pointer, an
+// overflowing address, an actor not named "Player", a torn read or an implausible value gives an
+// invalid Status or Position.
 // Reads only through ReadGuest<Reject>; never writes.
 #pragma once
 
 #include <array>
 #include <cstdint>
-#include <cstdio>
 #include <cstring>
 #include <limits>
 
@@ -145,33 +145,34 @@ inline Position ReadPosition(const EdenDsmodHostApi& h, const Offsets& o) {
     return p;
 }
 
+// Why the loading gate reads unknown; the module logs each kind once per session.
+enum class Unknown : std::uint8_t { none, managers_differ, count_unreadable, count, file_walk };
+inline constexpr const char* kUnknownText[] = {"", "managers differ", "count unreadable", "count",
+                                               "file walk"};
+
 // The GameData loading gate [S7 botw-abilities/src/champions/GameData.cpp:64-73]: 0 when the
 // holder's manager is the GameDataMgr, its file count n is 1-16, the file walk succeeds and the
 // flags' 0x02 bit is clear; 1 when that bit is set; -1 (unknown) on anything else, with `why`
-// naming the cause. A manager or holder walk that fails counts as "managers differ". Any empty
-// chain gives -1 with no host call and leaves `why` as it was (no chain to report).
+// naming the cause (and `n` the count for Unknown::count). A manager or holder walk that fails
+// counts as "managers differ". Any empty chain gives -1 with no host call and leaves `why` none.
 inline int ReadLoading(const EdenDsmodHostApi& h, std::uint64_t base, const Offsets& o,
-                       char (&why)[32]) {
+                       Unknown& why, std::uint32_t& n) {
+    why = Unknown::none;
     if (!o.gmd_mgr.n || !o.gmd_holder.n || !o.gmd_count.n || !o.gmd_loading.n)
         return -1;
     const std::uint64_t mgr = detail::Walk(h, base, o.gmd_mgr);
-    if (!mgr || mgr != detail::Walk(h, base, o.gmd_holder)) {
-        std::snprintf(why, sizeof why, "managers differ");
+    if (!mgr || mgr != detail::Walk(h, base, o.gmd_holder))
+        why = Unknown::managers_differ;
+    else if (!detail::ReadWord(h, base, o.gmd_count, n))
+        why = Unknown::count_unreadable;
+    else if (n < 1 || n > 16)
+        why = Unknown::count;
+    if (why != Unknown::none)
         return -1;
-    }
-    std::uint32_t n = 0;
-    if (!detail::ReadWord(h, base, o.gmd_count, n)) {
-        std::snprintf(why, sizeof why, "count unreadable");
-        return -1;
-    }
-    if (n < 1 || n > 16) {
-        std::snprintf(why, sizeof why, "count %u", unsigned(n));
-        return -1;
-    }
     const std::uint64_t file = detail::Walk(h, base, o.gmd_loading);
     std::uint8_t flags = 0;
     if (!file || !detail::Read(h, file, flags)) {
-        std::snprintf(why, sizeof why, "file walk");
+        why = Unknown::file_walk;
         return -1;
     }
     return flags & 0x02 ? 1 : 0;

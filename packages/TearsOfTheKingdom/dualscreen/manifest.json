@@ -2999,14 +2999,14 @@
     {
      "type": "label",
      "rect": [
-      620,
-      900,
+      1220,
+      1052,
       0,
-      22
+      24
      ],
      "text": "Wheel locked: game loading or not readable",
      "text_scale": 4,
-     "align": "center",
+     "align": "right",
      "color": "#FF8F907F",
      "need_bind": "totk.loading"
     },

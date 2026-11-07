@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Named pointer chains for the live status (docs/PLAN.md §L2, §T3a) and the loading gate (§A1).
-// Offsets{} (1.2.0 and any
-// other build) is all empty: every chain UNKNOWN, so ReadStatus reads nothing. kOffsets121 holds
-// the 1.2.1 leads, each UNVERIFIED until T8c checks it with the console's `chain` command.
+// Offsets{} (1.2.0 and any other build) is all empty: every chain UNKNOWN, so ReadStatus reads
+// nothing. kOffsets121 holds the 1.2.1 leads, each UNVERIFIED until T8c checks it with the
+// console's `chain` command.
 // Walk rule (totk_status.h): address = base + hop[0]; then for each next hop, address = u64 at
 // address + hop. The actor-relative tails are the §L2 chains with their {0x46AF308, 0x480} head
 // cut off, so `chain 46AF308 0x480 <tail>` still checks each one.

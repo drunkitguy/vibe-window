@@ -638,7 +638,7 @@ class GenManifestTest(unittest.TestCase):
         """The dim "Wheel locked" line shows only while totk.loading is 1 (the module publishes 1
         for an unknown gate too)."""
         line = self.one(self.page("abilities"), text="Wheel locked: game loading or not readable",
-                        rect=[620, 900, 0, 22], color=gen_manifest.DIM)
+                        rect=[1220, 1052, 0, 24], color=gen_manifest.DIM)
         for loading, shown in ((None, False), (0, False), (1, True)):
             snap = {"totk.ready": 1, **({} if loading is None else {"totk.loading": loading})}
             self.assertEqual(self.visible(line, snap), shown, loading)

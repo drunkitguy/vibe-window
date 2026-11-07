@@ -2,8 +2,36 @@
 // The module's totk.loading (docs/PLAN.md §A1) over a fake 1.2.1 gate (totk_test_host.h
 // PutLoading): the settle count and the log lines. Compiled in from the module source like
 // totk_module_test, which sits at CA9's 64 KiB file cap.
+#if defined(__GNUC__) && !defined(__clang__)
+// The replaced operator new/delete below pair malloc with free; GCC cannot see that.
+#pragma GCC diagnostic ignored "-Wmismatched-new-delete"
+#endif
 #include "0100F2C0115B6000.cpp"
 #include "totk_test_host.h"
+
+#include <cstdlib>
+
+// CA10 for a readable gate: allocations on this (the sampling) thread, as in totk_module_test.
+namespace {
+thread_local long t_news = 0;
+} // namespace
+void* operator new(std::size_t n) {
+    if (void* p = std::malloc(n ? n : 1)) {
+        ++t_news;
+        return p;
+    }
+    throw std::bad_alloc();
+}
+void* operator new(std::size_t n, const std::nothrow_t&) noexcept { // create's instance
+    ++t_news;
+    return std::malloc(n ? n : 1);
+}
+void operator delete(void* p) noexcept {
+    std::free(p);
+}
+void operator delete(void* p, std::size_t) noexcept {
+    std::free(p);
+}
 
 namespace {
 
@@ -95,7 +123,7 @@ int main() {
         }
         assert(f.Lines() == lines && at == expect);
     }
-    { // 1000 samples alternating unknown causes: only the first cause's line.
+    { // 1000 samples alternating unknown causes: one line per cause kind.
         Fixture f;
         for (int n = 0; n < 1000; ++n) {
             const bool differ = n % 2 == 0;
@@ -103,7 +131,49 @@ int main() {
             f.Count(differ ? 1 : 0);
             assert(f.Sample() == 1);
         }
-        assert(f.Lines() == std::vector<std::string>{"totk loading: unknown (managers differ)"});
+        assert((f.Lines() == std::vector<std::string>{"totk loading: unknown (managers differ)",
+                                                      "totk loading: unknown (count 0)"}));
+    }
+    { // Sampling from boot, before the game makes GameDataMgr: the boot's "managers differ" does
+      // not hide a later wrong count, file hop or unreadable count, and none logs twice.
+        Fixture f;
+        f.h.memory.clear();
+        for (int n = 0; n < 10; ++n)
+            assert(f.Sample() == 1);
+        totk::test::PutLoading(f.h, 0, 17);
+        for (int n = 0; n < 10; ++n)
+            assert(f.Sample() == 1);
+        f.Count(1);
+        f.h.Put<std::uint64_t>(f.mgr + totk::kOffsets121.gmd_loading.hop[1], 0);
+        for (int n = 0; n < 10; ++n)
+            assert(f.Sample() == 1);
+        f.h.memory.erase(f.mgr + totk::kOffsets121.gmd_count.hop[1]);
+        for (int n = 0; n < 10; ++n)
+            assert(f.Sample() == 1);
+        totk::test::PutLoading(f.h, 0, 20);
+        assert(f.Sample() == 1);
+        assert((f.Lines() == std::vector<std::string>{"totk loading: unknown (managers differ)",
+                                                      "totk loading: unknown (count 17)",
+                                                      "totk loading: unknown (file walk)",
+                                                      "totk loading: unknown (count unreadable)"}));
+    }
+    { // CA10 on a readable gate: no allocation in 1000 samples settled at 0, nor in 1000 at 1
+      // after the change line.
+        Fixture f;
+        for (int n = 0; n < kLoadSettle; ++n)
+            f.Sample();
+        assert(f.Sample() == 0);
+        long before = t_news;
+        for (int n = 0; n < 1000; ++n)
+            f.m->sample(f.instance, &f.h.api);
+        assert(t_news == before && f.h.ints.at("totk.loading") == 0);
+        f.h.Put<std::uint8_t>(f.flags, 0x02);
+        assert(f.Sample() == 1 && f.Lines() == (std::vector<std::string>{kOn, kOff}));
+        before = t_news;
+        for (int n = 0; n < 1000; ++n)
+            f.m->sample(f.instance, &f.h.api);
+        assert(t_news == before && f.h.ints.at("totk.loading") == 1);
+        assert(f.Lines().size() == 2);
     }
     { // 1.2.0 with the gate in memory: 1, no memory call, no line.
         Fixture f{false};

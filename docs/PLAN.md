@@ -2123,7 +2123,9 @@ libraries carry a checked hash [S2 `tools/build_dualscreen_package.py:227-236`; 
   delete those six actions). Tile 6 (Travel Medallion, `totk.ability.travel.owned`) keeps
   `ability_select_6`.
 - Abilities page: one dim line "Wheel locked: game loading or not readable" at
-  `[620, 900, 0, 22]`, `need_bind totk.loading` (shown while `totk.loading` is 1, which includes
+  `[1220, 1052, 0, 24]` right-aligned (the footer right of the source line, where nothing else
+  is drawn; amended after A1 round 1: `[620, 900, 0, 22]` crossed the row-2 tile borders),
+  `need_bind totk.loading` (shown while `totk.loading` is 1, which includes
   an unknown gate: 1.2.0 or a wrong chain).
 - `check_manifest.py`: `button` is allowed only for the names in `WHEEL` and only with the gate,
   expr and chord form of CA7(b); every other rule unchanged.
@@ -2145,8 +2147,11 @@ libraries carry a checked hash [S2 `tools/build_dualscreen_package.py:227-236`; 
   A2's write. When the gate cannot be read the module cannot tell a boot, title or load screen
   from play, so the safe side is to close the permit. The cost: on 1.2.0, or if a chain is wrong,
   the wheel taps refuse; the log says why. One log line per change of the published value
-  (`totk loading: 1 -> 0`), and once per session the first unknown cause (`totk loading:
-  unknown (managers differ | count n | file walk)`); never per frame.
+  (`totk loading: 1 -> 0`), and once per session each unknown cause kind (`totk loading:
+  unknown (managers differ | count unreadable | count n | file walk)`, at most 4 lines; amended
+  after A1 round 1: the boot's `managers differ`, logged before the game makes GameDataMgr, must
+  not hide a later wrong count or file hop); never per frame. `ReadLoading` reports the cause
+  as an enum plus `n`, so an unknown frame formats nothing.
 - `totk.ability.select` keeps refusing every argument (the manifest sends only 6). Its log line
   becomes `totk: totk.ability.select disabled: the Travel Medallion is placed in the + menu and
   used from the game's map; the companion's medallion move (Map page) waits for T8c`.
@@ -2182,7 +2187,11 @@ libraries carry a checked hash [S2 `tools/build_dualscreen_package.py:227-236`; 
   runs of 100 (gate 0, then 1, alternating) log exactly the `totk loading:` lines of the
   published changes, exactly 10 (5 `1 -> 0`, each at its run's 60th sample, and 5 `0 -> 1`; the
   first published 1 logs nothing); 1000 samples alternating unknown causes (holder != mgr, then n = 0) log
-  one `totk loading: unknown (managers differ)` line and no other unknown line.
+  exactly one `totk loading: unknown (managers differ)` and one `totk loading: unknown (count 0)`
+  line; sampling from boot (no gate laid out), then n = 17, a null file pointer, an unreadable
+  count and n = 20 logs one line per kind in that order (`count 20` logs nothing); CA10 on a
+  readable gate: zero allocations in 1000 samples settled at 0 and in 1000 at 1 after the change
+  line (`totk_loading_test`).
 - `test_check_manifest.py`: the generated manifest passes; each of these fails: a seventh `button`
   action, a `wheel_` action without `enabled_bind`, a gate expr other than the CA7(b) form, a
   chord that is not `L+RStick(x,y)`.

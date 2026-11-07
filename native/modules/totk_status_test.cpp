@@ -44,11 +44,14 @@ void WrapRupees(Host& h, const totk::Offsets& o) {
     h.Put<std::uint64_t>(kMax - 7 + o.rupees.hop[1], h.Get<std::uint64_t>(old + o.rupees.hop[1]));
 }
 
-// ReadLoading on `h`, asserting the unknown cause it names ("" for none).
-int Gate(Host& h, std::string_view cause = "", const totk::Offsets& o = kOffsets121) {
-    char why[32] = "";
-    const int r = totk::ReadLoading(h.api, h.api.main_base, o, why);
-    assert(why == cause);
+// ReadLoading on `h`, asserting the unknown cause it names ("" for none) and, for "count", n.
+int Gate(Host& h, std::string_view cause = "", const totk::Offsets& o = kOffsets121,
+         std::uint32_t count = 0) {
+    totk::Unknown why;
+    std::uint32_t n = 0;
+    const int r = totk::ReadLoading(h.api, h.api.main_base, o, why, n);
+    assert(totk::kUnknownText[unsigned(why)] == cause);
+    assert(why != totk::Unknown::count || n == count);
     return r;
 }
 
@@ -366,9 +369,9 @@ int main() {
         PutLoading(h, 0, 16);
         assert(Gate(h) == 0);
         PutLoading(h, 0, 0);
-        assert(Gate(h, "count 0") == -1);
+        assert(Gate(h, "count", kOffsets121, 0) == -1);
         PutLoading(h, 0, 17);
-        assert(Gate(h, "count 17") == -1);
+        assert(Gate(h, "count", kOffsets121, 17) == -1);
     }
     // Each unknown cause on a fresh layout: a null file pointer, another manager in the holder,
     // then an unmapped hop (one byte gone from each chain's slots and values).

@@ -491,8 +491,10 @@ def abilities_page(derived):
     widgets += [
         {"type": "label", "rect": [620, 480, 0, 40], "text": "No save data yet",
          "text_scale": 5, "align": "center", "color": DIM, "need_bind": "!totk.ability.valid"},
-        {"type": "label", "rect": [620, 900, 0, 22], "text": "Wheel locked: game loading or not "
-         "readable", "text_scale": 4, "align": "center", "color": DIM, "need_bind": "totk.loading"},
+        # In the footer right of the source line: nothing else is drawn there.
+        {"type": "label", "rect": [1220, 1052, 0, 24], "text": "Wheel locked: game loading or "
+         "not readable", "text_scale": 4, "align": "right", "color": DIM,
+         "need_bind": "totk.loading"},
         *panel([16, 924, 1208, 72]),
         *textured("battery", [32, 940, 40, 40], []),
         {"type": "label", "rect": [88, 934, 200, 20], "text": "Battery", "text_scale": 4,
