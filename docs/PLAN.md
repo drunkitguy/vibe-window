@@ -377,6 +377,7 @@ Doable in this Linux container now (no game, no Windows, no Thor):
 | H1a | Eden Duo: native modules on Windows (loader, harness compile fix, tests), as patches | - | done: `host/eden-duo/0001-0003` + `host/eden-duo-companions/0001`; loader Catch2 tests pass standalone; full eden-duo build blocked (proxy 403 on CPM fmt download), real-Windows checks in H1c; critic SATISFIED round 3 |
 | T1 | TotK package skeleton: build gate, fail-closed reader, tests; Linux `.so` and Windows DLL; `.dsmod.zip` | H1a (builder patch) | done: `2c482b6` (+ plan `911aed8`); gcc/clang/MinGW builds and ctest pass (MinGW under wine), single export, package + wine probe pass; critic SATISFIED round 3 |
 | H1b | eden-cli composite layout: `--window-rect`, `--aux-rect`, borderless, aux not focusable | H1a | done: `afe952e`, patch 0004 adds `--window-rect`/`--aux-rect` (borderless, hidden until placed), non-focusable aux, 640x360 main floor, 32767 bound, ledger rows; parser tests pass natively and under wine; SDL and harness code compile-checked only in H1c; critic SATISFIED round 3 |
+| H1d | eden-cli uses the Eden Qt config: `qt-config.ini`, then the game's `custom/<program id>.ini` (use_global), read-only (§H1d) | H1b | done: patch `0013`; `qt_config_test` passes natively and under wine (own config, global, per-game, no write or create, absent and empty files); `yuzu.cpp` syntax-checked only, run on the PC in H1c |
 | T2a | Retarget the skeleton to 1.2.0 (`kTargetBuild`, data file name, tests) | T1 | done: `d175a18`; 1.2.0 build id and data file; critic SATISFIED (with T3s) |
 | T3a'.1 | Eden Duo patch 0009 (zstd + `ZsDic` in the runtime's romfs reader, §T3a' A) + icon keys as `romfs:` paths (§T3a' B2) | T4 | done: 64a646e, critic SATISFIED round 1, Windows CI run 41379288233 green (198 cases); real romfs untested (T8a) |
 | T3a'.2 | Item names from MSBT (B1) + the one-shot texture dump for T8a (B5) | T3a'.1 | done: 2bdcb00 (patches 0010-0011), critic SATISFIED round 4, Eden CI 41396378620 + companion CI green; real romfs untested (T8a) |
@@ -626,6 +627,41 @@ Send logs and screenshots back.
 Decision point: if a failed load leaves its `module-*` staging dir behind on real Windows,
 desktop eden-cli needs a `SweepStale` call at startup (today only Android calls
 `SetModuleCacheDirectory`). That becomes its own follow-up packet; H1c does not fix it.
+
+### H1d (coder): eden-cli uses the Eden Qt config
+
+User request: eden-cli runs the game with the settings tuned in Eden Qt. Facts [S1, unchanged by
+0001-0012]:
+- eden-cli read only `sdl2-config.ini` [S1 `src/yuzu_cmd/yuzu.cpp:202`,
+  `src/frontend_common/config.cpp:55-61`]; Eden Qt keeps `qt-config.ini` in the same config dir
+  [S1 `src/qt_common/config/qt_config.h:15`, `config.cpp:30-40`] and boots a game with
+  `custom/<program id as %016X>.ini` read as a per-game config, then `ReloadInputDevices` and
+  `ApplySettings` [S1 `src/yuzu/main_window.cpp:1913-1924`].
+- Constructing any `Config` writes its file back: `Reload` is `ReadValues` + `SaveValues` (ends in
+  `WriteToIni`) [S1 `config.cpp:883-887,515-535`], `SetUpIni` creates a missing file [S1
+  `config.cpp:104-113`], and the SDL destructor saves at the end of start-up [S1
+  `src/yuzu_cmd/sdl_config.cpp:58-62`], resetting the players to global [S1 `sdl_config.cpp:194`,
+  `config.cpp:552`]. So patch 0013 reads with a private `SdlConfig` constructor that gets the
+  parsed ini and no file path, so nothing can save to the Qt files.
+- Per-game values apply by `use_global` in `ReadSettingGeneric` [S1 `config.cpp:909-932`]; Eden
+  Qt's player reader is the same code as SdlConfig's [S1 `qt_config.cpp:84-135`,
+  `sdl_config.cpp:96-148`]; the one Qt-only reader the core uses is `external_content_dirs` [S1
+  `qt_config.cpp:234-240`, `src/core/hle/service/filesystem/filesystem.cpp:759-786`].
+- `System::Initialize` reads multicore, memory layout and async GPU [S1 `src/core/core.cpp:121-146`];
+  the loader that reads the program id needs the content provider and factories [S1
+  `src/core/loader/loader.cpp:325-337`, `core.cpp:976-978`]; so 0013 sets those up before
+  `Initialize` (they were after the window [S1 `yuzu.cpp:244-246`]).
+What 0013 does when `<config dir>\qt-config.ini` exists (else nothing changes): save eden-cli's
+own config, read `qt-config.ini` (all shared sections, player maps, debug pad, ring controller,
+external content dirs), apply the launch params (they beat `qt-config.ini`), read
+`custom/<id>.ini` if present (it can beat a launch param, as in Qt), then `Initialize` and the
+renderer pick. One log line: `Duo config: qt-config.ini + custom/0100F2C0115B6000.ini`,
+`Duo config: qt-config.ini` (no per-game file) or `Duo config: eden-cli's own config only (no
+readable qt-config.ini)`. Limits: `qt-config.ini` is looked up in eden-cli's config dir, so a
+portable `C:\duo\user` hides `%APPDATA%\eden\config\qt-config.ini`; Qt keyboard bindings are
+Qt key codes [S1 `qt_config.cpp:12-18`] and do not mean the same keys in eden-cli (controller
+bindings do); program id 0 (homebrew) gets no per-game file. Check on the PC (H1c run): the log
+line names both files, and the game runs with the Qt graphics and controller settings.
 
 ### H2 (host: apollo2-vibe window-host, verify first)
 
@@ -2058,7 +2094,9 @@ to 1.4.3: the user chose 1.2.1.
   when start-up ends, after the command line was applied [S1 `src/yuzu_cmd/yuzu.cpp:202,207`,
   `sdl_config.cpp:58-62`, `frontend_common/config.cpp:515-535,604-613`], so a `--debug` run most
   likely writes `use_gdbstub=true` into the config it used (code reading, `UNVERIFIED` by a run):
-  A3 runs it on a copied config (`-c`, [S1 `dsmod_harness.cpp:846-847`]). Other gotchas are in
+  A3 runs it on a copied config (`-c`, [S1 `dsmod_harness.cpp:846-847`]). With `qt-config.ini`
+  present, patch 0013 saves that config before the command line is applied and never writes
+  `qt-config.ini` (H1d), so `--debug` lands in no file; the copy stays harmless. Other gotchas are in
   [S3 PORTING_A_GAME §2.3].
 - **Map markers from published keys**: `dynamic_markers` (`count`, `x`/`y`/`kind` with `{i}`,
   `hide_when_kind`, `dim_bind`, `icon_src_bind`) [S1 `mod_manifest.cpp:1183-1262`]; a slot draws
@@ -2402,7 +2440,12 @@ count as runs, as a game launch does. A crashed session's lines are in `eden_log
 eden-cli runs again, in `eden_log.txt.old.txt` after that one run, and gone after the second
 (Restore, "After a crash").
 `flush_line` is needed only to read the log while eden-cli runs (Next steps 10 and 11, A3
-sessions). The user turns it on once: quit eden-cli, `notepad
+sessions). The user turns it on once. With `$d\config\qt-config.ini` present (Eden Qt used on
+this PC), eden-cli takes `[Miscellaneous]` from it (H1d), so set it in Eden Qt: Emulation >
+Configure > Debug > "Flush log output on each line" [S1 `src/yuzu/configuration/configure_debug.ui:728-731`,
+`configure_debug.cpp:116`], OK, close Eden Qt; then
+`Select-String -Path "$d\config\qt-config.ini" -Pattern '^flush_line'` must print
+`flush_line\default=false` and `flush_line=true`. Without `qt-config.ini`: quit eden-cli, `notepad
 "$d\config\sdl2-config.ini"` (eden-cli's config, written at its first start [S1
 `frontend_common/config.cpp:55-61,883-887`, `src/common/fs/path_util.cpp:114-121`]), and under
 `[Miscellaneous]` set both lines `flush_line\default=false` and `flush_line=true` (with
@@ -2704,7 +2747,9 @@ queue their writes go through (step 1 says why not the arrays), then call them f
    .\eden-cli.exe -c C:\duo\re-config.ini --aux-window --debug 6543 -g <TotK 1.2.1>
    ```
    The copied config is the isolated profile: the `--debug` run writes `use_gdbstub=true` into
-   the config it used (G1), so it lands in `re-config.ini`, never in your normal config. The saves
+   the config it used (G1), so it lands in `re-config.ini`, never in your normal config (with
+   `qt-config.ini` present it lands nowhere, and the game still runs with the Eden Qt settings
+   for TotK, H1d). The saves
    are shared, hence the backup (a game frozen at a stop and then killed can lose unsaved
    progress). The guest waits at boot for the debugger (fact, G1): right after the launch, in a
    second window, `py -3 C:\duo\rsp_watch.py 127.0.0.1:6543 go` (it waits up to 60 s for the stub;
