@@ -378,7 +378,7 @@ Doable in this Linux container now (no game, no Windows, no Thor):
 | H1a | Eden Duo: native modules on Windows (loader, harness compile fix, tests), as patches | - | done: `host/eden-duo/0001-0003` + `host/eden-duo-companions/0001`; loader Catch2 tests pass standalone; full eden-duo build blocked (proxy 403 on CPM fmt download), real-Windows checks in H1c; critic SATISFIED round 3 |
 | T1 | TotK package skeleton: build gate, fail-closed reader, tests; Linux `.so` and Windows DLL; `.dsmod.zip` | H1a (builder patch) | done: `2c482b6` (+ plan `911aed8`); gcc/clang/MinGW builds and ctest pass (MinGW under wine), single export, package + wine probe pass; critic SATISFIED round 3 |
 | H1b | eden-cli composite layout: `--window-rect`, `--aux-rect`, borderless, aux not focusable | H1a | done: `afe952e`, patch 0004 adds `--window-rect`/`--aux-rect` (borderless, hidden until placed), non-focusable aux, 640x360 main floor, 32767 bound, ledger rows; parser tests pass natively and under wine; SDL and harness code compile-checked only in H1c; critic SATISFIED round 3 |
-| H1d | eden-cli uses the Eden Qt config: `qt-config.ini`, then the game's `custom/<program id>.ini` (use_global), read-only (§H1d) | H1b | done: patch `0013`; `qt_config_test` passes natively and under wine (own config, global, per-game, no write or create, absent, empty and garbage files, `[UI]` external content dirs, `DisabledAddOns` replaced, `[UI]` screenshot dir); `yuzu.cpp` and `dsmod_harness.cpp` syntax-checked only (g++ and MinGW), run on the PC in H1c check 6; the Qt read sits in the Duo hook `DSModHarness::ApplyEdenQtConfig`, `.upstream/DIVERGENCES.md` row 30; `-c` keeps eden-cli's own config and refuses Eden Qt's files (tested); accounts re-read from Eden Qt's NAND as Eden Qt does (Qt config only); data dirs follow Eden Qt (§H1d) |
+| H1d | eden-cli uses the Eden Qt config: `qt-config.ini`, then the game's `custom/<program id>.ini` (use_global), read-only (§H1d) | H1b | done: patch `0013`; `qt_config_test` passes natively and under wine (own config, global, per-game, no write or create, absent, empty and garbage files, `[UI]` external content dirs, `DisabledAddOns` replaced, `[UI]` screenshot dir); `yuzu.cpp` and `dsmod_harness.cpp` syntax-checked only (g++ and MinGW), run on the PC in H1c check 6; the Qt read sits in the Duo hook `DSModHarness::ApplyEdenQtConfig`, `.upstream/DIVERGENCES.md` row 30; `-c` keeps eden-cli's own config and refuses Eden Qt's files (tested); accounts re-read from Eden Qt's NAND as Eden Qt does (Qt config only); data dirs follow Eden Qt: factories rebuilt after the Qt reads, as Eden Qt does (§H1d) |
 | T2a | Retarget the skeleton to 1.2.0 (`kTargetBuild`, data file name, tests) | T1 | done: `d175a18`; 1.2.0 build id and data file; critic SATISFIED (with T3s) |
 | T3a'.1 | Eden Duo patch 0009 (zstd + `ZsDic` in the runtime's romfs reader, §T3a' A) + icon keys as `romfs:` paths (§T3a' B2) | T4 | done: 64a646e, critic SATISFIED round 1, Windows CI run 41379288233 green (198 cases); real romfs untested (T8a) |
 | T3a'.2 | Item names from MSBT (B1) + the one-shot texture dump for T8a (B5) | T3a'.1 | done: 2bdcb00 (patches 0010-0011), critic SATISFIED round 4, Eden CI 41396378620 + companion CI green; real romfs untested (T8a) |
@@ -687,6 +687,13 @@ User request: eden-cli runs the game with the settings tuned in Eden Qt. Facts [
   the loader that reads the program id needs the content provider and factories [S1
   `src/core/loader/loader.cpp:325-337`, `core.cpp:976-978`]; so 0013 sets those up before
   `Initialize` (they were after the window [S1 `yuzu.cpp:244-246`]).
+- `CreateFactories` reads the NAND, SD, load (mods) and dump dirs and `external_content_dirs` once,
+  when it builds the BIS, SDMC and external content factories [S1
+  `src/core/hle/service/filesystem/filesystem.cpp:721-786`], and the later call in `Services`
+  passes `overwrite=false` [S1 `src/core/hle/service/services.cpp:79`], so factories built from
+  `sdl2-config.ini`'s dirs would stay. Eden Qt rebuilds them after a config change [S1
+  `src/qt_common/util/content.cpp:149,247`]; 0013 does the same after the Qt reads [0013
+  `src/yuzu_cmd/dsmod_harness.cpp:1059`], so the factories are built twice with the Qt config.
 - The account list is read once, in the `ProfileManager` constructor, from the default NAND with
   the default `current_user` [S1 `src/core/core.cpp:117,549`,
   `src/core/hle/service/acc/profile_manager.cpp:53-72`], before any config is read. Eden Qt
@@ -709,14 +716,14 @@ and accounts are eden-cli's own as before and only the filesystem setup runs ear
 `Initialize`; `-c <file>` runs on that file alone, as its help line says, unless it names an Eden
 Qt file): save eden-cli's own config, read `qt-config.ini` (all shared sections, player maps, debug
 pad, ring controller, external content dirs, screenshot dir; its `DisabledAddOns` replace
-eden-cli's), read `custom/<id>.ini` if present, re-read the accounts, then apply the launch
+eden-cli's), read `custom/<id>.ini` if present, rebuild the factories, re-read the accounts, then apply the launch
 params, so `-n`, `-s` and `-u` beat both Qt files (`-i` (`--input-profile`) only sets the profile
 name [S1 `src/core/launch_params.cpp:165-167`, `src/yuzu_cmd/dsmod_harness.cpp:859-861`]; eden-cli
 loads no input profile file, so the controls are Eden Qt's) (Eden Qt parses the same flags [S1 `src/yuzu/main_window.cpp:527`]
 but applies only `-g`, `-f` and the applet launches;
 `ApplyLaunchParams` [S1 `src/core/launch_params.cpp:155-181`] is eden-cli's only, its one caller is
 `yuzu_cmd/yuzu.cpp`, in 0013 `ApplyEdenQtConfig`), then `Initialize` and the renderer pick. The
-reads, the log line, the account re-read, `-u` and `ApplyLaunchParams` sit in one Duo hook,
+reads, the log line, the factory rebuild, the account re-read, `-u` and `ApplyLaunchParams` sit in one Duo hook,
 `DSModHarness::ApplyEdenQtConfig` in `dsmod_harness.cpp`; `yuzu.cpp` keeps the three moved
 filesystem lines and the call, and `.upstream/DIVERGENCES.md` row 30 tells a sync to keep both. A file without `[Controls]` (Eden Qt
 always writes it, global and per-game [S1 `config.cpp:515-535,546-550`]) counts as unreadable. One
@@ -731,12 +738,12 @@ dump and save directories: `ReadDataStorageValues` calls `SetEdenPath` for each 
 `qt-config.ini` is looked up only in eden-cli's config dir, so a portable `C:\duo\user` hides
 `%APPDATA%\eden\config\qt-config.ini` and a portable Eden Qt (`user` next to `eden.exe`) keeps its
 `qt-config.ini` where eden-cli never looks [S1 `src/common/fs/path_util.cpp:114-118`] (H1c check 6
-gives the junction fix); Qt keyboard bindings do not carry over: Eden Qt saves a binding equal to
-its own Qt key default with `\default=true` [S1 `qt_config.cpp:12-18`], the reader then returns
-eden-cli's SDL scancode default [S1 `src/frontend_common/config.cpp:810-812`,
-`src/yuzu_cmd/sdl_config.cpp:19-23,114-121`], and a custom Qt key code reaches the keyboard engine
-as an SDL scancode [S1 `src/yuzu_cmd/emu_window/emu_window_sdl3.cpp:136-138`], so Qt-default keys
-become eden-cli's SDL defaults and custom keys map to other keys (controller bindings match);
+gives the junction fix); Qt keyboard bindings do not carry over: Eden Qt saves every keyboard
+binding, default or custom, as `\default=false` with its Qt::Key code, because
+`WriteStringSetting` appends the default to itself, so the stored default never equals the value
+[S1 `qt_config.cpp:380-381`, `src/frontend_common/config.cpp:847-853`]; eden-cli reads that code
+as an SDL scancode [S1 `src/yuzu_cmd/emu_window/emu_window_sdl3.cpp:136-138`], so every Qt
+keyboard binding lands on another key (controller bindings match);
 updates and DLC that Eden Qt registers from its game dirs are not loaded: its game-list worker scans `[UI] Paths\gamedirs` and, with
 `ext_content_from_game_dirs` on (default true [S1 `src/common/settings.h:863`]), adds every NSP/XCI
 there to the FrontendManual content provider [S1 `src/qt_common/game_list/worker.cpp:376-379`,
