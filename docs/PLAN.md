@@ -378,7 +378,7 @@ Doable in this Linux container now (no game, no Windows, no Thor):
 | H1a | Eden Duo: native modules on Windows (loader, harness compile fix, tests), as patches | - | done: `host/eden-duo/0001-0003` + `host/eden-duo-companions/0001`; loader Catch2 tests pass standalone; full eden-duo build blocked (proxy 403 on CPM fmt download), real-Windows checks in H1c; critic SATISFIED round 3 |
 | T1 | TotK package skeleton: build gate, fail-closed reader, tests; Linux `.so` and Windows DLL; `.dsmod.zip` | H1a (builder patch) | done: `2c482b6` (+ plan `911aed8`); gcc/clang/MinGW builds and ctest pass (MinGW under wine), single export, package + wine probe pass; critic SATISFIED round 3 |
 | H1b | eden-cli composite layout: `--window-rect`, `--aux-rect`, borderless, aux not focusable | H1a | done: `afe952e`, patch 0004 adds `--window-rect`/`--aux-rect` (borderless, hidden until placed), non-focusable aux, 640x360 main floor, 32767 bound, ledger rows; parser tests pass natively and under wine; SDL and harness code compile-checked only in H1c; critic SATISFIED round 3 |
-| H1d | eden-cli uses the Eden Qt config: `qt-config.ini`, then the game's `custom/<program id>.ini` (use_global), read-only (§H1d) | H1b | done: patch `0013`; `qt_config_test` passes natively and under wine (own config, global, per-game, no write or create, absent, empty and garbage files, `[UI]` external content dirs, `DisabledAddOns` replaced); `yuzu.cpp` syntax-checked only, run on the PC in H1c check 6; `-c` keeps eden-cli's own config and refuses Eden Qt's files (tested); accounts re-read from the configured NAND as Eden Qt does; data dirs follow Eden Qt (§H1d) |
+| H1d | eden-cli uses the Eden Qt config: `qt-config.ini`, then the game's `custom/<program id>.ini` (use_global), read-only (§H1d) | H1b | done: patch `0013`; `qt_config_test` passes natively and under wine (own config, global, per-game, no write or create, absent, empty and garbage files, `[UI]` external content dirs, `DisabledAddOns` replaced, `[UI]` screenshot dir); `yuzu.cpp` syntax-checked only, run on the PC in H1c check 6; `-c` keeps eden-cli's own config and refuses Eden Qt's files (tested); accounts re-read from Eden Qt's NAND as Eden Qt does (Qt config only); data dirs follow Eden Qt (§H1d) |
 | T2a | Retarget the skeleton to 1.2.0 (`kTargetBuild`, data file name, tests) | T1 | done: `d175a18`; 1.2.0 build id and data file; critic SATISFIED (with T3s) |
 | T3a'.1 | Eden Duo patch 0009 (zstd + `ZsDic` in the runtime's romfs reader, §T3a' A) + icon keys as `romfs:` paths (§T3a' B2) | T4 | done: 64a646e, critic SATISFIED round 1, Windows CI run 41379288233 green (198 cases); real romfs untested (T8a) |
 | T3a'.2 | Item names from MSBT (B1) + the one-shot texture dump for T8a (B5) | T3a'.1 | done: 2bdcb00 (patches 0010-0011), critic SATISFIED round 4, Eden CI 41396378620 + companion CI green; real romfs untested (T8a) |
@@ -660,12 +660,15 @@ User request: eden-cli runs the game with the settings tuned in Eden Qt. Facts [
   parsed ini and no file path, so nothing can save to the Qt files.
 - Per-game values apply by `use_global` in `ReadSettingGeneric` [S1 `config.cpp:909-932`]; Eden
   Qt's player reader is the same code as SdlConfig's [S1 `qt_config.cpp:84-135`,
-  `sdl_config.cpp:96-148`]; the one Qt-only reader the core uses is `external_content_dirs` [S1
-  `qt_config.cpp:234-240`, `src/core/hle/service/filesystem/filesystem.cpp:759-786`]. Qt reads
-  and writes it inside the UI group (`ReadUIValues` opens `UI`, then calls `ReadPathValues`; the
-  save side mirrors it) [S1 `qt_config.cpp:274-283,497-510`] and the section is the outermost
-  group [S1 `config.cpp:974-980`], so the array sits in `[UI]` as
-  `Paths\external_content_dirs\N\path`.
+  `sdl_config.cpp:96-148`]; the two Qt-only values the core uses are `external_content_dirs` [S1
+  `qt_config.cpp:234-240`, `src/core/hle/service/filesystem/filesystem.cpp:759-786`] and the
+  screenshot dir, which `Config::ReadScreenshotValues` sets with `SetEdenPath(ScreenshotsDir,
+  ...)` [S1 `config.cpp:377-385`] and the capture service lists and saves into [S1
+  `src/core/hle/service/caps/caps_manager.cpp:290,425`]. Qt reads and writes both inside the UI
+  group (`ReadUIValues` opens `UI`, then calls `ReadPathValues` and `ReadScreenshotValues`; the
+  save side mirrors it) [S1 `qt_config.cpp:274-284,497-511`] and the section is the outermost
+  group [S1 `config.cpp:974-980`], so they sit in `[UI]` as `Paths\external_content_dirs\N\path`
+  and `Screenshots\screenshot_path`.
 - `ReadDisabledAddOnValues` only `insert_or_assign`s per title [S1 `config.cpp:325-345`], and
   eden-cli has already loaded `sdl2-config.ini`, so 0013 clears the list before the Qt read.
 - `System::Initialize` reads multicore, memory layout and async GPU [S1 `src/core/core.cpp:121-146`];
@@ -678,9 +681,10 @@ User request: eden-cli runs the game with the settings tuned in Eden Qt. Facts [
   re-reads it after its config load (`FixProfiles` [S1 `src/yuzu/main_window.cpp:456`] calls
   `ResetUserSaveFile` [S1 `src/qt_common/util/content.cpp:297`], which reopens `current_user` [S1
   `profile_manager.cpp:484-499`]); the DSMod save reader asks it for the running account [S1
-  `src/core/mods/mod_module_services.cpp:115`]. So 0013 calls `ResetUserSaveFile` after the config
-  reads, resolves `-u <name>` against it (was before any config [S1 `yuzu.cpp:203`]), and calls it
-  again after the launch params when `-u` is given.
+  `src/core/mods/mod_module_services.cpp:115`]. So with the Qt config 0013 calls
+  `ResetUserSaveFile` after the Qt reads and again after the launch params when `-u` is given;
+  `-u <name>` is resolved after the config reads in every run (was before any config [S1
+  `yuzu.cpp:203`]), against the list the run has.
 - `-c <file>` hands the path to `Config::Initialize`, which writes the file at once and again at
   the end of start-up with the launch params in it [S1 `src/yuzu_cmd/dsmod_harness.cpp:846-847,
   970,974`, `config.cpp:55-61`, `src/core/launch_params.cpp:172-179`], so 0013 refuses a `-c`
@@ -688,13 +692,15 @@ User request: eden-cli runs the game with the settings tuned in Eden Qt. Facts [
   `qt-config.ini` or one in a dir named `custom`, in any dir (portable mode moves eden-cli's config
   dir to `user\config` but not Eden Qt's [S1 `src/common/fs/path_util.cpp:114-118`]), or does not
   resolve: one error line, exit 1. A hard link under another name is not caught.
-What 0013 does when `<config dir>\qt-config.ini` exists and no `-c` is given (else nothing changes;
-`-c <file>` runs on that file alone, as its help line says, unless it names an Eden Qt file):
-save eden-cli's own config, read `qt-config.ini` (all shared sections, player maps, debug pad,
-ring controller, external content dirs; its `DisabledAddOns` replace eden-cli's), read
-`custom/<id>.ini` if present, then apply the launch params, so `-n`, `-s` and `-u` beat both Qt files
-(`-p` only sets the profile name [S1 `src/core/launch_params.cpp:165-167`]; eden-cli loads no input
-profile file, so the controls are Eden Qt's) (Eden Qt parses the same flags [S1 `src/yuzu/main_window.cpp:527`]
+What 0013 does when `<config dir>\qt-config.ini` exists and no `-c` is given (else the settings
+and accounts are eden-cli's own as before and only the filesystem setup runs earlier, before
+`Initialize`; `-c <file>` runs on that file alone, as its help line says, unless it names an Eden
+Qt file): save eden-cli's own config, read `qt-config.ini` (all shared sections, player maps, debug
+pad, ring controller, external content dirs, screenshot dir; its `DisabledAddOns` replace
+eden-cli's), read `custom/<id>.ini` if present, re-read the accounts, then apply the launch
+params, so `-n`, `-s` and `-u` beat both Qt files (`-i` (`--input-profile`) only sets the profile
+name [S1 `src/core/launch_params.cpp:165-167`, `src/yuzu_cmd/dsmod_harness.cpp:859-861`]; eden-cli
+loads no input profile file, so the controls are Eden Qt's) (Eden Qt parses the same flags [S1 `src/yuzu/main_window.cpp:527`]
 but applies only `-g`, `-f` and the applet launches;
 `ApplyLaunchParams` [S1 `src/core/launch_params.cpp:155-181`] is eden-cli's only, its one caller is
 `yuzu_cmd/yuzu.cpp`), then `Initialize` and the renderer pick. A file without `[Controls]` (Eden Qt

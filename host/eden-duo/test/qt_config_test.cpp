@@ -73,7 +73,8 @@ std::set<fs::path> Tree(const fs::path& dir) {
 
 // What Eden Qt writes (WriteSettingGeneric/WritePreparedSetting): "\default=false" before a value
 // it means, "\use_global" in a custom file, quotes around strings with special characters, and
-// the Paths group inside [UI] (QtConfig::SaveUIValues calls SavePathValues).
+// the Paths and Screenshots groups inside [UI] (QtConfig::SaveUIValues calls SavePathValues and
+// SaveScreenshotValues). main() appends the screenshot dir, which must exist.
 const char* const kQtGlobal = "[Core]\n"
                               "use_multi_core\\default=false\n"
                               "use_multi_core=false\n"
@@ -111,7 +112,11 @@ int main() {
     fs::create_directories(qt_dir / "custom");
     const fs::path qt_global = qt_dir / "qt-config.ini";
     const fs::path qt_game = qt_dir / "custom" / "0100F2C0115B6000.ini";
-    Put(qt_global, kQtGlobal);
+    const fs::path shots = root / "shots-é";
+    fs::create_directories(shots);
+    const std::string qt_global_text = std::string(kQtGlobal) + "Screenshots\\screenshot_path=" +
+                                       Common::FS::PathToUTF8String(shots) + "\n";
+    Put(qt_global, qt_global_text);
     Put(qt_game, kQtGame);
     const auto stamp = fs::file_time_type::clock::now() - std::chrono::hours(1);
     fs::last_write_time(qt_global, stamp);
@@ -143,6 +148,7 @@ int main() {
 
     // qt-config.ini replaces every shared value, and its DisabledAddOns list replaces eden-cli's.
     Settings::values.disabled_addons[0x0100000000000001] = {"Update"};
+    assert(Common::FS::GetEdenPath(Common::FS::EdenPath::ScreenshotsDir) != shots);
     assert(SdlConfig::ReadQtConfig(qt_global, Config::ConfigType::GlobalConfig));
     assert(Settings::values.disabled_addons.empty());
     assert(!Settings::values.use_multi_core.GetValue());
@@ -152,6 +158,7 @@ int main() {
     assert(Settings::values.players.GetValue()[0].buttons[0] == "engine:sdl,button:1,port:0");
     assert(Settings::values.external_content_dirs.size() == 1 &&
            Settings::values.external_content_dirs[0] == "/games/updates");
+    assert(Common::FS::GetEdenPath(Common::FS::EdenPath::ScreenshotsDir) == shots);
 
     // custom/<id>.ini: use_global=false values and a named input profile win, the rest stays global.
     assert(SdlConfig::ReadQtConfig(qt_game, Config::ConfigType::PerGameConfig));
@@ -165,7 +172,7 @@ int main() {
     assert(Settings::values.log_flush_line.GetValue());
 
     // Neither read wrote, touched or created anything next to the Qt files, or tried to save.
-    assert(Get(qt_global) == kQtGlobal && Get(qt_game) == kQtGame);
+    assert(Get(qt_global) == qt_global_text && Get(qt_game) == kQtGame);
     assert(fs::last_write_time(qt_global) == global_time && fs::last_write_time(qt_game) == game_time);
     assert(Tree(qt_dir) == tree);
     assert(g_saves == 0);
