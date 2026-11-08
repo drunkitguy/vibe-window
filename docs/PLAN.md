@@ -2703,8 +2703,9 @@ queue their writes go through (step 1 says why not the arrays), then call them f
      session after `totk.loading` first publishes 0, the module logs (host reads only)
      `totk re: IntArray queue control at 0x<mgr+0x160> (capacity C, buffer 0x<b>); hashes
      Pouch.Weapon.EquipIndex 0x.. Pouch.Shield.EquipIndex 0x.. Pouch.Bow.EquipIndex 0x..
-     Pouch.Food.Content.StockNum 0x..` (hashes from the module's Murmur3, `totk_gamedata.h`). A
-     missing line means the gate never opened (§T8c additions). Test: the fake GameDataMgr gives
+     Pouch.Food.Content.StockNum 0x..` (hashes from the module's Murmur3, `totk_gamedata.h`), with
+     `(store unreadable)` in place of the capacity and buffer when either read fails; the address
+     is still logged. A missing line means the gate never opened (§T8c additions). Test: the fake GameDataMgr gives
      the fixture's address, capacity and buffer in one line, once; without the file, with an empty
      one or with `ia_queue` 0, no line and no reads.
    - `tools/totk/rsp_watch.py` (stdlib only), two modes. `rsp_watch.py <host:port> go`: connect
@@ -2756,7 +2757,9 @@ queue their writes go through (step 1 says why not the arrays), then call them f
    row. Then in the second window (`cd C:\duo; $d = "$env:APPDATA\eden"`):
    `Select-String -Path "$d\log\eden_log.txt" -Pattern 'totk re:' | ForEach-Object Line` prints
    the queue address and the four hashes (the address changes every boot; it is the same for
-   every row of one boot). Each row in this order: (1) in game, get to the last button press
+   every row of one boot). If the line says `(store unreadable)`, still run the rows with its
+   address; a row whose script ends with an `error:` line follows the error rule below, and the
+   line goes in `totk-log.txt` as usual. Each row in this order: (1) in game, get to the last button press
    (for the + menu rows: menu open, cursor on the item); (2) in the second window run
    `py -3 C:\duo\rsp_watch.py 127.0.0.1:6543 <addr> 4 <hash> | Tee-Object C:\duo\watch-<row>.txt`
    with that row's hash; (3) do the action; (4) wait until the script ends; if the script prints
