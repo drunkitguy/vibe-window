@@ -792,8 +792,8 @@ void Sample(void* instance, const EdenDsmodHostApi* host) {
             o.I(pub::kInvValid, 0);
             return;
         }
-        // The live inventory and gear (source 2) when the worker has them and the player actor
-        // reads valid (the title screen's GameData may hold empty pouches), else the save's.
+        // The live inventory and gear (source 2) when the worker has them and T3a's live status is
+        // valid (within kLiveGrace; the title screen's GameData may hold empty pouches), else the save's.
         if (!status)
             live.reset(); // in.live_inv still holds it: no free here
         const totk::Snapshot& inv = live ? *live : *snap;

@@ -1957,8 +1957,12 @@ PowerShell, as §T8a: `cd C:\duo; $d = "$env:APPDATA\eden"`. Read-only throughou
    `Copy-Item -Recurse "$d\nand\user\save" C:\duo\save-backup-120` [S1 `src/common/fs/fs_paths.h:24`,
    `src/core/file_sys/savedata_factory.cpp:32,150-152`].
 2. Only after T2b's package is in CI and you said yes to D2b: `.\eden-cli.exe --install <TotK
-   1.2.1 update.nsp>` (your own v393216 file, not 1.4.3; Next steps 5); install the newest `totk-companion` package
-   as §T8a step 1.
+   1.2.1 update.nsp>` (your own v393216 file, not 1.4.3; Next steps 5); then download only
+   the newest `totk-companion` artifact (workflow "TotK companion"; eden-cli stays as it is) and
+   unzip it into `C:\duo` (`0100F2C0115B6000.dsmod.zip` stays zipped), then run
+   `Expand-Archive -Force 0100F2C0115B6000.dsmod.zip "$d\load\0100F2C0115B6000\TotKDuo"` and
+   `Remove-Item -ErrorAction SilentlyContinue "$d\dualscreen\user\0100F2C0115B6000\totk-dump"`
+   (the texture dump stays off: it blocks live reads while it runs).
 3. `$env:EDEN_DSMOD_CMD = "C:\duo\dsmod-cmd.txt"; $env:EDEN_DSMOD_PROFILE = "1"; .\eden-cli.exe
    --aux-window -g <TotK>`. Load a save and stand still on the Surface.
 4. Save these lines as `C:\duo\chains.txt` (name, hearts, max hearts, stamina, max stamina,
@@ -2005,8 +2009,12 @@ Once A1 and A2 are in CI, run §A3 "T8c additions" (Next steps 11) in their own 
 
 ### T8d (user, PC, after T3c is in CI): GameData check and ability scan
 
-1. Live inventory (T3c), PowerShell as §T8c. First download the newest `totk-companion` artifact
-   (the CI build that has T3c) and install it as §T8a step 1:
+1. Live inventory (T3c), PowerShell as §T8c. First download only the newest
+   `totk-companion` artifact (the CI build that has T3c; workflow "TotK companion"; eden-cli stays
+   as it is) and unzip it into `C:\duo` (`0100F2C0115B6000.dsmod.zip` stays zipped), then run
+   `Expand-Archive -Force 0100F2C0115B6000.dsmod.zip "$d\load\0100F2C0115B6000\TotKDuo"` and
+   `Remove-Item -ErrorAction SilentlyContinue "$d\dualscreen\user\0100F2C0115B6000\totk-dump"`
+   (the texture dump stays off: it blocks live reads while it runs):
    (a) then run only T8c step 3's command line (`$env:EDEN_DSMOD_CMD = "C:\duo\dsmod-cmd.txt";
        $env:EDEN_DSMOD_PROFILE = "1"; .\eden-cli.exe --aux-window -g <TotK>`) and do not load a
        save yet; on the title screen wait 5 s, then write down the home page's source line ("Live"
