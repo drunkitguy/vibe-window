@@ -65,7 +65,8 @@ Everything below is blocked on you, in this order. Send logs, `.shot` files and 
    in-game changes against the HUD, then send the log (§T8c).
 8. **T8 (after T4v-T7): first real run.** Install the package on the PC, load a save, and send the
    `.shot` pictures and `DSMod` log lines listed in §T8.
-9. **T8d (after T3c): GameData check and ability scan** (§T8d).
+9. **T8d (after T3c is in CI): GameData check and ability scan.** Install the newest package, then
+   the title-screen and in-game inventory checks and the ability scan (§T8d).
 
 Decision D3 (2026-11-07, user): "Stay 1.2.1, go for all four" (travel, equip, use item, ability
 select). You were told: "abilities via injected ability-wheel input; travel by moving the Travel
@@ -391,7 +392,7 @@ Doable in this Linux container now (no game, no Windows, no Thor):
 | T2b | One package for 1.2.0 (save only) and 1.2.1 (live): two-row build table, both ids in `module.build_ids`, `data.json`, CI | T2a, D2b | done: 9bfe3a7, critic SATISFIED round 1 |
 | T3a | Live status on 1.2.1: chain walker in `ReadStatus`, hearts, stamina, rupees, battery; save fallback | T2b | done: dc01a3d..6ce1927, critic SATISFIED round 4; chains UNVERIFIED until T8c |
 | T3b | Live position and layer: player actor chain with name check, map marker, layer follows Link | T3a | done: c3119bd..63585db, critic SATISFIED round 3; chains UNVERIFIED until T8c |
-| T3c | Live inventory and equipped items from the GameData tables, through the existing save parser; index self-check | T3a, A1 (gate chains, `ReadLoading`), A2 (probe, `int_table`, `kMaxTable`), T8c | coded (critic pending): 681df6a..2469b36; `totk_live.h`, `totk_live_test.cpp`; chains UNVERIFIED until T8c, String64Array layout and indices until T8d |
+| T3c | Live inventory and equipped items from the GameData tables, through the existing save parser; index self-check | T3a, A1 (gate chains, `ReadLoading`), A2 (probe, `int_table`, `kMaxTable`), T8c | coded (critic pending): 681df6a..100c9de; `totk_live.h`, `totk_live_test.cpp`; chains UNVERIFIED until T8c, String64Array layout and indices until T8d |
 | T3d | Current ability, one chain from T8d's scan | T8d | blocked: user |
 | A1 | Ability select through the game's wheel: six `button` actions `L+RStick(x,y)` behind `owned && !totk.loading`; `totk.loading` from the GameData loading gate; Travel Medallion tile refused with a reason (§A1) | T3a (chain walker), D3 | todo |
 | A2 | Travel: (a) read-only destination markers on the Map page from the player's romfs and save; (b) the Travel Medallion trigger, one 4-op expect-checked `write_batch`, build-gated to 1.2.1, refusing until T8c fills its `UNKNOWN` fields; tap-to-restore (§A2) | A1 (`totk.loading`), T3b, D3 | todo |
@@ -2004,8 +2005,9 @@ Once A1 and A2 are in CI, run §A3 "T8c additions" (Next steps 11) in their own 
 
 ### T8d (user, PC, after T3c is in CI): GameData check and ability scan
 
-1. Live inventory (T3c), PowerShell as §T8c:
-   (a) run only T8c step 3's command line (`$env:EDEN_DSMOD_CMD = "C:\duo\dsmod-cmd.txt";
+1. Live inventory (T3c), PowerShell as §T8c. First download the newest `totk-companion` artifact
+   (the CI build that has T3c) and install it as §T8a step 1:
+   (a) then run only T8c step 3's command line (`$env:EDEN_DSMOD_CMD = "C:\duo\dsmod-cmd.txt";
        $env:EDEN_DSMOD_PROFILE = "1"; .\eden-cli.exe --aux-window -g <TotK>`) and do not load a
        save yet; on the title screen wait 5 s, then write down the home page's source line ("Live"
        or "From last save") and the item count of each tab;

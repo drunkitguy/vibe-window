@@ -559,6 +559,16 @@ int main() {
         assert(materials() == 1);
         w.h.Put(head, slot);
         assert(materials() == 2);
+        // Only a status bound fails (max hearts 0): the actor and position stay valid.
+        const std::uint64_t max_hearts = PutChain(w.h, actor, kO.max_hearts);
+        const auto hearts = w.h.Get<std::uint32_t>(max_hearts);
+        w.h.Put<std::uint32_t>(max_hearts, 0);
+        assert(totk::ReadPosition(w.h.api, kO).valid);
+        for (int i = 1; i < kLiveGrace; ++i)
+            assert(materials() == 2);
+        assert(materials() == 1);
+        w.h.Put(max_hearts, hearts);
+        assert(materials() == 2);
     }
     // The live items get the game's names too: names loaded after the live inventory and while
     // the gate reads loading rename it, then the next live read is named.
