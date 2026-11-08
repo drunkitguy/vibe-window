@@ -28,8 +28,9 @@ Everything below is blocked on you, in this order. Send logs, `.shot` files and 
 1. **H1c, eden-cli on Windows.** Fork igawa6/eden-duo at `v1.3.2.2`, then
    `git am host/eden-duo/00*.patch`. Run `tools/windows/load-msvc-env.ps1`, then
    `cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DYUZU_TESTS=ON -DEDEN_DSMOD_BUILD_DEV_TOOLS=ON`
-   and `cmake --build build`. Then run the five checks in §H1c (stage and rect tests,
-   `tests.exe "[dsmod][module]"`, smoke run, rect minimums, `tools/duo/duo-touched-ledger.sh --check`).
+   and `cmake --build build`. Then run the six checks in §H1c (stage and rect tests,
+   `tests.exe "[dsmod][module]"`, smoke run, rect minimums, `tools/duo/duo-touched-ledger.sh --check`,
+   the Eden Qt config line in `eden_log.txt`).
 2. **H2, host.** Install the apollo2-vibe window-host MSI from branch `claude/clever-clarke-k7hhhj`.
    Turn on Windows taskbar auto-hide (Settings > Personalization > Taskbar > Automatically hide).
    Keep `virtual_display_mode = per_client` and `virtual_display_layout = exclusive`. Add the app
@@ -50,7 +51,7 @@ Everything below is blocked on you, in this order. Send logs, `.shot` files and 
    saves and install it in Eden (§T8c steps 1-2). Before T2b's package (CI "TotK companion") is
    built, the companion on 1.2.1 shows only the notice page.
 6. **T8a on 1.2.1 if you said yes in step 5, else 1.2.0 (after T2b and H1c): texture dump.** Use the CI-built eden-cli (it applies
-   `host/eden-duo/0001-0011`) and the CI-built companion package. Install the package, create the
+   all `host/eden-duo/00*.patch`) and the CI-built companion package. Install the package, create the
    `totk-dump` file, start TotK (1.2.1 if you said yes in step 5, else 1.2.0) once, load a save, wait 2 minutes, then quit. The log should
    then contain `totk dump done` (or `failed`), as §T8a explains.
    - Send every log line with `totk`, `DSMod` or `build_id=`. Eden's `Querying NSO patch existence for
@@ -378,6 +379,7 @@ Doable in this Linux container now (no game, no Windows, no Thor):
 | H1a | Eden Duo: native modules on Windows (loader, harness compile fix, tests), as patches | - | done: `host/eden-duo/0001-0003` + `host/eden-duo-companions/0001`; loader Catch2 tests pass standalone; full eden-duo build blocked (proxy 403 on CPM fmt download), real-Windows checks in H1c; critic SATISFIED round 3 |
 | T1 | TotK package skeleton: build gate, fail-closed reader, tests; Linux `.so` and Windows DLL; `.dsmod.zip` | H1a (builder patch) | done: `2c482b6` (+ plan `911aed8`); gcc/clang/MinGW builds and ctest pass (MinGW under wine), single export, package + wine probe pass; critic SATISFIED round 3 |
 | H1b | eden-cli composite layout: `--window-rect`, `--aux-rect`, borderless, aux not focusable | H1a | done: `afe952e`, patch 0004 adds `--window-rect`/`--aux-rect` (borderless, hidden until placed), non-focusable aux, 640x360 main floor, 32767 bound, ledger rows; parser tests pass natively and under wine; SDL and harness code compile-checked only in H1c; critic SATISFIED round 3 |
+| H1d | eden-cli uses the Eden Qt config: `qt-config.ini`, then the game's `custom/<program id>.ini` (use_global), read-only (§H1d) | H1b | done: patch `0013`; `qt_config_test` passes natively and under wine (own config, global, per-game, no write or create, absent, empty and garbage files, `[UI]` external content dirs, `DisabledAddOns` replaced, `[UI]` screenshot dir); `yuzu.cpp` and `dsmod_harness.cpp` syntax-checked only (g++ and MinGW), run on the PC in H1c check 6; the Qt read sits in the Duo hook `DSModHarness::ApplyEdenQtConfig`, `.upstream/DIVERGENCES.md` row 30; `-c` keeps eden-cli's own config and refuses Eden Qt's files (tested); accounts re-read from Eden Qt's NAND as Eden Qt does (Qt config only); data dirs follow Eden Qt: factories rebuilt after the Qt reads, as Eden Qt does (§H1d) |
 | T2a | Retarget the skeleton to 1.2.0 (`kTargetBuild`, data file name, tests) | T1 | done: `d175a18`; 1.2.0 build id and data file; critic SATISFIED (with T3s) |
 | T3a'.1 | Eden Duo patch 0009 (zstd + `ZsDic` in the runtime's romfs reader, §T3a' A) + icon keys as `romfs:` paths (§T3a' B2) | T4 | done: 64a646e, critic SATISFIED round 1, Windows CI run 41379288233 green (198 cases); real romfs untested (T8a) |
 | T3a'.2 | Item names from MSBT (B1) + the one-shot texture dump for T8a (B5) | T3a'.1 | done: 2bdcb00 (patches 0010-0011), critic SATISFIED round 4, Eden CI 41396378620 + companion CI green; real romfs untested (T8a) |
@@ -622,11 +624,141 @@ failed load. On the user's Windows build of the patched fork:
 4. Confirm the call-site minimums: `--window-rect 0,0,639,360` and `0,0,640,359` are refused with
    a message, `0,0,640,360` starts; `--aux-rect 0,0,0,1` is refused, `0,0,1,1` starts.
 5. Run `tools/duo/duo-touched-ledger.sh --check` in the patched tree. Must pass.
+6. Eden Qt config (H1d): close Eden Qt first (a `qt-config.ini` it is saving can be read
+   half-written, §H1d Limits), then start TotK with the H2 command line (`--aux-window --window-rect
+   0,0,1920,1080 --aux-rect 0,1080,1240,1080 -g "<TotK nsp>"`). `eden_log.txt` must hold
+   `Duo config: qt-config.ini + custom/0100F2C0115B6000.ini` (or `Duo config: qt-config.ini` when
+   Eden Qt has no per-game settings for TotK), and the graphics API (Vulkan or OpenGL, as set in
+   Eden Qt's Graphics page) and the controller must match Eden Qt. If it says `Duo config:
+   eden-cli's own config only (no readable qt-config.ini)`, the two keep their data in different
+   dirs: Eden Qt is portable (a `user` folder next to `eden.exe`), or eden-cli is (`C:\duo\user`
+   exists and hides `%APPDATA%\eden`) [S1 `src/common/fs/path_util.cpp:114-118`]. For a portable
+   Eden Qt, with no `C:\duo\user` yet, run `New-Item -ItemType Junction -Path C:\duo\user -Target
+   "<Eden Qt folder>\user"` (no admin needed; both builds keep their own folders and DLLs, and `$d`
+   is then `C:\duo\user`); for a portable eden-cli alone, rename `C:\duo\user`. Rerun check 6.
+   `eden_log.txt` must also hold `ExeFS: Update (<version>) applied successfully` [S1
+   `src/core/file_sys/patch_manager.cpp:326`] with the version Eden Qt shows for TotK in its game
+   list. If the line is missing or the version differs, the update sits in an Eden Qt game folder,
+   which eden-cli does not scan (§H1d Limits): install it to Eden Qt's NAND (File > Install Files
+   to NAND...) and rerun check 6. Then
+   `Select-String -Path "$d\config\qt-config.ini" -Pattern '^(nand|sdmc|load|dump|save)_directory='`
+   (`$d` as §T8a): `nand_directory`, `sdmc_directory`, `load_directory` and `dump_directory` must
+   each show a path under `$d` (`nand`, `sdmc`, `load`, `dump`), and `save_directory` must be
+   empty (saves in the NAND). If a line differs, eden-cli uses that directory (§H1d): every
+   later step's `$d\nand` and `$d\load` mean the directory printed, `$d\nand\user\save` means
+   `<save_directory>\user\save` when `save_directory` is set [S1
+   `src/core/hle/service/filesystem/filesystem.cpp:391`], and the TotK update is installed from
+   Eden Qt (File > Install Files to NAND...), not with `eden-cli --install`, which uses
+   `sdl2-config.ini`'s NAND.
 Send logs and screenshots back.
 
 Decision point: if a failed load leaves its `module-*` staging dir behind on real Windows,
 desktop eden-cli needs a `SweepStale` call at startup (today only Android calls
 `SetModuleCacheDirectory`). That becomes its own follow-up packet; H1c does not fix it.
+
+### H1d (coder): eden-cli uses the Eden Qt config
+
+User request: eden-cli runs the game with the settings tuned in Eden Qt. Facts [S1 with 0001-0012
+applied]:
+- eden-cli read only `sdl2-config.ini` [S1 `src/yuzu_cmd/yuzu.cpp:202`,
+  `src/frontend_common/config.cpp:55-61`]; Eden Qt keeps `qt-config.ini` in the same config dir
+  [S1 `src/qt_common/config/qt_config.h:15`, `config.cpp:30-40`] and boots a game with
+  `custom/<program id as %016X>.ini` read as a per-game config, then `ReloadInputDevices` and
+  `ApplySettings` [S1 `src/yuzu/main_window.cpp:1913-1924`].
+- Constructing any `Config` writes its file back: `Reload` is `ReadValues` + `SaveValues` (ends in
+  `WriteToIni`) [S1 `config.cpp:883-887,515-535`], `SetUpIni` creates a missing file [S1
+  `config.cpp:104-113`], and the SDL destructor saves at the end of start-up [S1
+  `src/yuzu_cmd/sdl_config.cpp:58-62`], resetting the players to global [S1 `sdl_config.cpp:194`,
+  `config.cpp:552`]. So patch 0013 reads with a private `SdlConfig` constructor that gets the
+  parsed ini and no file path, so nothing can save to the Qt files.
+- Per-game values apply by `use_global` in `ReadSettingGeneric` [S1 `config.cpp:909-932`]; Eden
+  Qt's player reader is the same code as SdlConfig's [S1 `qt_config.cpp:84-135`,
+  `sdl_config.cpp:96-148`]; the two Qt-only values the core uses are `external_content_dirs` [S1
+  `qt_config.cpp:234-240`, `src/core/hle/service/filesystem/filesystem.cpp:759-786`] and the
+  screenshot dir, which `Config::ReadScreenshotValues` sets with `SetEdenPath(ScreenshotsDir,
+  ...)` [S1 `config.cpp:377-385`] and the capture service lists and saves into [S1
+  `src/core/hle/service/caps/caps_manager.cpp:290,425`]. Qt reads and writes both inside the UI
+  group (`ReadUIValues` opens `UI`, then calls `ReadPathValues` and `ReadScreenshotValues`; the
+  save side mirrors it) [S1 `qt_config.cpp:274-284,497-511`] and the section is the outermost
+  group [S1 `config.cpp:974-980`], so they sit in `[UI]` as `Paths\external_content_dirs\N\path`
+  and `Screenshots\screenshot_path`.
+- `ReadDisabledAddOnValues` only `insert_or_assign`s per title [S1 `config.cpp:325-345`], and
+  eden-cli has already loaded `sdl2-config.ini`, so 0013 clears the list before the Qt read.
+- `System::Initialize` reads multicore, memory layout and async GPU [S1 `src/core/core.cpp:121-146`];
+  the loader that reads the program id needs the content provider and factories [S1
+  `src/core/loader/loader.cpp:325-337`, `core.cpp:976-978`]; so 0013 sets those up before
+  `Initialize` (they were after the window [S1 `yuzu.cpp:244-246`]).
+- `CreateFactories` reads the NAND, SD, load (mods) and dump dirs and `external_content_dirs` once,
+  when it builds the BIS, SDMC and external content factories [S1
+  `src/core/hle/service/filesystem/filesystem.cpp:721-786`], and the later call in `Services`
+  passes `overwrite=false` [S1 `src/core/hle/service/services.cpp:79`], so factories built from
+  `sdl2-config.ini`'s dirs would stay. Eden Qt builds them once, after reading `qt-config.ini`
+  [S1 `src/yuzu/main_window.cpp:365,446`, `src/qt_common/qt_common.cpp:301-305`]; 0013 does the
+  same after the Qt reads [0013 `src/yuzu_cmd/dsmod_harness.cpp:1059`], so the factories are
+  built twice, the second time from the Qt config.
+- The account list is read once, in the `ProfileManager` constructor, from the default NAND with
+  the default `current_user` [S1 `src/core/core.cpp:117,549`,
+  `src/core/hle/service/acc/profile_manager.cpp:53-72`], before any config is read. Eden Qt
+  re-reads it after its config load (`FixProfiles` [S1 `src/yuzu/main_window.cpp:456`] calls
+  `ResetUserSaveFile` [S1 `src/qt_common/util/content.cpp:297`], which reopens `current_user` [S1
+  `profile_manager.cpp:484-499`]); the DSMod save reader asks it for the running account [S1
+  `src/core/mods/mod_module_services.cpp:115`]. So with the Qt config 0013 calls
+  `ResetUserSaveFile` after the Qt reads and again after the launch params when `-u` is given;
+  `-u <name>` is resolved after the config reads in every run (was before any config [S1
+  `yuzu.cpp:203`]), against the list the run has.
+- `-c <file>` hands the path to `Config::Initialize`, which writes the file at once and again at
+  the end of start-up with the launch params in it [S1 `src/yuzu_cmd/dsmod_harness.cpp:846-847,
+  970,974`, `config.cpp:55-61`, `src/core/launch_params.cpp:172-179`], so 0013 refuses a `-c`
+  that resolves (absolute, `..`, symlinks; case-folded on Windows) to a file named
+  `qt-config.ini` or one in a dir named `custom`, in any dir (portable mode moves eden-cli's config
+  dir to `user\config` but not Eden Qt's [S1 `src/common/fs/path_util.cpp:114-118`]), or does not
+  resolve: one error line, exit 1. A hard link under another name is not caught.
+What 0013 does when `<config dir>\qt-config.ini` exists and no `-c` is given (else the settings
+and accounts are eden-cli's own as before and only the filesystem setup runs earlier, before
+`Initialize`; `-c <file>` runs on that file alone, as its help line says, unless it names an Eden
+Qt file): save eden-cli's own config, read `qt-config.ini` (all shared sections, player maps, debug
+pad, ring controller, external content dirs, screenshot dir; its `DisabledAddOns` replace
+eden-cli's), read `custom/<id>.ini` if present, rebuild the factories, re-read the accounts, then apply the launch
+params, so `-n`, `-s` and `-u` beat both Qt files (`-i` (`--input-profile`) only sets the profile
+name [S1 `src/core/launch_params.cpp:165-167`, `src/yuzu_cmd/dsmod_harness.cpp:859-861`]; eden-cli
+loads no input profile file, so the controls are Eden Qt's) (Eden Qt parses the same flags [S1 `src/yuzu/main_window.cpp:527`]
+but applies only `-g`, `-f` and the applet launches;
+`ApplyLaunchParams` [S1 `src/core/launch_params.cpp:155-181`] is eden-cli's only, its one caller is
+`yuzu_cmd/yuzu.cpp`, in 0013 `ApplyEdenQtConfig`), then `Initialize` and the renderer pick. The
+reads, the log line, the factory rebuild, the account re-read, `-u` and `ApplyLaunchParams` sit in one Duo hook,
+`DSModHarness::ApplyEdenQtConfig` in `dsmod_harness.cpp`; `yuzu.cpp` keeps the three moved
+filesystem lines and the call, and `.upstream/DIVERGENCES.md` row 30 tells a sync to keep both. A file without `[Controls]` (Eden Qt
+always writes it, global and per-game [S1 `config.cpp:515-535,546-550`]) counts as unreadable. One
+log line: `Duo config: qt-config.ini + custom/0100F2C0115B6000.ini`, `Duo config: qt-config.ini`
+(no per-game file), `Duo config: eden-cli's own config only (no readable qt-config.ini)` or `Duo
+config: eden-cli's own config only (-c given)`. The Qt global file also sets the NAND, SD, load,
+dump and save directories: `ReadDataStorageValues` calls `SetEdenPath` for each [S1
+`src/frontend_common/config.cpp:272-296`] and Eden Qt's Filesystem page sets all five [S1
+`src/yuzu/configuration/configure_filesystem.cpp:81-90`], while `--install` reads only
+`sdl2-config.ini` [S1 `src/yuzu_cmd/dsmod_harness.cpp:974`, `InstallPackage` `:234-247`]; H1c check
+6 shows whether they differ from the `$d` defaults. Limits (each a `shortcut:` comment in 0013):
+`qt-config.ini` is looked up only in eden-cli's config dir, so a portable `C:\duo\user` hides
+`%APPDATA%\eden\config\qt-config.ini` and a portable Eden Qt (`user` next to `eden.exe`) keeps its
+`qt-config.ini` where eden-cli never looks [S1 `src/common/fs/path_util.cpp:114-118`] (H1c check 6
+gives the junction fix); Qt keyboard bindings do not carry over: Eden Qt saves every keyboard
+binding, default or custom, as `\default=false` with its Qt::Key code, because
+`WriteStringSetting` appends the default to itself, so the stored default never equals the value
+[S1 `qt_config.cpp:380-381`, `src/frontend_common/config.cpp:847-853`]; eden-cli reads that code
+as an SDL scancode [S1 `src/yuzu_cmd/emu_window/emu_window_sdl3.cpp:136-138`], so every Qt
+keyboard binding lands on another key (controller bindings match);
+updates and DLC that Eden Qt registers from its game dirs are not loaded: its game-list worker scans `[UI] Paths\gamedirs` and, with
+`ext_content_from_game_dirs` on (default true [S1 `src/common/settings.h:863`]), adds every NSP/XCI
+there to the FrontendManual content provider [S1 `src/qt_common/game_list/worker.cpp:376-379`,
+`src/qt_common/qt_common.cpp:303`] (Android likewise [S1
+`src/android/app/src/main/jni/native.cpp:252`]); 0013 reads the setting but eden-cli scans no game
+dir, so an update kept only there runs in Eden Qt and not in eden-cli (another game version and
+build id, so the companion's build gate stays shut; H1c check 6 catches it, the fix is to install
+the update to Eden Qt's NAND); program id 0 (homebrew) gets no per-game file; a `qt-config.ini`
+that Eden Qt is saving at that moment can be read half-written: `WriteToIni` opens it with `wb`
+(truncates) and then writes [S1 `src/frontend_common/config.cpp:64,80-82`], a cut file that still
+holds `[Controls]` passes the check, and the missing sections read as defaults with no log line, so
+close Eden Qt before starting eden-cli. Check on the PC:
+§H1c check 6.
 
 ### H2 (host: apollo2-vibe window-host, verify first)
 
@@ -1528,7 +1660,9 @@ textures and font (T8a/T8).
 
 PowerShell on the Windows PC. Start every PowerShell window with `cd C:\duo` and
 `$d = "$env:APPDATA\eden"`: `$d` is the Eden data dir, or use `C:\duo\user` instead when that
-folder exists (portable) [S1 `src/common/fs/path_util.cpp:115-118`]. The log is
+folder exists (portable) [S1 `src/common/fs/path_util.cpp:115-118`]. With `qt-config.ini` present,
+`$d\nand`, `$d\load` and the save folder are Eden Qt's directories when H1c check 6 printed
+others; read every such path below as the one printed. The log is
 `$d\log\eden_log.txt` [S1 `src/common/logging.cpp:403`, `fs_paths.h:42`]; it is written in 4 KiB
 chunks and completed when eden-cli quits (`flush_line` is off by default) [S1
 `src/common/logging.cpp:276-279`, `src/common/settings.h:927`], so read it after quitting. eden-cli
@@ -1537,10 +1671,11 @@ D2b: run this on **1.2.1** if you said yes in Next steps 5 (after T2b's package;
 `Common.Product` numbers may differ from 1.2.0 (1.2.1 has only `Common.Product.110` [S32]).
 Keys and the TotK 1.2.0 update are set up as for H1c's smoke run: keys in `$d\keys\`, the update
 installed once with `.\eden-cli.exe --install <TotK 1.2.0 update.nsp>` [S1
-`src/yuzu_cmd/dsmod_harness.cpp:232,831`].
+`src/yuzu_cmd/dsmod_harness.cpp:232,831`], or from Eden Qt (File > Install Files to NAND...) when
+H1c check 6 printed a NAND other than `$d\nand`.
 1. From this branch's GitHub Actions runs (signed in to GitHub, which artifact downloads need)
-   download `eden-duo-windows-x64` (workflow "Eden Duo Windows": eden-cli with patches 0001-0011;
-   dev tools are on by default, `EDEN_DSMOD_BUILD_DEV_TOOLS`) and `totk-companion` (workflow "TotK
+   download `eden-duo-windows-x64` (workflow "Eden Duo Windows": eden-cli with all
+   `host/eden-duo/00*.patch`; dev tools are on by default, `EDEN_DSMOD_BUILD_DEV_TOOLS`) and `totk-companion` (workflow "TotK
    companion"). Unzip both into `C:\duo`; `totk-companion.zip` holds `0100F2C0115B6000.dsmod.zip`,
    which stays zipped. Then:
    ```
@@ -1954,10 +2089,12 @@ is coded before T8d.
 PowerShell, as §T8a: `cd C:\duo; $d = "$env:APPDATA\eden"`. Read-only throughout: no cheats, no
 `writeb`.
 1. **Before updating**, back up the saves (the 1.2.0 to 1.2.1 save change is `UNVERIFIED`):
-   `Copy-Item -Recurse "$d\nand\user\save" C:\duo\save-backup-120` [S1 `src/common/fs/fs_paths.h:24`,
+   `Copy-Item -Recurse "$d\nand\user\save" C:\duo\save-backup-120` (copy the save folder from
+   H1c check 6 instead, if it printed another) [S1 `src/common/fs/fs_paths.h:24`,
    `src/core/file_sys/savedata_factory.cpp:32,150-152`].
 2. Only after T2b's package is in CI and you said yes to D2b: `.\eden-cli.exe --install <TotK
-   1.2.1 update.nsp>` (your own v393216 file, not 1.4.3; Next steps 5); then run
+   1.2.1 update.nsp>` (your own v393216 file, not 1.4.3; Next steps 5; from Eden Qt instead when
+   H1c check 6 printed another NAND, as §T8a); then run
    `Remove-Item -ErrorAction SilentlyContinue "$env:USERPROFILE\Downloads\totk-companion*.zip"`
    (otherwise the browser saves the new download as `totk-companion (1).zip` and the next line
    unpacks §T8a's old one), download only the newest `totk-companion` artifact (workflow "TotK
@@ -2122,7 +2259,10 @@ to 1.4.3: the user chose 1.2.1.
   when start-up ends, after the command line was applied [S1 `src/yuzu_cmd/yuzu.cpp:202,207`,
   `sdl_config.cpp:58-62`, `frontend_common/config.cpp:515-535,604-613`], so a `--debug` run most
   likely writes `use_gdbstub=true` into the config it used (code reading, `UNVERIFIED` by a run):
-  A3 runs it on a copied config (`-c`, [S1 `dsmod_harness.cpp:846-847`]). Other gotchas are in
+  without `qt-config.ini`, A3 runs it on a copied config (`-c`, [S1 `dsmod_harness.cpp:846-847`]).
+  With `qt-config.ini` present and no `-c`, patch 0013 saves eden-cli's own config before the
+  command line is applied and never writes `qt-config.ini` (H1d), so `--debug` lands in no file
+  and A3 needs no copy; `-c` would turn the Qt read off (H1d). Other gotchas are in
   [S3 PORTING_A_GAME §2.3].
 - **Map markers from published keys**: `dynamic_markers` (`count`, `x`/`y`/`kind` with `{i}`,
   `hide_when_kind`, `dim_bind`, `icon_src_bind`) [S1 `mod_manifest.cpp:1183-1262`]; a slot draws
@@ -2466,7 +2606,12 @@ count as runs, as a game launch does. A crashed session's lines are in `eden_log
 eden-cli runs again, in `eden_log.txt.old.txt` after that one run, and gone after the second
 (Restore, "After a crash").
 `flush_line` is needed only to read the log while eden-cli runs (Next steps 10 and 11, A3
-sessions). The user turns it on once: quit eden-cli, `notepad
+sessions). The user turns it on once. With `$d\config\qt-config.ini` present (Eden Qt used on
+this PC), eden-cli takes `[Miscellaneous]` from it (H1d), so set it in Eden Qt: Emulation >
+Configure > Debug > "Flush log output on each line" [S1 `src/yuzu/configuration/configure_debug.ui:728-731`,
+`configure_debug.cpp:116`], OK, close Eden Qt; then
+`Select-String -Path "$d\config\qt-config.ini" -Pattern '^flush_line'` must print
+`flush_line\default=false` and `flush_line=true`. Without `qt-config.ini`: quit eden-cli, `notepad
 "$d\config\sdl2-config.ini"` (eden-cli's config, written at its first start [S1
 `frontend_common/config.cpp:55-61,883-887`, `src/common/fs/path_util.cpp:114-121`]), and under
 `[Miscellaneous]` set both lines `flush_line\default=false` and `flush_line=true` (with
@@ -2769,14 +2914,18 @@ queue their writes go through (step 1 says why not the arrays), then call them f
    ```
    cd C:\duo; $d = "$env:APPDATA\eden"
    Copy-Item -Recurse "$d\nand\user\save" "C:\duo\save-backup-re-$(Get-Date -Format yyyyMMdd-HHmm)"
-   Copy-Item -Force "$d\config\sdl2-config.ini" C:\duo\re-config.ini
    New-Item -Force -ItemType File "$d\dualscreen\user\0100F2C0115B6000\totk-re" -Value 1
    Remove-Item C:\duo\dsmod-cmd.txt.out -ErrorAction SilentlyContinue
    $env:EDEN_DSMOD_CMD = "C:\duo\dsmod-cmd.txt"
-   .\eden-cli.exe -c C:\duo\re-config.ini --aux-window --debug 6543 -g <TotK 1.2.1>
+   .\eden-cli.exe --aux-window --debug 6543 -g <TotK 1.2.1>
    ```
-   The copied config is the isolated profile: the `--debug` run writes `use_gdbstub=true` into
-   the config it used (G1), so it lands in `re-config.ini`, never in your normal config. The saves
+   (Back up the save folder from H1c check 6 instead, if it printed another.) With `qt-config.ini`
+   present, the `--debug` run writes `use_gdbstub` into no file (eden-cli saves its own
+   `sdl2-config.ini` before the command line is applied) and runs with the Eden Qt settings for
+   TotK (G1, H1d). Without it, the `--debug` run writes `use_gdbstub=true` into the config it
+   used (G1), so isolate it: run `Copy-Item -Force "$d\config\sdl2-config.ini" C:\duo\re-config.ini` before the
+   launch and launch with `.\eden-cli.exe -c C:\duo\re-config.ini --aux-window --debug 6543 -g
+   <TotK 1.2.1>`, so it lands in `re-config.ini`, never in your normal config. The saves
    are shared, hence the backup (a game frozen at a stop and then killed can lose unsaved
    progress). The guest waits at boot for the debugger (fact, G1): right after the launch, in a
    second window, `py -3 C:\duo\rsp_watch.py 127.0.0.1:6543 go` (it waits up to 60 s for the stub;
@@ -2942,7 +3091,7 @@ from each field that passed, and the trigger becomes live in Next steps 12.
 | Wheel look, A2 run, A3 sessions | A1, A2, A3 | Next steps 10-13; `flush_line` on once, to read the log during a session (§A2 "Log on disk"); for A3 the UltraCam `exefs` file list and patch log lines (§G2) |
 | Approve vendoring zstd | T3a | Answered: approved. No longer vendored in the module (§R2); the same files build patch 0009's test outside the repo (hashes in §T3a') |
 | Approve vendoring stb_truetype | T3a' | Answered: approved; vendored as `native/third_party/stb_truetype.h` v1.26 (public domain) for the game font (§R2) |
-| T8a dump | T8a, T4v | The `totk-dump` file, one start of TotK (1.2.1 if you update, else 1.2.0; Next steps 5-6) with the CI-built eden-cli (patches 0001-0011) and companion package, the `totk`/`DSMod` log lines and the `imgdump` PNGs the coder lists (PowerShell steps in §T8a) |
+| T8a dump | T8a, T4v | The `totk-dump` file, one start of TotK (1.2.1 if you update, else 1.2.0; Next steps 5-6) with the CI-built eden-cli (all `host/eden-duo/00*.patch`) and companion package, the `totk`/`DSMod` log lines and the `imgdump` PNGs the coder lists (PowerShell steps in §T8a) |
 | Reference look decisions | T4v | Accepted by the user: pages Map / Inventory (home) / Abilities with Gear in the home page's right column; no 3D Link figure (§R3), the equipped weapon at 256 px instead; English only |
 | T8 run | T8 | Package installed in the CI-built eden-cli, one save loaded, `.shot` pictures per page, `totk`/`DSMod` log lines, values compared with the game |
 | eden-duo fork + Windows build | H1c | A fork repo for the H1 patches, and either a Windows build on their PC (MSVC + Ninja, `tools/windows/load-msvc-env.ps1` [S1 docs/Build.md]) or a GitHub Actions Windows runner in the fork |
