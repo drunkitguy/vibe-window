@@ -1879,8 +1879,9 @@ the parser's bounds checks apply to live data too.
      `Pouch` order, 0 for Arrow and Food: not checked). The block is read from table −
      `kTableToBlock` (0x18), `kBlockBytes` (0x28); String64Array `kS64aEntry` 0x90, `kS64aLen` 0x70,
      `kS64aData` 0x78, `kS64Element` 0x50, `kS64Text` 0xC (§L2, `UNVERIFIED until T8d`). All are empty or 0 in `Offsets{}` and set only in
-     `kOffsets121`. When `gmd_mgr` is empty the poll is skipped (zero host calls) and the save
-     stays the source, so 1.2.0 and unknown builds never read these addresses (CA8);
+     `kOffsets121`. When `int_table` or `s64a_table` is 0 the poll is skipped (zero host calls)
+     and the save stays the source (an empty gate chain reads as gate unknown with no memory
+     read, A1's `ReadLoading`), so 1.2.0 and unknown builds never read these addresses (CA8);
    - the gate is A1's `ReadLoading` (mgr == holder, 1 ≤ n ≤ 16, file walk, mask 0x02 clear):
      0 reads on, 1 skips the poll (keeps the last snapshot), -1 stays on the save (logged once
      per session: `totk live gamedata: gate unknown`);

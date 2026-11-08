@@ -260,6 +260,13 @@ int main() {
         const Got got = Read(h);
         assert(got.r == Result::index && got.why == "Pouch.Bow.Content.Name hash missing");
     }
+    { // a checked name at its index but that index >= count: the probe refusal, not the index
+        Host h;
+        const Gmd g = PutGameData(h, keys);
+        h.Put<std::uint32_t>(g.mgr + kO.s64a_table + totk::kTableCount, kO.pouch_index[0]);
+        const Got got = Read(h);
+        assert(got.r == Result::index && got.why == "Pouch.Weapon.Content.Name index >= count");
+    }
     { // an unchecked pouch (Food) missing is an empty pouch, as in the save path
         GmdKeys k = keys;
         std::erase_if(k.texts, [](const auto& e) { return e.first == "Pouch.Food.Content.Name"; });

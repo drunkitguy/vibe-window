@@ -68,7 +68,8 @@ inline constexpr Layout kInts{kIntArrayEntry, kIntArrayLen, kIntArrayData, 4};
 inline constexpr Layout kTexts{kS64aEntry, kS64aLen, kS64aData, kS64Element};
 inline constexpr std::size_t kTextBytes = 64; // a String64's text
 static_assert(kIntArrayEntry <= kS64aEntry && kIntArrayData + 8 <= kIntArrayEntry &&
-              kS64aData + 8 <= kS64aEntry && kS64Text + kTextBytes <= kS64Element);
+              kS64aData + 8 <= kS64aEntry && kIntArrayLen + 4 <= kIntArrayEntry &&
+              kS64aLen + 4 <= kS64aEntry && kS64Text + kTextBytes <= kS64Element);
 
 inline bool InMain(const EdenDsmodHostApi& h, std::uint64_t vtable) {
     return dsmod_sdk::InMain(h.main_base, h.main_size, vtable, 8);
