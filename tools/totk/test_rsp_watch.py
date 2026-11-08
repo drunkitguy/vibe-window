@@ -237,9 +237,12 @@ class RspWatch(unittest.TestCase):
         rsp_watch.CONNECT_TIMEOUT = 1.0
         start = time.monotonic()
         try:
-            code, out = run(["127.0.0.1:%d" % port, "go"])
+            with mock.patch.object(rsp_watch.time, "sleep", wraps=time.sleep) as sl:
+                code, out = run(["127.0.0.1:%d" % port, "go"])
         finally:
             rsp_watch.CONNECT_TIMEOUT = saved
+        self.assertTrue(sl.call_args_list)  # waits between tries, no spin during the boot
+        self.assertEqual({c.args for c in sl.call_args_list}, {(0.5,)})
         self.assertLess(time.monotonic() - start, 2.0)  # retried 1 s, not longer
         self.assertEqual(code, 1)
         self.assertEqual(out, "no gdbstub at 127.0.0.1:%d after 1 s; is --debug set?\n" % port)
