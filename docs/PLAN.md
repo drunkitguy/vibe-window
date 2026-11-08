@@ -2697,7 +2697,7 @@ queue their writes go through (step 1 says why not the arrays), then call them f
      `UNVERIFIED until A3 step 2`; 0 in `Offsets{}`), and `totk_offsets.h` the store offsets
      `kQueueCapacity` 0x28, `kQueueBuffer` 0x30, `kQueueControl` 0x38 with the same source.
    - Trigger: the worker checks the file `user:totk-re` once per session, after the romfs
-     answered, as it runs `dump::Run` (`0100F2C0115B6000.cpp:312-318`, `totk_dump.h:159`; §T8a),
+     answered, as it runs `dump::Run` (`0100F2C0115B6000.cpp:373-380`, `totk_dump.h:159`; §T8a),
      and hands the result to the tick thread through the mutex-guarded `re` flag that Sample
      copies to `report`, so `sample` does no file I/O [S3 MODULE_GUIDE §9]. §A2's read-only report uses the same flag. With it set, once per
      session after `totk.loading` first publishes 0, the module logs (host reads only)
