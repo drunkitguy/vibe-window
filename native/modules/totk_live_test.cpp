@@ -144,8 +144,10 @@ struct Module {
         } else {
             h.api.read_romfs = nullptr;
         }
-        if (keys)
+        if (keys) {
             g = PutGameData(h, *keys, lay);
+            PutLive(h); // the player actor: the live inventory shows only with a valid status
+        }
         d.Put("slot_01/caption.sav", Caption(2024, 1, 2, 8, 0, false));
         if (saved)
             d.Put("slot_01/progress.sav", FixtureSave().Build());
@@ -196,6 +198,10 @@ struct Module {
         Sample();
         assert(h.ints.at("totk.inv.source") == h.ints.at("totk.gear.source"));
         return h.ints.at("totk.inv.source");
+    }
+    std::shared_ptr<const totk::Snapshot> LiveInv() {
+        std::scoped_lock lock{In().mutex};
+        return In().live_inv;
     }
     std::vector<std::string> Lines() {
         std::scoped_lock lock{h.log_mutex};
@@ -453,6 +459,14 @@ int main() {
                 live.h.ints.erase(live.h.ints.find(k));
                 saved.h.ints.erase(saved.h.ints.find(k));
             }
+            for (Module* m : {&live, &saved}) { // the live status and position differ by design
+                const auto other = [](const auto& kv) {
+                    return kv.first.starts_with("totk.status.") || kv.first.starts_with("totk.map.");
+                };
+                std::erase_if(m->h.ints, other);
+                std::erase_if(m->h.floats, other);
+                std::erase_if(m->h.texts, other);
+            }
             assert(live.h.ints == saved.h.ints && live.h.texts == saved.h.texts &&
                    live.h.floats == saved.h.floats);
         }
@@ -518,6 +532,34 @@ int main() {
                                              "totk live gamedata: gate unknown"};
         assert(w.Lines() == lines);
     }
+    // A live GameData with the player actor's name or chain broken (the title screen): the save's
+    // tabs and gear (source 1), and select checks the save's tab, until the status reads valid.
+    {
+        GmdKeys k = keys;
+        Of(k.texts, "Pouch.Material.Content.Name").push_back("Item_Fruit_B");
+        Module w(true, &k);
+        const std::uint64_t actor = PutChain(w.h, w.h.api.main_base, kO.actor),
+                            name = PutChain(w.h, actor, kO.name);
+        const auto materials = [&] {
+            assert(w.Act("totk.inv.tab", 4));
+            const auto source = w.Source();
+            assert(w.h.ints.at("totk.inv.count") == (source == 2 ? 2 : 1) &&
+                   w.Act("totk.inv.select", 1) == (source == 2));
+            return source;
+        };
+        w.h.Put<char>(name, 'X');
+        assert(materials() == 1 && w.Lines().size() == 1); // the worker still reads it: ok
+        w.h.Put<char>(name, 'P');
+        assert(materials() == 2);
+        const std::uint64_t head = w.h.api.main_base + kO.actor.hop[0],
+                            slot = w.h.Get<std::uint64_t>(head);
+        w.h.Put<std::uint64_t>(head, 0);
+        for (int i = 1; i < kLiveGrace; ++i) // the status's grace
+            assert(materials() == 2);
+        assert(materials() == 1);
+        w.h.Put(head, slot);
+        assert(materials() == 2);
+    }
     // The live items get the game's names too: names loaded after the live inventory and while
     // the gate reads loading rename it, then the next live read is named.
     {
@@ -540,11 +582,11 @@ int main() {
         auto save_copy = Snap(w.In());
         w.d.Put("slot_01/caption.sav", Caption(2024, 1, 2, 9, 0, false));
         w.Poll(); // the first read of the new progress.sav (and a live replace)
-        auto live_copy = Inv(w.In());
+        auto live_copy = w.LiveInv();
         assert(save_copy && live_copy && live_copy != save_copy);
         const std::weak_ptr<const totk::Snapshot> save_weak = save_copy, live_weak = live_copy;
         w.Poll(); // the matching read: the save and the live inventory are both replaced
-        assert(Snap(w.In()) != save_copy && Inv(w.In()) != live_copy);
+        assert(Snap(w.In()) != save_copy && w.LiveInv() != live_copy);
         const long before = t_deletes;
         save_copy.reset();
         live_copy.reset();

@@ -391,7 +391,7 @@ Doable in this Linux container now (no game, no Windows, no Thor):
 | T2b | One package for 1.2.0 (save only) and 1.2.1 (live): two-row build table, both ids in `module.build_ids`, `data.json`, CI | T2a, D2b | done: 9bfe3a7, critic SATISFIED round 1 |
 | T3a | Live status on 1.2.1: chain walker in `ReadStatus`, hearts, stamina, rupees, battery; save fallback | T2b | done: dc01a3d..6ce1927, critic SATISFIED round 4; chains UNVERIFIED until T8c |
 | T3b | Live position and layer: player actor chain with name check, map marker, layer follows Link | T3a | done: c3119bd..63585db, critic SATISFIED round 3; chains UNVERIFIED until T8c |
-| T3c | Live inventory and equipped items from the GameData tables, through the existing save parser; index self-check | T3a, A1 (gate chains, `ReadLoading`), A2 (probe, `int_table`, `kMaxTable`), T8c | coded (critic pending): 681df6a..088264a + round 4; `totk_live.h`, `totk_live_test.cpp`; chains UNVERIFIED until T8c, String64Array layout and indices until T8d |
+| T3c | Live inventory and equipped items from the GameData tables, through the existing save parser; index self-check | T3a, A1 (gate chains, `ReadLoading`), A2 (probe, `int_table`, `kMaxTable`), T8c | coded (critic pending): 681df6a..ba218cd; `totk_live.h`, `totk_live_test.cpp`; chains UNVERIFIED until T8c, String64Array layout and indices until T8d |
 | T3d | Current ability, one chain from T8d's scan | T8d | blocked: user |
 | A1 | Ability select through the game's wheel: six `button` actions `L+RStick(x,y)` behind `owned && !totk.loading`; `totk.loading` from the GameData loading gate; Travel Medallion tile refused with a reason (§A1) | T3a (chain walker), D3 | todo |
 | A2 | Travel: (a) read-only destination markers on the Map page from the player's romfs and save; (b) the Travel Medallion trigger, one 4-op expect-checked `write_batch`, build-gated to 1.2.1, refusing until T8c fills its `UNKNOWN` fields; tap-to-restore (§A2) | A1 (`totk.loading`), T3b, D3 | todo |
@@ -1913,10 +1913,13 @@ the parser's bounds checks apply to live data too.
    layout, a missing key is absent as in the save path). On a pass, log `totk live gamedata: ok lengths=W,B,S,A,R,M,F,Z,K` once (T8d step 1): each
    pouch's `Content.Name` length as the game holds it, before the `kMaxItems` cut (0 when missing),
    in `Pouch` order, so T8d decides the 400-element shortcut.
-4. Module: tabs and gear come from the live snapshot (`totk.inv.source` and `totk.gear.source` 2).
+4. Module: tabs and gear come from the live snapshot (`totk.inv.source` and `totk.gear.source` 2)
+   only while T3a's live status is valid (its player actor walk with the `Player` name check,
+   within `kLiveGrace`), else from the save: the title screen's GameData may hold empty pouches
+   that pass every check above.
    Abilities stay from the save (Bool layout UNKNOWN). Effect labels (EnumArray layout UNKNOWN) are
    copied from the save's item at the same pouch index when the ids match, else absent.
-   `totk.inv.select` checks the shown (live) tab.
+   `totk.inv.select` checks the shown tab, by the same rule.
 Tests: a fake GameDataMgr with hash tables in `totk_test_host.h` (`PutGameData`; its memory is
 locked and the worker's calls are counted apart from the tick thread's, so the existing exact
 read counts and `corrupt_read` stay deterministic; `corrupt_worker_read` tears a worker read):
@@ -1930,7 +1933,9 @@ read counts and `corrupt_read` stay deterministic; `corrupt_worker_read` tears a
 - an empty IntArray and String64Array (data pointer 0) give ok and match the save;
 - the IntArray values below 0x10000, values wrapping past 2^64 onto mapped memory, an entry, a
   block or the manager not 8-aligned (everything else readable) give layout;
-- names loaded while the gate reads loading rename the live inventory shown.
+- names loaded while the gate reads loading rename the live inventory shown;
+- a live GameData with the actor's name or chain broken publishes source 1 and the save's tabs
+  (the chain after the status's grace), and `totk.inv.select` checks the save's tab.
 Acceptance: CA1-CA10; a live fixture and its matching save fixture publish identical keys.
 
 ### T3d (after T8d): current ability
@@ -1999,9 +2004,10 @@ Once A1 and A2 are in CI, run §A3 "T8c additions" (Next steps 11) in their own 
 ### T8d (user, PC, after T3c is in CI): GameData check and ability scan
 
 1. Live inventory (T3c), PowerShell as §T8c:
-   (a) start as T8c step 3; on the title screen, before Continue or Load, wait 5 s, then write
-       down the home page's source line ("Live" or "From last save") and the item count of each
-       tab;
+   (a) run only T8c step 3's command line (`$env:EDEN_DSMOD_CMD = "C:\duo\dsmod-cmd.txt";
+       $env:EDEN_DSMOD_PROFILE = "1"; .\eden-cli.exe --aux-window -g <TotK>`) and do not load a
+       save yet; on the title screen wait 5 s, then write down the home page's source line ("Live"
+       or "From last save") and the item count of each tab;
    (b) load a save that has at least one material, two weapons, and an equipped weapon, bow and
        shield; on the companion's home page write down one material's count (Materials tab) and
        the weapon, bow and shield gear cards;
@@ -2015,10 +2021,10 @@ Once A1 and A2 are in CI, run §A3 "T8c additions" (Next steps 11) in their own 
    "Live", the coder drops `UNVERIFIED until T8d` from `s64a_table`, `pouch_index`,
    `kTableToBlock`, `kBlockBytes` and `kS64*`; a length above 400 means reading more than
    `kMaxItems`; an `index check FAILED` line or a wrong (d) leaves the inventory on the save.
-   "Live" with empty tabs in (a) means the title screen's GameData reads as live: the coder
-   publishes the live inventory only while T3a's player actor walk is valid. `gate unknown`
-   followed by a `totk loading: unknown (<cause>)` line leaves the inventory on the save; the
-   coder fixes the chain the cause names.
+   "Live" in (a) means T3a's player actor walk reads valid on the title screen (the live
+   inventory shows only while it is valid): the coder fixes that chain. `gate unknown` together
+   with a `totk loading: unknown (<cause>)` line anywhere in the file (the tick thread logs it
+   first) leaves the inventory on the save; the coder fixes the chain the cause names.
 2. Ability scan (for T3d), one console line at a time:
    - `chain 4721B98 0x258`, and note the last pointer `P`;
    - `cscan P 65536` (256 KiB of ints: the index of `PlayerStatus.CurrentSpecialPower` and the

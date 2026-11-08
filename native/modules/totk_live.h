@@ -127,7 +127,7 @@ inline Result Pass(const EdenDsmodHostApi& h, const Offsets& o, std::uint64_t mg
         return Result::layout;
     std::vector<std::uint8_t> raw;
     std::string lengths = "lengths=";
-    for (int p = 0; p < 9; ++p) {
+    for (std::size_t p = 0; p < kPouchKeys.size(); ++p) {
         std::uint32_t name_len = 0;
         std::vector<std::string> names;
         for (const Key& k : kKeys) {

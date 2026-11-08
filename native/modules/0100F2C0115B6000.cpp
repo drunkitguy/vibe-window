@@ -304,8 +304,6 @@ struct LiveInv {
 // shortcut: needs a save read first (its effects and abilities), so a new game shows no inventory
 // until its first save; read without one if T8d shows that matters.
 // shortcut: 2 s lag (the worker poll), poll faster if T8d finds it laggy.
-// shortcut: the title screen's GameData may read as live (UNVERIFIED), gate on the player actor
-// if T8d step 1(a) shows it.
 void PollLive(Instance& in, const totk::Offsets& o, const totk::GameData* save, LiveInv& s,
               const totk::msbt::Labels& labels) {
     using totk::live::Result;
@@ -794,7 +792,10 @@ void Sample(void* instance, const EdenDsmodHostApi* host) {
             o.I(pub::kInvValid, 0);
             return;
         }
-        // The live inventory and gear (source 2) when the worker has them, else the save's.
+        // The live inventory and gear (source 2) when the worker has them and the player actor
+        // reads valid (the title screen's GameData may hold empty pouches), else the save's.
+        if (!status)
+            live.reset(); // in.live_inv still holds it: no free here
         const totk::Snapshot& inv = live ? *live : *snap;
         PublishGear(o, in.keys, inv, live ? 2 : 1);
         o.I(pub::kAbilityValid, 1);
@@ -852,10 +853,11 @@ std::shared_ptr<const totk::Snapshot> Snap(Instance& in) {
     return in.snapshot;
 }
 
-// The shown inventory: the live one, else the save's.
+// The shown inventory: the live one while the live status is valid (Sample's rule), else the
+// save's. Tick thread only (in.misses).
 std::shared_ptr<const totk::Snapshot> Inv(Instance& in) {
     std::scoped_lock lock{in.mutex};
-    return in.live_inv ? in.live_inv : in.snapshot;
+    return in.live_inv && in.misses < kLiveGrace ? in.live_inv : in.snapshot;
 }
 
 // Preconditions 1-4 of §A2 (host reads only): null when they hold, else the message.
