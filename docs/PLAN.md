@@ -391,7 +391,7 @@ Doable in this Linux container now (no game, no Windows, no Thor):
 | T2b | One package for 1.2.0 (save only) and 1.2.1 (live): two-row build table, both ids in `module.build_ids`, `data.json`, CI | T2a, D2b | done: 9bfe3a7, critic SATISFIED round 1 |
 | T3a | Live status on 1.2.1: chain walker in `ReadStatus`, hearts, stamina, rupees, battery; save fallback | T2b | done: dc01a3d..6ce1927, critic SATISFIED round 4; chains UNVERIFIED until T8c |
 | T3b | Live position and layer: player actor chain with name check, map marker, layer follows Link | T3a | done: c3119bd..63585db, critic SATISFIED round 3; chains UNVERIFIED until T8c |
-| T3c | Live inventory and equipped items from the GameData tables, through the existing save parser; index self-check | T3a, A1 (gate chains, `ReadLoading`), A2 (probe, `int_table`, `kMaxTable`), T8c | coded (critic pending): 681df6a..ba218cd; `totk_live.h`, `totk_live_test.cpp`; chains UNVERIFIED until T8c, String64Array layout and indices until T8d |
+| T3c | Live inventory and equipped items from the GameData tables, through the existing save parser; index self-check | T3a, A1 (gate chains, `ReadLoading`), A2 (probe, `int_table`, `kMaxTable`), T8c | coded (critic pending): 681df6a..2469b36; `totk_live.h`, `totk_live_test.cpp`; chains UNVERIFIED until T8c, String64Array layout and indices until T8d |
 | T3d | Current ability, one chain from T8d's scan | T8d | blocked: user |
 | A1 | Ability select through the game's wheel: six `button` actions `L+RStick(x,y)` behind `owned && !totk.loading`; `totk.loading` from the GameData loading gate; Travel Medallion tile refused with a reason (§A1) | T3a (chain walker), D3 | todo |
 | A2 | Travel: (a) read-only destination markers on the Map page from the player's romfs and save; (b) the Travel Medallion trigger, one 4-op expect-checked `write_batch`, build-gated to 1.2.1, refusing until T8c fills its `UNKNOWN` fields; tap-to-restore (§A2) | A1 (`totk.loading`), T3b, D3 | todo |
@@ -1936,7 +1936,8 @@ read counts and `corrupt_read` stay deterministic; `corrupt_worker_read` tears a
 - names loaded while the gate reads loading rename the live inventory shown;
 - a live GameData with the actor's name or chain broken publishes source 1 and the save's tabs
   (the chain after the status's grace), and `totk.inv.select` checks the save's tab.
-Acceptance: CA1-CA10; a live fixture and its matching save fixture publish identical keys.
+Acceptance: CA1-CA10; a live fixture and its matching save fixture publish identical keys apart from
+`totk.status.*` and `totk.map.*` (T3a/T3b's live values, which differ by design), with inv/gear source 2.
 
 ### T3d (after T8d): current ability
 
