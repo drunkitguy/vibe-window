@@ -1060,31 +1060,33 @@ int main() {
     }
     // Its memory calls alone (the A2 report off, also with only one of its two tables): is_mapped
     // + read for capacity and buffer with the file, none without it, with an empty one or with
-    // ia_queue 0; an unreadable store (its first is_mapped fails) still gives the address.
+    // ia_queue 0; an unreadable store (its first is_mapped fails) or buffer (only the capacity
+    // mapped) still gives the address.
     struct Case {
         int re;
         std::uint64_t ia_queue;
-        bool store;
+        int store; // store fields Put: 2 both, 1 the capacity only, 0 none
         unsigned reads;
         const char* what;
         std::uint64_t totk::Offsets::*kept = nullptr; // the one A2 table left set
     };
-    for (const Case c : {Case{1, 0x128, true, 4, "capacity 512, buffer 0x9a000000"},
-                         Case{1, 0x128, false, 1, "store unreadable"}, Case{0, 0x128, true, 0, ""},
-                         Case{2, 0x128, true, 0, ""}, Case{1, 0, true, 0, ""},
-                         Case{1, 0x128, true, 4, "capacity 512, buffer 0x9a000000",
+    for (const Case c : {Case{1, 0x128, 2, 4, "capacity 512, buffer 0x9a000000"},
+                         Case{1, 0x128, 1, 3, "store unreadable"},
+                         Case{1, 0x128, 0, 1, "store unreadable"}, Case{0, 0x128, 2, 0, ""},
+                         Case{2, 0x128, 2, 0, ""}, Case{1, 0, 2, 0, ""},
+                         Case{1, 0x128, 2, 4, "capacity 512, buffer 0x9a000000",
                               &totk::Offsets::v3a_table},
-                         Case{1, 0x128, true, 4, "capacity 512, buffer 0x9a000000",
+                         Case{1, 0x128, 2, 4, "capacity 512, buffer 0x9a000000",
                               &totk::Offsets::int_table}}) {
         World w({.re = c.re});
         w.In().offsets.v3a_table = w.In().offsets.int_table = 0;
         if (c.kept)
             w.In().offsets.*c.kept = kO.*c.kept;
         w.In().offsets.ia_queue = c.ia_queue;
-        if (c.store) {
+        if (c.store >= 1)
             w.h.Put<std::int32_t>(w.mgr + 0x150, 512);
+        if (c.store == 2)
             w.h.Put<std::uint64_t>(w.mgr + 0x158, 0x9a000000);
-        }
         unsigned reads = 0;
         for (int i = 0; i < kLoadSettle + 5; ++i) {
             w.m->sample(w.instance, &w.h.api);
