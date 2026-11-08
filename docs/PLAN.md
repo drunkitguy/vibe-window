@@ -657,8 +657,8 @@ desktop eden-cli needs a `SweepStale` call at startup (today only Android calls
 
 ### H1d (coder): eden-cli uses the Eden Qt config
 
-User request: eden-cli runs the game with the settings tuned in Eden Qt. Facts [S1, unchanged by
-0001-0012]:
+User request: eden-cli runs the game with the settings tuned in Eden Qt. Facts [S1 with 0001-0012
+applied]:
 - eden-cli read only `sdl2-config.ini` [S1 `src/yuzu_cmd/yuzu.cpp:202`,
   `src/frontend_common/config.cpp:55-61`]; Eden Qt keeps `qt-config.ini` in the same config dir
   [S1 `src/qt_common/config/qt_config.h:15`, `config.cpp:30-40`] and boots a game with
