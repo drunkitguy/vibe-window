@@ -392,7 +392,7 @@ Doable in this Linux container now (no game, no Windows, no Thor):
 | T2b | One package for 1.2.0 (save only) and 1.2.1 (live): two-row build table, both ids in `module.build_ids`, `data.json`, CI | T2a, D2b | done: 9bfe3a7, critic SATISFIED round 1 |
 | T3a | Live status on 1.2.1: chain walker in `ReadStatus`, hearts, stamina, rupees, battery; save fallback | T2b | done: dc01a3d..6ce1927, critic SATISFIED round 4; chains UNVERIFIED until T8c |
 | T3b | Live position and layer: player actor chain with name check, map marker, layer follows Link | T3a | done: c3119bd..63585db, critic SATISFIED round 3; chains UNVERIFIED until T8c |
-| T3c | Live inventory and equipped items from the GameData tables, through the existing save parser; index self-check | T3a, A1 (gate chains, `ReadLoading`), A2 (probe, `int_table`, `kMaxTable`), T8c | coded (critic pending): 681df6a..100c9de; `totk_live.h`, `totk_live_test.cpp`; chains UNVERIFIED until T8c, String64Array layout and indices until T8d |
+| T3c | Live inventory and equipped items from the GameData tables, through the existing save parser; index self-check | T3a, A1 (gate chains, `ReadLoading`), A2 (probe, `int_table`, `kMaxTable`), T8c | coded (critic pending): 681df6a..8a71fa9; `totk_live.h`, `totk_live_test.cpp`; chains UNVERIFIED until T8c, String64Array layout and indices until T8d |
 | T3d | Current ability, one chain from T8d's scan | T8d | blocked: user |
 | A1 | Ability select through the game's wheel: six `button` actions `L+RStick(x,y)` behind `owned && !totk.loading`; `totk.loading` from the GameData loading gate; Travel Medallion tile refused with a reason (§A1) | T3a (chain walker), D3 | todo |
 | A2 | Travel: (a) read-only destination markers on the Map page from the player's romfs and save; (b) the Travel Medallion trigger, one 4-op expect-checked `write_batch`, build-gated to 1.2.1, refusing until T8c fills its `UNKNOWN` fields; tap-to-restore (§A2) | A1 (`totk.loading`), T3b, D3 | todo |
@@ -1959,7 +1959,8 @@ PowerShell, as §T8a: `cd C:\duo; $d = "$env:APPDATA\eden"`. Read-only throughou
 2. Only after T2b's package is in CI and you said yes to D2b: `.\eden-cli.exe --install <TotK
    1.2.1 update.nsp>` (your own v393216 file, not 1.4.3; Next steps 5); then download only
    the newest `totk-companion` artifact (workflow "TotK companion"; eden-cli stays as it is) and
-   unzip it into `C:\duo` (`0100F2C0115B6000.dsmod.zip` stays zipped), then run
+   run `Expand-Archive -Force "$env:USERPROFILE\Downloads\totk-companion.zip" C:\duo` (`-Force`
+   replaces §T8a's older `0100F2C0115B6000.dsmod.zip`, which stays zipped), then run
    `Expand-Archive -Force 0100F2C0115B6000.dsmod.zip "$d\load\0100F2C0115B6000\TotKDuo"` and
    `Remove-Item -ErrorAction SilentlyContinue "$d\dualscreen\user\0100F2C0115B6000\totk-dump"`
    (the texture dump stays off: it blocks live reads while it runs).
@@ -2011,7 +2012,8 @@ Once A1 and A2 are in CI, run §A3 "T8c additions" (Next steps 11) in their own 
 
 1. Live inventory (T3c), PowerShell as §T8c. First download only the newest
    `totk-companion` artifact (the CI build that has T3c; workflow "TotK companion"; eden-cli stays
-   as it is) and unzip it into `C:\duo` (`0100F2C0115B6000.dsmod.zip` stays zipped), then run
+   as it is) and run `Expand-Archive -Force "$env:USERPROFILE\Downloads\totk-companion.zip" C:\duo`
+   (`-Force` replaces the older `0100F2C0115B6000.dsmod.zip`, which stays zipped), then run
    `Expand-Archive -Force 0100F2C0115B6000.dsmod.zip "$d\load\0100F2C0115B6000\TotKDuo"` and
    `Remove-Item -ErrorAction SilentlyContinue "$d\dualscreen\user\0100F2C0115B6000\totk-dump"`
    (the texture dump stays off: it blocks live reads while it runs):
