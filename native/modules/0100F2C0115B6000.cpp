@@ -304,6 +304,8 @@ struct LiveInv {
 // shortcut: needs a save read first (its effects and abilities), so a new game shows no inventory
 // until its first save; read without one if T8d shows that matters.
 // shortcut: 2 s lag (the worker poll), poll faster if T8d finds it laggy.
+// shortcut: the title screen's GameData may read as live (UNVERIFIED), gate on the player actor
+// if T8d step 1(a) shows it.
 void PollLive(Instance& in, const totk::Offsets& o, const totk::GameData* save, LiveInv& s,
               const totk::msbt::Labels& labels) {
     using totk::live::Result;

@@ -12,9 +12,9 @@
 
 #include <cstdlib>
 
-// CA10 with a live inventory shown: allocations on this (the sampling) thread.
+// CA10 with a live inventory shown: allocations and frees on this (the sampling) thread.
 namespace {
-thread_local long t_news = 0;
+thread_local long t_news = 0, t_deletes = 0;
 } // namespace
 void* operator new(std::size_t n) {
     if (void* p = std::malloc(n ? n : 1)) {
@@ -28,9 +28,11 @@ void* operator new(std::size_t n, const std::nothrow_t&) noexcept { // create's 
     return std::malloc(n ? n : 1);
 }
 void operator delete(void* p) noexcept {
+    t_deletes += p != nullptr;
     std::free(p);
 }
 void operator delete(void* p, std::size_t) noexcept {
+    t_deletes += p != nullptr;
     std::free(p);
 }
 
@@ -530,6 +532,23 @@ int main() {
         w.h.Put<std::uint8_t>(w.g.flags, 0);
         w.Poll();
         assert(w.Source() == 2 && w.h.texts.at("totk.inv.sel.name") == "Apple");
+    }
+    // A new save: Poll and PollLive both replace in one worker iteration, each into its own
+    // retired slot, so the worker, not a sample still holding a copy, frees the old snapshots.
+    {
+        Module w(true, &keys);
+        auto save_copy = Snap(w.In());
+        w.d.Put("slot_01/caption.sav", Caption(2024, 1, 2, 9, 0, false));
+        w.Poll(); // the first read of the new progress.sav (and a live replace)
+        auto live_copy = Inv(w.In());
+        assert(save_copy && live_copy && live_copy != save_copy);
+        const std::weak_ptr<const totk::Snapshot> save_weak = save_copy, live_weak = live_copy;
+        w.Poll(); // the matching read: the save and the live inventory are both replaced
+        assert(Snap(w.In()) != save_copy && Inv(w.In()) != live_copy);
+        const long before = t_deletes;
+        save_copy.reset();
+        live_copy.reset();
+        assert(t_deletes == before && !save_weak.expired() && !live_weak.expired());
     }
     // No save shown yet: no live read.
     {
