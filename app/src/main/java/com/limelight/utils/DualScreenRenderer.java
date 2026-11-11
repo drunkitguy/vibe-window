@@ -8,6 +8,7 @@ import android.opengl.EGLDisplay;
 import android.opengl.EGLSurface;
 import android.opengl.GLES20;
 import android.opengl.GLSurfaceView;
+import android.os.SystemClock;
 import android.view.Surface;
 
 import com.limelight.LimeLog;
@@ -25,6 +26,8 @@ import javax.microedition.khronos.opengles.GL10;
  * Dual screen: the decoder writes one SurfaceTexture; the GLSurfaceView's single context draws
  * one crop to the GLSurfaceView and the other crop to a second EGL window surface (the
  * Presentation's SurfaceView on the other display), both from the same latched frame, 1:1.
+ * Until DualScreenDetector has seen the two-window layout, the content box goes to the
+ * GLSurfaceView alone, scaled to fit, and the second surface is black.
  */
 public class DualScreenRenderer implements GLSurfaceView.Renderer, SurfaceTexture.OnFrameAvailableListener {
     private static final int GL_TEXTURE_EXTERNAL_OES = 0x8D65;
@@ -41,14 +44,48 @@ public class DualScreenRenderer implements GLSurfaceView.Renderer, SurfaceTextur
                     "    v_TexCoord = (u_TexMatrix * vec4(a_TexCoord, 0.0, 1.0)).xy;\n" +
                     "}\n";
 
+    // Layout detection: the video reduced to DualScreenDetector's grid, 4 cells per RGBA pixel, so
+    // the readback is GRID_W * GRID_H bytes that are 0 or 255. Each cell takes one bilinear tap at
+    // its centre, the mean of its inner 2x2 pixels.
+    // shortcut: a cell's outer pixel ring is not sampled, so chroma bleed across a window edge
+    // and the SurfaceTexture matrix's one-texel crop shrink do not light the next cell, but
+    // content only 1 px wide on that ring is not seen. Sample all 16 pixels if that ever matters.
+    private static final int ANALYSIS_W = DualScreenDetector.GRID_W / 4;
+    private static final int ANALYSIS_H = DualScreenDetector.GRID_H;
+    private static final String ANALYSIS_FRAGMENT_SHADER =
+            "#extension GL_OES_EGL_image_external : require\n" +
+                    "#ifdef GL_FRAGMENT_PRECISION_HIGH\n" +
+                    "precision highp float;\n" +
+                    "#else\n" +
+                    "precision mediump float;\n" +
+                    "#endif\n" +
+                    "varying vec2 v_TexCoord;\n" +
+                    "uniform samplerExternalOES u_Texture;\n" +
+                    "uniform vec2 u_PixelX;\n" +
+                    "float cell(float n) {\n" +
+                    // The fragment's centre is 2 cells from its left edge, a cell's centre half a cell from its own
+                    "    vec3 c = texture2D(u_Texture, v_TexCoord + (n - 1.5) * " + DualScreenDetector.CELL + ".0 * u_PixelX).rgb;\n" +
+                    "    return step(" + DualScreenDetector.BLACK_THRESHOLD + ", max(c.r, max(c.g, c.b)));\n" +
+                    "}\n" +
+                    "void main() {\n" +
+                    "    gl_FragColor = vec4(cell(0.0), cell(1.0), cell(2.0), cell(3.0));\n" +
+                    "}\n";
+    // The whole video upside down, so the first row read back is the top of the video
+    private static final float[] ANALYSIS_TEX_COORDS = {0f, 1f, 1f, 1f, 0f, 0f, 1f, 0f};
+
     private final GLSurfaceView glSurfaceView;
     private final Stereo3DRenderer.OnSurfaceReadyListener onSurfaceReadyListener;
     private final Runnable onVideoSurfaceLost;
     private final int[] mainCrop;
     private final int[] secondCrop;
+    private final DualScreenDetector detector;
+    private final Runnable requestRender;
     private final FloatBuffer quadBuffer = floats(QUAD_VERTICES);
     private final FloatBuffer mainTexBuffer;
     private final FloatBuffer secondTexBuffer;
+    private final FloatBuffer analysisTexBuffer = floats(ANALYSIS_TEX_COORDS);
+    private final FloatBuffer fitTexBuffer = floats(new float[8]);
+    private final ByteBuffer analysisCells = ByteBuffer.allocateDirect(DualScreenDetector.GRID_W * DualScreenDetector.GRID_H);
     private final AtomicInteger pendingFrames = new AtomicInteger();
 
     // GL thread only
@@ -69,14 +106,24 @@ public class DualScreenRenderer implements GLSurfaceView.Renderer, SurfaceTextur
     private Surface secondEglFailedFor;
     private EGLDisplay secondEglDisplay = EGL14.EGL_NO_DISPLAY;
     private EGLSurface secondEglSurface = EGL14.EGL_NO_SURFACE;
+    // Layout detection; analysisFbo is 0 when it is not set up or has failed
+    private int analysisProgram, analysisPositionHandle, analysisTexCoordHandle, analysisTexMatrixHandle, analysisPixelXHandle;
+    private int analysisFbo, analysisTextureId;
+    private long lastCheckMs;
+    // The view fitTexBuffer and fitRect were made for
+    private DualScreenDetector.View fitFor;
+    private int[] fitRect;
 
     // The second display's Surface and size, set from the UI thread
     private volatile Surface secondSurface;
     private volatile int secondWidth, secondHeight;
 
     public DualScreenRenderer(GLSurfaceView view, Stereo3DRenderer.OnSurfaceReadyListener listener,
-                              Runnable onVideoSurfaceLost, int[] mainCrop, int[] secondCrop) {
+                              Runnable onVideoSurfaceLost, int[] mainCrop, int[] secondCrop,
+                              DualScreenDetector detector) {
         this.glSurfaceView = view;
+        this.requestRender = view::requestRender;
+        this.detector = detector;
         this.onSurfaceReadyListener = listener;
         this.onVideoSurfaceLost = onVideoSurfaceLost;
         this.mainCrop = mainCrop;
@@ -114,6 +161,11 @@ public class DualScreenRenderer implements GLSurfaceView.Renderer, SurfaceTextur
         }
     }
 
+    /** Any thread: the decoder (re)started, so layout detection starts over on the main display. */
+    public void resetDetection() {
+        glSurfaceView.queueEvent(detector::reset);
+    }
+
     /** Any thread; safe to call more than once. Everything is released on the GL thread. */
     public void onSurfaceDestroyed() {
         glSurfaceView.queueEvent(this::releaseGl);
@@ -137,7 +189,16 @@ public class DualScreenRenderer implements GLSurfaceView.Renderer, SurfaceTextur
             GLES20.glDeleteTextures(1, new int[] {videoTextureId}, 0);
             videoTextureId = 0;
         }
+        releaseAnalysis();
         frameLatched = false;
+    }
+
+    // GL thread only; GL ignores the name 0, so this is safe at any point of the set-up
+    private void releaseAnalysis() {
+        GLES20.glDeleteFramebuffers(1, new int[] {analysisFbo}, 0);
+        GLES20.glDeleteTextures(1, new int[] {analysisTextureId}, 0);
+        GLES20.glDeleteProgram(analysisProgram);
+        analysisFbo = analysisTextureId = analysisProgram = 0;
     }
 
     @Override
@@ -182,6 +243,8 @@ public class DualScreenRenderer implements GLSurfaceView.Renderer, SurfaceTextur
         positionHandle = GLES20.glGetAttribLocation(program, "a_Position");
         texCoordHandle = GLES20.glGetAttribLocation(program, "a_TexCoord");
         texMatrixHandle = GLES20.glGetUniformLocation(program, "u_TexMatrix");
+        detector.reset();
+        setUpAnalysis();
 
         videoSurfaceHandedOut = true;
         if (onSurfaceReadyListener != null) {
@@ -198,6 +261,7 @@ public class DualScreenRenderer implements GLSurfaceView.Renderer, SurfaceTextur
         eglContext = EGL14.eglGetCurrentContext();
         mainDrawSurface = EGL14.eglGetCurrentSurface(EGL14.EGL_DRAW);
         mainReadSurface = EGL14.eglGetCurrentSurface(EGL14.EGL_READ);
+        fitFor = null;
         if (width != mainCrop[2] || height != mainCrop[3]) {
             LimeLog.warning("Dual screen: main surface " + width + "x" + height + " is not 1:1 with its crop; scaling");
         }
@@ -221,17 +285,112 @@ public class DualScreenRenderer implements GLSurfaceView.Renderer, SurfaceTextur
             }
         }
 
+        long now = SystemClock.uptimeMillis();
+        if (frameLatched && analysisFbo != 0 && now - lastCheckMs >= DualScreenDetector.CHECK_INTERVAL_MS) {
+            lastCheckMs = now;
+            analyse();
+            // A still picture brings no new frames; keep the checks and their debounce going
+            glSurfaceView.postDelayed(requestRender, DualScreenDetector.CHECK_INTERVAL_MS);
+        }
+        // One snapshot for both displays
+        DualScreenDetector.View view = detector.view();
+
         updateSecondEglSurface();
         if (secondEglSurface != EGL14.EGL_NO_SURFACE) {
             if (EGL14.eglMakeCurrent(eglDisplay, secondEglSurface, secondEglSurface, eglContext)) {
-                drawCrop(secondTexBuffer, secondWidth, secondHeight);
+                drawCrop(view.dual ? secondTexBuffer : null, 0, 0, secondWidth, secondHeight);
                 EGL14.eglSwapBuffers(eglDisplay, secondEglSurface);
             }
             // GLSurfaceView swaps its own surface after this returns, so it must be current again
             EGL14.eglMakeCurrent(eglDisplay, mainDrawSurface, mainReadSurface, eglContext);
         }
 
-        drawCrop(mainTexBuffer, mainWidth, mainHeight);
+        if (view.dual) {
+            drawCrop(mainTexBuffer, 0, 0, mainWidth, mainHeight);
+            return;
+        }
+        // The content box scaled to fit; the clear paints the bars
+        clearBlack();
+        if (view.main == null) {
+            return;
+        }
+        if (view != fitFor) {
+            fitFor = view;
+            fitTexBuffer.put(DualScreenLayout.texCoords(view.main)).position(0);
+            fitRect = view.rect(mainWidth, mainHeight);
+        }
+        // GL's y runs up
+        drawCrop(fitTexBuffer, fitRect[0], mainHeight - fitRect[1] - fitRect[3], fitRect[2], fitRect[3]);
+    }
+
+    private void setUpAnalysis() {
+        analysisProgram = createProgram(VERTEX_SHADER, ANALYSIS_FRAGMENT_SHADER);
+        if (analysisProgram == 0) {
+            analysisFailed("shader");
+            return;
+        }
+        analysisPositionHandle = GLES20.glGetAttribLocation(analysisProgram, "a_Position");
+        analysisTexCoordHandle = GLES20.glGetAttribLocation(analysisProgram, "a_TexCoord");
+        analysisTexMatrixHandle = GLES20.glGetUniformLocation(analysisProgram, "u_TexMatrix");
+        analysisPixelXHandle = GLES20.glGetUniformLocation(analysisProgram, "u_PixelX");
+
+        int[] ids = new int[1];
+        GLES20.glGenTextures(1, ids, 0);
+        analysisTextureId = ids[0];
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, analysisTextureId);
+        GLES20.glTexImage2D(GLES20.GL_TEXTURE_2D, 0, GLES20.GL_RGBA, ANALYSIS_W, ANALYSIS_H, 0,
+                GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, null);
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_NEAREST);
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_NEAREST);
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE);
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE);
+        GLES20.glGenFramebuffers(1, ids, 0);
+        analysisFbo = ids[0];
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, analysisFbo);
+        GLES20.glFramebufferTexture2D(GLES20.GL_FRAMEBUFFER, GLES20.GL_COLOR_ATTACHMENT0,
+                GLES20.GL_TEXTURE_2D, analysisTextureId, 0);
+        int status = GLES20.glCheckFramebufferStatus(GLES20.GL_FRAMEBUFFER);
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
+        if (status != GLES20.GL_FRAMEBUFFER_COMPLETE) {
+            analysisFailed("framebuffer status 0x" + Integer.toHexString(status));
+        }
+    }
+
+    // Without detection the stream is split always, as before; never a black screen
+    private void analysisFailed(String why) {
+        LimeLog.warning("Dual screen: layout detection is off (" + why + "); splitting over both displays");
+        releaseAnalysis();
+        detector.giveUp();
+    }
+
+    // A few times per second, never per frame: one small draw and one GRID_W * GRID_H byte readback
+    private void analyse() {
+        // Drop an older error, so only this pass is judged
+        GLES20.glGetError();
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, analysisFbo);
+        GLES20.glViewport(0, 0, ANALYSIS_W, ANALYSIS_H);
+        GLES20.glUseProgram(analysisProgram);
+        GLES20.glVertexAttribPointer(analysisPositionHandle, 2, GLES20.GL_FLOAT, false, 0, quadBuffer);
+        GLES20.glVertexAttribPointer(analysisTexCoordHandle, 2, GLES20.GL_FLOAT, false, 0, analysisTexBuffer);
+        GLES20.glEnableVertexAttribArray(analysisPositionHandle);
+        GLES20.glEnableVertexAttribArray(analysisTexCoordHandle);
+        GLES20.glUniformMatrix4fv(analysisTexMatrixHandle, 1, false, texMatrix, 0);
+        // One video pixel to the right, after the texture matrix
+        GLES20.glUniform2f(analysisPixelXHandle, texMatrix[0] / DualScreenLayout.VIDEO_W, texMatrix[1] / DualScreenLayout.VIDEO_W);
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
+        GLES20.glBindTexture(GL_TEXTURE_EXTERNAL_OES, videoTextureId);
+        GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
+        GLES20.glReadPixels(0, 0, ANALYSIS_W, ANALYSIS_H, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, analysisCells);
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
+        int error = GLES20.glGetError();
+        if (error != GLES20.GL_NO_ERROR) {
+            analysisFailed("GL error 0x" + Integer.toHexString(error));
+            return;
+        }
+        String change = detector.check(analysisCells);
+        if (change != null) {
+            LimeLog.info("Dual screen: " + change);
+        }
     }
 
     private void updateSecondEglSurface() {
@@ -284,14 +443,20 @@ public class DualScreenRenderer implements GLSurfaceView.Renderer, SurfaceTextur
         secondEglFor = null;
     }
 
-    private void drawCrop(FloatBuffer texCoords, int width, int height) {
-        GLES20.glViewport(0, 0, width, height);
-        if (!frameLatched) {
-            // Nothing decoded yet: show black, not whatever the buffer held
-            GLES20.glClearColor(0f, 0f, 0f, 1f);
-            GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
+    // The whole surface, whatever the viewport
+    private void clearBlack() {
+        GLES20.glClearColor(0f, 0f, 0f, 1f);
+        GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
+    }
+
+    // Draws the crop into the viewport x, y, width, height; null texCoords draw black
+    private void drawCrop(FloatBuffer texCoords, int x, int y, int width, int height) {
+        if (texCoords == null || !frameLatched) {
+            // Nothing to show or nothing decoded yet: black, not whatever the buffer held
+            clearBlack();
             return;
         }
+        GLES20.glViewport(x, y, width, height);
         GLES20.glUseProgram(program);
         GLES20.glVertexAttribPointer(positionHandle, 2, GLES20.GL_FLOAT, false, 0, quadBuffer);
         GLES20.glVertexAttribPointer(texCoordHandle, 2, GLES20.GL_FLOAT, false, 0, texCoords);

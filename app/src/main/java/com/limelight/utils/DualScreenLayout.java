@@ -99,6 +99,21 @@ public final class DualScreenLayout {
     }
 
     /**
+     * Where a w x h picture goes in a viewW x viewH view when it is scaled to fit, centred, aspect
+     * kept: {x, y, width, height} in view pixels.
+     */
+    public static int[] fitRect(int w, int h, int viewW, int viewH) {
+        int fitW = viewW, fitH = viewH;
+        // Cross products, so a picture of the view's own aspect fills it exactly
+        if ((long) w * viewH > (long) h * viewW) {
+            fitH = Math.max(1, Math.round((float) viewW * h / w));
+        } else {
+            fitW = Math.max(1, Math.round((float) viewH * w / h));
+        }
+        return new int[] {(viewW - fitW) / 2, (viewH - fitH) / 2, fitW, fitH};
+    }
+
+    /**
      * Texture coordinates of {@code crop} for a triangle strip over the quad
      * {-1,-1, 1,-1, -1,1, 1,1}, before the SurfaceTexture transform matrix: (0,0) is the
      * bottom-left of the upright video, (1,1) its top-right.

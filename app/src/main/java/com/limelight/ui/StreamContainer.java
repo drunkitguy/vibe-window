@@ -8,6 +8,7 @@ import android.opengl.GLSurfaceView;
 import android.util.AttributeSet;
 import android.view.Display;
 import android.view.KeyEvent;
+import android.view.MotionEvent;
 import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
@@ -20,6 +21,7 @@ import android.widget.FrameLayout;
 import com.limelight.Game;
 import com.limelight.LimeLog;
 import com.limelight.preferences.PreferenceConfiguration;
+import com.limelight.utils.DualScreenDetector;
 import com.limelight.utils.DualScreenLayout;
 import com.limelight.utils.DualScreenRenderer;
 import com.limelight.utils.Stereo3DRenderer;
@@ -51,6 +53,9 @@ public class StreamContainer extends FrameLayout implements SurfaceHolder.Callba
     private PreferenceConfiguration prefConfig;
     private Stereo3DRenderer mStereoRenderer;
     private DualScreenRenderer mDualRenderer;
+    private DualScreenDetector mDualDetector;
+    // Whether the second display's current gesture goes to the host
+    private boolean dualSecondGesture;
     private Presentation mDualPresentation;
     private boolean dualScreenMainTop = true;
 
@@ -112,7 +117,8 @@ public class StreamContainer extends FrameLayout implements SurfaceHolder.Callba
         }
     }
 
-    // One GL context draws the main display's crop here and the other crop into a Presentation
+    // One GL context draws the main display's crop here and the other crop into a Presentation.
+    // Until the stream shows the two-window layout, the content is here alone and the Presentation is black.
     private void initDualScreen(Context context, LayoutParams childParams) {
         // Game.onCreate picked a display other than its own and turns the mode off without one
         Display secondDisplay = game.getDualScreenDisplay();
@@ -122,12 +128,13 @@ public class StreamContainer extends FrameLayout implements SurfaceHolder.Callba
         secondDisplay.getRealSize(secondSize);
         // The larger display shows the top crop
         dualScreenMainTop = DualScreenLayout.isTopDisplay(mainSize.x, mainSize.y, secondSize.x, secondSize.y);
-        int[] mainCrop = getDualScreenMainCrop();
+        int[] mainCrop = dualScreenMainTop ? DualScreenLayout.TOP_CROP : DualScreenLayout.BOTTOM_CROP;
         int[] secondCrop = dualScreenMainTop ? DualScreenLayout.BOTTOM_CROP : DualScreenLayout.TOP_CROP;
+        mDualDetector = new DualScreenDetector(dualScreenMainTop);
 
         GLSurfaceView glSurfaceView = new GLSurfaceView(context);
         glSurfaceView.setEGLContextClientVersion(2);
-        mDualRenderer = new DualScreenRenderer(glSurfaceView, this, game::onDualScreenVideoLost, mainCrop, secondCrop);
+        mDualRenderer = new DualScreenRenderer(glSurfaceView, this, game::onDualScreenVideoLost, mainCrop, secondCrop, mDualDetector);
         glSurfaceView.setRenderer(mDualRenderer);
         glSurfaceView.setRenderMode(GLSurfaceView.RENDERMODE_WHEN_DIRTY);
         mSurfaceView = glSurfaceView;
@@ -152,8 +159,14 @@ public class StreamContainer extends FrameLayout implements SurfaceHolder.Callba
                 mDualRenderer.setSecondSurface(null, 0, 0);
             }
         });
-        // The second display never gets the user's touch mode: its touches go out as direct touch
-        secondView.setOnTouchListener((view, event) -> game.sendDualScreenTouch(event, dualScreenMainTop, view));
+        // The second display never gets the user's touch mode: its touches go out as direct touch.
+        // While it is black it ignores them; a gesture keeps the answer it started with, so the host gets every up.
+        secondView.setOnTouchListener((view, event) -> {
+            if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+                dualSecondGesture = mDualDetector.view().dual;
+            }
+            return dualSecondGesture && game.sendDualScreenTouch(event, dualScreenMainTop, view);
+        });
 
         mDualPresentation.setContentView(secondView);
         try {
@@ -168,9 +181,16 @@ public class StreamContainer extends FrameLayout implements SurfaceHolder.Callba
         return dualScreenMainTop;
     }
 
-    // The crop the main display shows (dual screen only)
-    public int[] getDualScreenMainCrop() {
-        return dualScreenMainTop ? DualScreenLayout.TOP_CROP : DualScreenLayout.BOTTOM_CROP;
+    // What the main display shows now and how its points map to the video (dual screen only); any thread
+    public DualScreenDetector.View getDualScreenView() {
+        return mDualDetector.view();
+    }
+
+    // The decoder (re)started (dual screen only); any thread
+    public void resetDualScreenDetection() {
+        if (mDualRenderer != null) {
+            mDualRenderer.resetDetection();
+        }
     }
 
     // --- Aspect Ratio and Scaling Logic ---

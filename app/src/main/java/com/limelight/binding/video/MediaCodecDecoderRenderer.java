@@ -631,6 +631,11 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
 
         videoDecoder.configure(format, renderTarget, null, 0);
 
+        if (prefs.dualScreen && activity instanceof com.limelight.Game) {
+            // Dual screen: the layout is detected anew for each (re)started decoder
+            ((com.limelight.Game) activity).onDualScreenDecoderStart();
+        }
+
         // As in 1.2.2: hint the stream frame rate on the surface after configure
         try { applySurfaceFrameRate(renderTarget, targetFps); } catch (Throwable ignored) {}
 

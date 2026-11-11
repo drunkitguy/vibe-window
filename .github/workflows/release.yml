@@ -187,6 +187,10 @@ jobs:
 
             Defaults: Auto resolution and frame rate (match the display), virtual display on, "Show only the app window" on, frame pacing Balanced, Motion on.
 
+            **Fixes in 1.5.1**
+
+            - Dual screen no longer cuts every app in half. The stream starts on the main screen alone, scaled to fit, with the second screen black. It splits over both screens only once the picture shows the two-window layout (a 1920x1080 window on top, a 1240x1080 window below it on the left, black beside that), and goes back to the main screen when that layout is gone. No new host is needed. The client decides from the picture, so an app that happens to look like that layout is split too.
+
             **New in 1.5.0**
 
             - Dual screen (AYN Thor and other devices with a second display): a new setting next to the window-only options. It asks the host for a 1920x2160 stream and shows the top 1920x1080 on the main screen and the bottom 1240x1080 on the second screen, 1:1. Taps on either screen go to the matching spot on the PC, so the bottom screen drives a second app window such as an Eden Duo companion. Full external display, 3D, picture-in-picture and HDR are off while it is on. Off by default, and only shown when a second display is present.

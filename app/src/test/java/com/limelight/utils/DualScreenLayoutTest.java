@@ -154,6 +154,20 @@ public class DualScreenLayoutTest {
     }
 
     @Test
+    public void fitRectKeepsTheAspectAndCentres() {
+        // The view's own aspect fills it exactly, at any size
+        assertArrayEquals(new int[] {0, 0, 1920, 1080}, DualScreenLayout.fitRect(1920, 1080, 1920, 1080));
+        assertArrayEquals(new int[] {0, 0, 1920, 1080}, DualScreenLayout.fitRect(1280, 720, 1920, 1080));
+        // Taller than the view: bars left and right
+        assertArrayEquals(new int[] {480, 0, 960, 1080}, DualScreenLayout.fitRect(1920, 2160, 1920, 1080));
+        // Wider than the view: bars above and below
+        assertArrayEquals(new int[] {0, 191, 1240, 698}, DualScreenLayout.fitRect(1920, 1080, 1240, 1080));
+        // Never empty
+        assertArrayEquals(new int[] {959, 0, 2, 1080}, DualScreenLayout.fitRect(4, 2160, 1920, 1080));
+        assertArrayEquals(new int[] {0, 539, 1920, 1}, DualScreenLayout.fitRect(1920, 1, 1920, 1080));
+    }
+
+    @Test
     public void texCoordsSelectTheCropBeforeTheMatrix() {
         // Strip order BL, BR, TL, TR; v = 1 is the top of the upright video
         assertArrayEquals(new float[] {0f, 0.5f, 1f, 0.5f, 0f, 1f, 1f, 1f},
