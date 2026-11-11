@@ -380,7 +380,7 @@ Doable in this Linux container now (no game, no Windows, no Thor):
 | T1 | TotK package skeleton: build gate, fail-closed reader, tests; Linux `.so` and Windows DLL; `.dsmod.zip` | H1a (builder patch) | done: `2c482b6` (+ plan `911aed8`); gcc/clang/MinGW builds and ctest pass (MinGW under wine), single export, package + wine probe pass; critic SATISFIED round 3 |
 | H1b | eden-cli composite layout: `--window-rect`, `--aux-rect`, borderless, aux not focusable | H1a | done: `afe952e`, patch 0004 adds `--window-rect`/`--aux-rect` (borderless, hidden until placed), non-focusable aux, 640x360 main floor, 32767 bound, ledger rows; parser tests pass natively and under wine; SDL and harness code compile-checked only in H1c; critic SATISFIED round 3 |
 | H1d | eden-cli uses the Eden Qt config: `qt-config.ini`, then the game's `custom/<program id>.ini` (use_global), read-only (§H1d) | H1b | done: patch `0013`; `qt_config_test` passes natively and under wine (own config, global, per-game, no write or create, absent, empty and garbage files, `[UI]` external content dirs, `DisabledAddOns` replaced, `[UI]` screenshot dir); `yuzu.cpp` and `dsmod_harness.cpp` syntax-checked only (g++ and MinGW), run on the PC in H1c check 6; the Qt read sits in the Duo hook `DSModHarness::ApplyEdenQtConfig`, `.upstream/DIVERGENCES.md` row 30; `-c` keeps eden-cli's own config and refuses Eden Qt's files (tested); accounts re-read from Eden Qt's NAND as Eden Qt does (Qt config only); data dirs follow Eden Qt: factories rebuilt after the Qt reads, as Eden Qt does (§H1d) |
-| H3d | Vibe Window client: Dual screen stays on the main display until the two-window layout is seen in the picture (§H3d) | H3 | coded, critic rounds 1-2 fixed: `DualScreenDetector` + renderer analysis pass, app 1.5.1; `DualScreenLayoutTest` 14 + `DualScreenDetectorTest` 27 pass with javac/JUnit, `glslangValidator` links both shaders, android-all type-check of the changed files; Gradle and the Thor untested |
+| H3d | Vibe Window client: Dual screen stays on the main display until the two-window layout is seen in the picture (§H3d) | H3 | coded, critic rounds 1-3 fixed: `DualScreenDetector` + renderer analysis pass, app 1.5.1; `DualScreenLayoutTest` 14 + `DualScreenDetectorTest` 28 pass with javac/JUnit, `glslangValidator` links both shaders, android-all type-check of the changed files; Gradle and the Thor untested |
 | T2a | Retarget the skeleton to 1.2.0 (`kTargetBuild`, data file name, tests) | T1 | done: `d175a18`; 1.2.0 build id and data file; critic SATISFIED (with T3s) |
 | T3a'.1 | Eden Duo patch 0009 (zstd + `ZsDic` in the runtime's romfs reader, §T3a' A) + icon keys as `romfs:` paths (§T3a' B2) | T4 | done: 64a646e, critic SATISFIED round 1, Windows CI run 41379288233 green (198 cases); real romfs untested (T8a) |
 | T3a'.2 | Item names from MSBT (B1) + the one-shot texture dump for T8a (B5) | T3a'.1 | done: 2bdcb00 (patches 0010-0011), critic SATISFIED round 4, Eden CI 41396378620 + companion CI green; real romfs untested (T8a) |
@@ -903,37 +903,54 @@ Facts:
 - The stream mode cannot change in a session and the user must not need a new host, so the
   request stays `1920x2160x60` (`Game.java:419`) and the client decides from the picture alone.
   The host paints every pixel outside the app's windows pure black (§H2 finding 2).
+- The one dual-screen companion in this repository is nearly black itself (critic round 3). Its
+  canvas is `#FF0A0E0D`, RGB 10,14,13 (`packages/TearsOfTheKingdom/dualscreen/manifest.json:9`,
+  token `bg` in §R5 Tokens): 14/255. Its panel fill `#E6121815` over the canvas is 17,23,20
+  (token `panel`): 23/255. Both are under the detector's 24/255, so in the companion window only
+  what is brighter is content: frames (`edge`, 62,74,54), text and icons.
+- What the companion always draws (widgets without `need_bind`, from the manifest): on `home`
+  text and filled marks only from `40,8` to `1200,186` (the tab labels and the two glyph buttons
+  `manifest.json:2135-2228`, the two status marks `:1025-1076`); below that panel frames (the
+  bottom bar `0,940,1240,108`, `:1642-1652`) and widgets bound to game values. On `abilities`
+  the top bar and one frame `16,924,1208,72` (`:3013-3023`); on `map` the top bar, 76 px, and
+  the map picture. The widget runtime is not in this repository: that a `rect`'s `color` is a 2 px frame
+  is read from the token table, not from code.
+- The cover "Companion unavailable" (`manifest.json:2246-2290`, the same on `abilities`
+  `:3175-3219` and `map` `:4937-4981`) is shown while `totk.ready` is not 1: wrong build, module
+  error, checksum or platform (§T1, `PLAN.md:536`). It is a full-canvas rect in the canvas colour
+  and two labels inside `100,350,1040,420`. Its lit area is at most 1040x420; a window in the
+  bottom crop needs 828x720 (item 2 below).
 
 What the code does (client only, no new setting, no new dependency):
 1. **Grid.** About 4 times a second, never per frame: a check is scheduled 250 ms
-   (`CHECK_INTERVAL_MS` `DualScreenDetector.java:24`) after a newly latched frame
+   (`CHECK_INTERVAL_MS` `DualScreenDetector.java:29`) after a newly latched frame
    (`DualScreenRenderer.java:286`, `scheduleCheck` `:363-368`) and runs on the GL thread as a
    queued event, not as a frame (`checkLayout` `:371-385`). It draws the video into a 120x540 RGBA
    framebuffer and reads it back: 259,200 bytes, one per 4x4 px cell, 0 or 255 (`analyse`
    `:388-415`, shader `:54-71`). A cell has content when a colour channel is above 24/255
-   (`BLACK_THRESHOLD` `DualScreenDetector.java:23`). Nothing is drawn or swapped for a check unless
+   (`BLACK_THRESHOLD` `DualScreenDetector.java:28`). Nothing is drawn or swapped for a check unless
    the answer changed (`DualScreenRenderer.java:382-384`).
-2. **Signature and box** (`DualScreenDetector.check`, `DualScreenDetector.java:137-193`): the
+2. **Signature and box** (`DualScreenDetector.check`, `DualScreenDetector.java:142-198`): the
    bounding box of the content cells, and the two-window signature: no content in the dead zone
    (`x >= 1240, y >= 1080`, a cell in neither crop), and in `TOP_CROP` and in `BOTTOM_CROP` content
-   whose extent spans at least 2/3 of the crop's width and of its height (`spans` `:227-230`,
-   `WINDOW_NUM`/`WINDOW_DEN` `:35-36`). Only the extent counts, so a window that is dark inside
+   whose extent spans at least 2/3 of the crop's width and of its height (`spans` `:232-235`,
+   `WINDOW_NUM`/`WINDOW_DEN` `:40-41`). Only the extent counts, so a window that is dark inside
    passes.
 3. **State.** SINGLE at every start, new GL context (`DualScreenRenderer.java:250`) and decoder
    (re)start (`MediaCodecDecoderRenderer.java:634-637` -> `Game.onDualScreenDecoderStart` ->
    `DualScreenRenderer.resetDetection`). SINGLE -> DUAL after the signature on 3 checks in a row
    (about 0.75 s after the first frame that shows it); DUAL -> SINGLE after dead-zone content on
    3 checks in a row, or content but none in `BOTTOM_CROP` on 8 (2 s). An all-black frame changes
-   nothing, counts included (`DualScreenDetector.java:160`). Each change is logged once:
+   nothing, counts included (`DualScreenDetector.java:165`). Each change is logged once:
    `Dual screen: <reason>` (`DualScreenRenderer.java:411-414`).
 4. **SINGLE.** The main display is cleared to black and the content box is drawn into a centred
    viewport of its own aspect (`DualScreenLayout.fitRect`, `DualScreenRenderer.java:311-319`).
-   The box starts as the whole video (`DualScreenDetector.java:88,94`), so the first frame is
+   The box starts as the whole video (`DualScreenDetector.java:93,99`), so the first frame is
    shown at once, both halves at half size, and a picture the grid misreads as black is still
    shown. The second display gets one black frame per EGL surface and per end of a split and is
    then left alone (`secondBlack`, `DualScreenRenderer.java:297-301,465`); it ignores touches
    (`StreamContainer.java:164-169`). DUAL draws as before.
-5. **Box rule** (`updateBox`, `DualScreenDetector.java:195-217`): the drawn box never shows less
+5. **Box rule** (`updateBox`, `DualScreenDetector.java:200-222`): the drawn box never shows less
    than the content. Content outside it enlarges it to the union of the two on that check. It
    gets smaller only to a box that was measured the same on 3 checks in a row and has at least 1/4
    of the drawn box's area; the check that enlarges the box is the first of the 3 when the content
@@ -943,7 +960,7 @@ What the code does (client only, no new setting, no new dependency):
 6. **Touch and mouse.** `getDualScreenMainCrop` is gone. Direct touch, contact area and both
    absolute-mouse paths ask `StreamContainer.getDualScreenView()` at every event
    (`Game.java:2610,2718,3512`, `AbsoluteTouchContext.java:136`) and map through the drawn rect
-   (`DualScreenDetector.View`, `DualScreenDetector.java:49-84`); a point on a bar lands on the
+   (`DualScreenDetector.View`, `DualScreenDetector.java:54-89`); a point on a bar lands on the
    content edge. Pointer ids keep H3's shares: 0-4 for the display that shows the top crop when
    split, 5-9 for the one that shows the bottom crop, in SINGLE too (`Game.java:2815`, `:3579`),
    so the two displays never share an id when the split starts while a finger is down. A
@@ -952,7 +969,7 @@ What the code does (client only, no new setting, no new dependency):
    on a smaller main display, where a gesture begun in the split keeps the crop mapping
    (`Game.java:3534-3543`).
 7. **Threads.** The GL thread replaces one `volatile` immutable `View`
-   (`DualScreenDetector.java:88,191`); UI and input threads only read it. No lock, and no
+   (`DualScreenDetector.java:93,196`); UI and input threads only read it. No lock, and no
    allocation per frame (the fit rect and texture coordinates are remade only for a new `View`,
    `DualScreenRenderer.java:313-317`).
 8. **Failure.** If the shader, the framebuffer (`DualScreenRenderer.java:322-353`) or the pass
@@ -985,12 +1002,22 @@ Decisions the request left open (coder):
   when that is the smaller one (`Game.java:3535-3543`), so a split that ends in the middle of a
   gesture still sends its up.
 - **Checks without new frames** go on only while a debounce is running
-  (`DualScreenDetector.pending`, `DualScreenDetector.java:187`, `DualScreenRenderer.java:378-381`):
+  (`DualScreenDetector.pending`, `DualScreenDetector.java:192`, `DualScreenRenderer.java:378-381`):
   a still picture that was checked and settled costs nothing, and an all-black still picture is
   not checked again. The check is a queued event and not part of `onDrawFrame`, so a frame that
   arrives less than 250 ms after the last check is still checked when no other frame follows,
   and no frame is drawn twice for a check.
 - Changes of the content box are logged too (`Dual screen: content box [x, y, w, h]`).
+- **The threshold stays 24/255, and the cover is not split** (critic round 3; the other way was a
+  threshold under 14/255, which makes the companion's canvas content). A split starts and lasts
+  only while the dead zone is empty, and the dead zone lies against the game picture's bottom
+  edge (`y = 1080`, `x >= 1240`): one cell over the threshold there on 3 checks in a row ends the
+  split, so encoder error beside a bright, moving edge would switch the layout during play. And a
+  decoder path that shows the host's black as 16/255 (limited range not expanded) would make every
+  pixel content under a threshold of 14 or less: no split and no fit for any app. Neither is
+  measured; 24/255 has room for both, a threshold under 14/255 for neither. What 24/255 costs is
+  known and bounded: the cover (known limit below) and a split that waits for lit content on the
+  companion page. To be decided again with the Thor's numbers (`UNVERIFIED` below).
 - **The shrink debounce stays 3 checks** (`BOX_CHECKS`), as the packet's "debounce time". A
   longer one makes the dark-scene re-fit below rarer and the first fit after launch later.
 
@@ -1000,8 +1027,18 @@ Known limits:
   display whose picture is dark in its bottom-right 680x1080.
 - A dual-screen app stays on the main display, both windows fitted at half size, for as long as
   its game picture or its companion picture is lit over less than 2/3 of its width or height (a
-  centred logo, a dark scene). While the game window is black the companion is there alone. Once
-  split, it stays split until the DUAL -> SINGLE rules end it.
+  centred logo, a dark scene, a companion page with little on it). The companion's canvas and
+  panels do not count (Facts): on `home` without game values the height comes from the panel
+  frames alone, on `map` from the map picture. While the game window is black the companion is
+  there alone. Once split, it stays split until the DUAL -> SINGLE rules end it: one lit cell in
+  the bottom crop is enough to keep it.
+- **"Companion unavailable" never splits.** With a game build the module does not support, or a
+  module error, the companion shows its cover, lit over at most 1040x420. The stream stays SINGLE
+  for the whole session: content box at most `0,0,1920,1852`, drawn `400,0,1120,1080` on the
+  Thor's 1920x1080 screen. The game is 1120x630 there (58%, a little more when the message is
+  short), the message is under it, the bottom screen is black. 1.5.0 showed the game full-screen
+  and the message on the bottom screen. Pinned by
+  `DualScreenDetectorTest.theCompanionUnavailableCoverNeverSplits`.
 - Every app is still streamed as the 1920x2160 composite. A window that fills the virtual
   display is a 960x1080 picture on the Thor's 1920x1080 screen.
 - A window with less than 1/4 of the area of the box drawn before it stays that small on the
@@ -1027,6 +1064,17 @@ Known limits:
   see Acceptance), that the pass works from a queued event, and what it costs (one 120x540 draw
   and one 259 KB `glReadPixels` at most four times a second);
 - the 24/255 threshold against the real encoder's noise on black, and against dark scenes;
+- what the encoder leaves on the host's black beside the game picture's edge, and the level the
+  decoder gives that black (the two numbers that decide whether the threshold can go under
+  14/255 and the cover can split);
+- that the working companion's `home` page is content over 828x720 after the encoder. Without
+  game values the height rests on its 2 px frames: a frame row is at most half of a cell's
+  sample (the cell's inner 2x2 pixels), so on a 23/255 panel it must keep about a third of its
+  74 levels, and a frame on a cell's outer rows is not seen. With a save loaded the bound widgets
+  add to it;
+- the panel fill at 23/255, one level under the threshold: encoder noise can make panel cells
+  content on some checks. Before the split that moves the box and the spans; it cannot end a
+  split;
 - a console window or launcher phase at launch (expected: shown in the whole video at half
   scale, then the box follows the game window after 3 checks);
 - whether the host ever draws a cursor in the dead zone;
@@ -1037,22 +1085,31 @@ Known limits:
 Acceptance (coder, here; no Android SDK in this container, as in §H3):
 1. `javac --release 11 -Xlint:all -cp <junit>:<hamcrest>` of `DualScreenLayout.java`,
    `DualScreenDetector.java` and both tests, then `org.junit.runner.JUnitCore
-   com.limelight.utils.DualScreenLayoutTest com.limelight.utils.DualScreenDetectorTest`: OK, 41
+   com.limelight.utils.DualScreenLayoutTest com.limelight.utils.DualScreenDetectorTest`: OK, 42
    tests. `DualScreenDetectorTest` builds the grids of the exact layout, an all-black frame, a
    16:9 game at `0,540,1920,1080` (that box exactly), a window filling 1920x2160, content only in
    one crop, one cell in the dead zone, a spinner and a splash across the seam, the 2/3 bound cell
    by cell, both debounce directions with an interrupted run and a second round, the four
-   debounce durations, the all-black hold of every count, the box rules (jitter, floor, growth at
+   debounce durations, one lit cell in the bottom crop keeping the split, the "Companion
+   unavailable" cover (never split, its box and drawn rect), the all-black hold of every count,
+   the box rules (jitter, floor, growth at
    once and the way down from it, blinking content, any shape), `pending`, `reset`, and the
    mapping with points on the bars for both answers of `isTopDisplay`. One test feeds 400 seeded
    random sequences of checks drawn from 24 grids and then holds the last picture: a running debounce ends within
    8 checks, and once `pending()` is false the same picture changes nothing.
-2. 120 hand-written mutants of `DualScreenDetector` and `fitRect` against those tests (round 2
-   added the critic's: span terms, counts cleared on black, every debounce constant): 4 survive,
-   all equivalent (`inside` without `x >= crop[0]`, which is 0 for both crops; `fitRect` with
-   `>=`, where both branches give the view's own size; `smallerBox` also set when the box grows,
-   where it is set or unused right after; `reset` also clearing the two counts that entering DUAL
-   clears). The count is of this list, not of every possible mutant.
+2. 124 hand-written mutants of `DualScreenDetector` and `fitRect` against those tests (round 2
+   added the critic's: span terms, counts cleared on black, every debounce constant; round 3 the
+   end of a split on `bottom[2] <= 0`, `< 1` and on `!spans(bottom, ...)`, and a halved height
+   bound): 4 survive, all equivalent (`inside` without `x >= crop[0]`, which is 0 for both crops;
+   `fitRect` with `>=`, where both branches give the view's own size; `smallerBox` also set when
+   the box grows, where it is set or unused right after; `reset` also clearing the two counts
+   that entering DUAL clears). The count is of this list, not of every possible mutant.
+   Round 3 also ran the critic's generated set (one operator, index, constant or statement
+   changed per mutant, in `DualScreenDetector` from `View`'s constructor on and in `fitRect`):
+   337 mutants, 324 killed, 7 do not compile, 6 survive, all equivalent (the empty extent's `-1`
+   as `-2`, twice; `all[3] < 0` and `bottom[3] < 0` for `[2]`, which are set together; `inside`
+   with `y >= crop[0]`, where a cell outside `TOP_CROP` already has `y >= 1080`; the `fitRect`
+   `>=` above). Before round 3's assertion 9 survived: these 6 and 3 on the end of a split.
 3. `glslangValidator -l` on the vertex shader and the analysis fragment shader as the source
    builds them (`CELL` 4, threshold 0.09411765): compiles and links, exit 0.
 4. Type-check of `DualScreenRenderer`, `StreamContainer` and `AbsoluteTouchContext` against
@@ -1065,9 +1122,16 @@ Acceptance (coder, here; no Android SDK in this container, as in §H3):
 
 Checks (user, Thor, APK 1.5.1): a normal game with Dual screen on is whole on the main display
 and the bottom screen is black; "TotK duo" starts with both windows on the main display at half
-size, then splits as in 1.5.0 about a second after both windows have drawn; taps on the main
-display hit the right spot in both cases; the log has one `Dual screen: two-window layout seen`
-line per launch and no `layout detection is off`. In the normal game also a dark scene and the
+size, then splits as in 1.5.0 about a second after the game picture is lit and the companion's
+`home` page is up (its frames, text and icons; the dark canvas alone does not count); taps on
+the main display hit the right spot in both cases; the log has one
+`Dual screen: two-window layout seen` line per launch and no `layout detection is off`. If it
+does not split: say which companion page was up and whether a save was loaded, and send the
+`Dual screen: content box` lines. With a game build the module does not support (the companion
+says "Companion unavailable"): expected is the known limit, the game at about 58% on the main
+display with the message under it, the bottom screen black, no `two-window layout seen` line;
+say if that state must split too (then the threshold goes under 14/255, with the risk in
+Decisions). In the normal game also a dark scene and the
 pause menu: say if the picture moves or zooms there (known limit; the log then has
 `Dual screen: content box` lines).
 

@@ -281,6 +281,26 @@ public class DualScreenDetectorTest {
         d = inDual();
         assertNull(feed(d, grid(BOTTOM), 50));
         assertTrue(d.view().dual);
+
+        // Gone means no content at all: one lit cell of a dark companion page keeps the split
+        d = inDual();
+        assertNull(feed(d, grid(TOP, new int[] {0, 1080, 4, 4}), 2 * DualScreenDetector.NO_BOTTOM_CHECKS));
+        assertTrue(d.view().dual);
+    }
+
+    // The TotK companion while its module is not ready: the canvas (14/255) is black to the grid,
+    // and the two labels of "Companion unavailable" lie inside 100,350,1040,420 of the window
+    // (packages/TearsOfTheKingdom/dualscreen/manifest.json). Kept on the main display, BLACK_THRESHOLD says why.
+    @Test
+    public void theCompanionUnavailableCoverNeverSplits() {
+        // Every cell the labels can light
+        int[] labels = {100, 1080 + 348, 1040, 424};
+        assertNeverSplits(TOP, labels);
+
+        DualScreenDetector d = new DualScreenDetector(true);
+        assertEquals("content box [0, 0, 1920, 1852]", feed(d, grid(TOP, labels), DualScreenDetector.BOX_CHECKS));
+        // The game at 58% on a 1920x1080 main display, the message under it
+        assertArrayEquals(new int[] {400, 0, 1120, 1080}, d.view().rect(1920, 1080));
     }
 
     @Test

@@ -19,7 +19,12 @@ public final class DualScreenDetector {
     public static final int GRID_W = DualScreenLayout.VIDEO_W / CELL;
     public static final int GRID_H = DualScreenLayout.VIDEO_H / CELL;
     // A cell has content when a colour channel is above this (0..1): the host paints pure black
-    // around the windows and the codec adds noise to it
+    // around the windows and the codec adds noise to it.
+    // shortcut: a dark window is black too. The TotK companion's canvas is 14/255 and its panel
+    // fill 23/255 (packages/TearsOfTheKingdom/dualscreen/manifest.json "background", docs/PLAN.md
+    // H3d), so only its frames, text and icons are content, and its "Companion unavailable" cover
+    // (two labels, at most 420 px tall) never splits. Upgrade, to a threshold under 14/255, when
+    // the Thor has shown what the encoder leaves on the host's black beside a bright window edge.
     public static final float BLACK_THRESHOLD = 24f / 255;
     public static final int CHECK_INTERVAL_MS = 250;
 
