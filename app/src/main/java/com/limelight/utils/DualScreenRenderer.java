@@ -8,7 +8,6 @@ import android.opengl.EGLDisplay;
 import android.opengl.EGLSurface;
 import android.opengl.GLES20;
 import android.opengl.GLSurfaceView;
-import android.os.SystemClock;
 import android.view.Surface;
 
 import com.limelight.LimeLog;
@@ -26,8 +25,8 @@ import javax.microedition.khronos.opengles.GL10;
  * Dual screen: the decoder writes one SurfaceTexture; the GLSurfaceView's single context draws
  * one crop to the GLSurfaceView and the other crop to a second EGL window surface (the
  * Presentation's SurfaceView on the other display), both from the same latched frame, 1:1.
- * Until DualScreenDetector has seen the two-window layout, the content box goes to the
- * GLSurfaceView alone, scaled to fit, and the second surface is black.
+ * Until DualScreenDetector has seen the two-window layout, the content box (at first the whole
+ * video) goes to the GLSurfaceView alone, scaled to fit, and the second surface is black.
  */
 public class DualScreenRenderer implements GLSurfaceView.Renderer, SurfaceTexture.OnFrameAvailableListener {
     private static final int GL_TEXTURE_EXTERNAL_OES = 0x8D65;
@@ -79,7 +78,7 @@ public class DualScreenRenderer implements GLSurfaceView.Renderer, SurfaceTextur
     private final int[] mainCrop;
     private final int[] secondCrop;
     private final DualScreenDetector detector;
-    private final Runnable requestRender;
+    private final Runnable postCheck;
     private final FloatBuffer quadBuffer = floats(QUAD_VERTICES);
     private final FloatBuffer mainTexBuffer;
     private final FloatBuffer secondTexBuffer;
@@ -106,10 +105,13 @@ public class DualScreenRenderer implements GLSurfaceView.Renderer, SurfaceTextur
     private Surface secondEglFailedFor;
     private EGLDisplay secondEglDisplay = EGL14.EGL_NO_DISPLAY;
     private EGLSurface secondEglSurface = EGL14.EGL_NO_SURFACE;
+    // The second surface already shows black, so it is not drawn again until the split
+    private boolean secondBlack;
     // Layout detection; analysisFbo is 0 when it is not set up or has failed
     private int analysisProgram, analysisPositionHandle, analysisTexCoordHandle, analysisTexMatrixHandle, analysisPixelXHandle;
     private int analysisFbo, analysisTextureId;
-    private long lastCheckMs;
+    // A check is on its way
+    private boolean checkPosted;
     // The view fitTexBuffer and fitRect were made for
     private DualScreenDetector.View fitFor;
     private int[] fitRect;
@@ -122,7 +124,9 @@ public class DualScreenRenderer implements GLSurfaceView.Renderer, SurfaceTextur
                               Runnable onVideoSurfaceLost, int[] mainCrop, int[] secondCrop,
                               DualScreenDetector detector) {
         this.glSurfaceView = view;
-        this.requestRender = view::requestRender;
+        // UI thread, CHECK_INTERVAL_MS after scheduleCheck: hand the check to the GL thread
+        Runnable check = this::checkLayout;
+        this.postCheck = () -> view.queueEvent(check);
         this.detector = detector;
         this.onSurfaceReadyListener = listener;
         this.onVideoSurfaceLost = onVideoSurfaceLost;
@@ -279,27 +283,22 @@ public class DualScreenRenderer implements GLSurfaceView.Renderer, SurfaceTextur
                 }
                 texture.getTransformMatrix(texMatrix);
                 frameLatched = true;
+                scheduleCheck();
             } catch (RuntimeException e) {
                 // Keep drawing the last latched frame
                 LimeLog.warning("Dual screen: updateTexImage failed: " + e);
             }
         }
 
-        long now = SystemClock.uptimeMillis();
-        if (frameLatched && analysisFbo != 0 && now - lastCheckMs >= DualScreenDetector.CHECK_INTERVAL_MS) {
-            lastCheckMs = now;
-            analyse();
-            // A still picture brings no new frames; keep the checks and their debounce going
-            glSurfaceView.postDelayed(requestRender, DualScreenDetector.CHECK_INTERVAL_MS);
-        }
         // One snapshot for both displays
         DualScreenDetector.View view = detector.view();
 
         updateSecondEglSurface();
-        if (secondEglSurface != EGL14.EGL_NO_SURFACE) {
+        if (secondEglSurface != EGL14.EGL_NO_SURFACE && (view.dual || !secondBlack)) {
             if (EGL14.eglMakeCurrent(eglDisplay, secondEglSurface, secondEglSurface, eglContext)) {
                 drawCrop(view.dual ? secondTexBuffer : null, 0, 0, secondWidth, secondHeight);
                 EGL14.eglSwapBuffers(eglDisplay, secondEglSurface);
+                secondBlack = !view.dual;
             }
             // GLSurfaceView swaps its own surface after this returns, so it must be current again
             EGL14.eglMakeCurrent(eglDisplay, mainDrawSurface, mainReadSurface, eglContext);
@@ -311,9 +310,6 @@ public class DualScreenRenderer implements GLSurfaceView.Renderer, SurfaceTextur
         }
         // The content box scaled to fit; the clear paints the bars
         clearBlack();
-        if (view.main == null) {
-            return;
-        }
         if (view != fitFor) {
             fitFor = view;
             fitTexBuffer.put(DualScreenLayout.texCoords(view.main)).position(0);
@@ -361,6 +357,31 @@ public class DualScreenRenderer implements GLSurfaceView.Renderer, SurfaceTextur
         LimeLog.warning("Dual screen: layout detection is off (" + why + "); splitting over both displays");
         releaseAnalysis();
         detector.giveUp();
+    }
+
+    // One check at most per CHECK_INTERVAL_MS, and none for a picture that was checked and settled
+    private void scheduleCheck() {
+        if (analysisFbo != 0 && !checkPosted) {
+            checkPosted = true;
+            glSurfaceView.postDelayed(postCheck, DualScreenDetector.CHECK_INTERVAL_MS);
+        }
+    }
+
+    // A queued event, not a frame: nothing is drawn or swapped unless the answer changed
+    private void checkLayout() {
+        checkPosted = false;
+        if (analysisFbo == 0 || !frameLatched || !EGL14.eglGetCurrentContext().equals(eglContext)) {
+            return;
+        }
+        DualScreenDetector.View before = detector.view();
+        analyse();
+        if (detector.pending()) {
+            // A still picture brings no new frames, and a running debounce must end
+            scheduleCheck();
+        }
+        if (detector.view() != before) {
+            glSurfaceView.requestRender();
+        }
     }
 
     // A few times per second, never per frame: one small draw and one GRID_W * GRID_H byte readback
@@ -441,6 +462,7 @@ public class DualScreenRenderer implements GLSurfaceView.Renderer, SurfaceTextur
         }
         secondEglSurface = EGL14.EGL_NO_SURFACE;
         secondEglFor = null;
+        secondBlack = false;
     }
 
     // The whole surface, whatever the viewport

@@ -162,9 +162,11 @@ public class DualScreenLayoutTest {
         assertArrayEquals(new int[] {480, 0, 960, 1080}, DualScreenLayout.fitRect(1920, 2160, 1920, 1080));
         // Wider than the view: bars above and below
         assertArrayEquals(new int[] {0, 191, 1240, 698}, DualScreenLayout.fitRect(1920, 1080, 1240, 1080));
-        // Never empty
-        assertArrayEquals(new int[] {959, 0, 2, 1080}, DualScreenLayout.fitRect(4, 2160, 1920, 1080));
-        assertArrayEquals(new int[] {0, 539, 1920, 1}, DualScreenLayout.fitRect(1920, 1, 1920, 1080));
+        // Rounded to the nearest pixel: 1151.6 wide
+        assertArrayEquals(new int[] {384, 0, 1152, 1003}, DualScreenLayout.fitRect(1240, 1080, 1920, 1003));
+        // Never empty: 0.2 px wide, 0.2 px high
+        assertArrayEquals(new int[] {959, 0, 1, 100}, DualScreenLayout.fitRect(4, 2160, 1920, 100));
+        assertArrayEquals(new int[] {0, 539, 100, 1}, DualScreenLayout.fitRect(1920, 4, 100, 1080));
     }
 
     @Test
