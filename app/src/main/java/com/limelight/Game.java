@@ -2811,8 +2811,8 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
         float[] normalizedContactArea = getStreamViewNormalizedContactArea(event, pointerIndex);
         int pointerId = event.getPointerId(pointerIndex);
         if (prefConfig.dualScreen) {
-            // Keep the top display's ids in its share of the host's touch slots
-            pointerId = DualScreenLayout.pointerId(false, pointerId);
+            // Keep the main display's ids in its share of the host's touch slots, also before the split
+            pointerId = DualScreenLayout.pointerId(!streamContainer.isDualScreenMainTop(), pointerId);
             if (pointerId < 0) {
                 return true;
             }

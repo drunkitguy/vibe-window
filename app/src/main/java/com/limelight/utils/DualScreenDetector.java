@@ -36,7 +36,10 @@ public final class DualScreenDetector {
     static final int WINDOW_DEN = 3;
     // shortcut: the content box shrinks only to a box with at least 1/4 of its area, so a spinner
     // on a black loading screen is not blown up; a window that small stays small on the display,
-    // also when it is the first thing shown (the box starts as the whole video).
+    // also when it is the first thing shown (the box starts as the whole video). The box is the
+    // lit pixels, not the window: a normal game whose scene is black along an edge, or lit only in
+    // a region of at least 1/4 of the box (a pause menu on black), for BOX_CHECKS checks is
+    // shifted or zoomed (up to 2x for a box of the display's shape) until the edge lights up again.
     // Upgrade when the host tells the client the window rect.
     static final int SHRINK_MIN_SHARE = 4;
 
@@ -191,21 +194,22 @@ public final class DualScreenDetector {
 
     // The drawn box never shows less than the content: content outside it enlarges it at once.
     // It gets smaller only when the same smaller box, not under the floor, was measured on
-    // BOX_CHECKS checks in a row, so a dark edge that flickers does not make it jitter.
+    // BOX_CHECKS checks in a row, so a dark edge that flickers does not make it jitter. The check
+    // that enlarges it is the first of those when the content is smaller than the new box.
     private boolean updateBox(int[] measured) {
-        if (!contains(box, measured)) {
+        boolean grew = !contains(box, measured);
+        if (grew) {
+            // The measured box is not the one being counted, which lay inside the old box: the count restarts below
             box = union(box, measured);
-            shrinkRun = 0;
-            return true;
         }
         if (Arrays.equals(measured, box) || (long) measured[2] * measured[3] * SHRINK_MIN_SHARE < (long) box[2] * box[3]) {
             shrinkRun = 0;
-            return false;
+            return grew;
         }
         shrinkRun = Arrays.equals(measured, smallerBox) ? shrinkRun + 1 : 1;
         smallerBox = measured;
         if (shrinkRun < BOX_CHECKS) {
-            return false;
+            return grew;
         }
         shrinkRun = 0;
         box = measured;

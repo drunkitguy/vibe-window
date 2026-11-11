@@ -3,6 +3,7 @@ package com.limelight.utils;
 import org.junit.Test;
 
 import java.nio.ByteBuffer;
+import java.util.Random;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
@@ -76,6 +77,7 @@ public class DualScreenDetectorTest {
 
     @Test
     public void theExactLayoutSplitsOnlyAfterTheDebounce() {
+        assertEquals(750, DualScreenDetector.DUAL_CHECKS * DualScreenDetector.CHECK_INTERVAL_MS);
         DualScreenDetector d = new DualScreenDetector(true);
         assertNull(feed(d, DUAL, DualScreenDetector.DUAL_CHECKS - 1));
         assertFalse(d.view().dual);
@@ -126,6 +128,27 @@ public class DualScreenDetectorTest {
         // And it never ends the split
         assertNull(feed(d, BLACK, 50));
         assertTrue(d.view().dual);
+    }
+
+    @Test
+    public void anAllBlackFrameKeepsEveryCount() {
+        // In the middle of a dead-zone run: the next check with it completes the run
+        DualScreenDetector d = inDual();
+        assertNull(feed(d, grid(FULL), DualScreenDetector.DEAD_ZONE_CHECKS - 1));
+        assertNull(feed(d, BLACK, 50));
+        assertEquals("content outside the two windows, main display only", d.check(grid(FULL)));
+
+        // Of a run without the second window
+        d = inDual();
+        assertNull(feed(d, grid(TOP), DualScreenDetector.NO_BOTTOM_CHECKS - 1));
+        assertNull(feed(d, BLACK, 50));
+        assertEquals("the second window is gone, main display only", d.check(grid(TOP)));
+
+        // Of a smaller box on its way
+        d = new DualScreenDetector(true);
+        assertNull(feed(d, grid(LETTERBOX), DualScreenDetector.BOX_CHECKS - 1));
+        assertNull(feed(d, BLACK, 50));
+        assertEquals("content box [0, 540, 1920, 1080]", d.check(grid(LETTERBOX)));
     }
 
     @Test
@@ -205,10 +228,16 @@ public class DualScreenDetectorTest {
         assertNeverSplits(new int[] {0, 0, 1280, 716}, bottom);
         assertNeverSplits(top, new int[] {0, 1080, 824, 720});
         assertNeverSplits(top, new int[] {0, 1080, 828, 716});
+        // Nor when it reaches the crop's right or bottom edge: the span is the content's own
+        assertNeverSplits(new int[] {644, 0, 1276, 1080}, BOTTOM);
+        assertNeverSplits(new int[] {0, 364, 1920, 716}, BOTTOM);
+        assertNeverSplits(TOP, new int[] {416, 1080, 824, 1080});
+        assertNeverSplits(TOP, new int[] {0, 1444, 1240, 716});
     }
 
     @Test
     public void deadZoneContentEndsTheSplitAfterTheDebounce() {
+        assertEquals(750, DualScreenDetector.DEAD_ZONE_CHECKS * DualScreenDetector.CHECK_INTERVAL_MS);
         DualScreenDetector d = inDual();
         ByteBuffer filled = grid(FULL);
         assertNull(feed(d, filled, DualScreenDetector.DEAD_ZONE_CHECKS - 1));
@@ -256,6 +285,7 @@ public class DualScreenDetectorTest {
 
     @Test
     public void theBoxDoesNotJitter() {
+        assertEquals(750, DualScreenDetector.BOX_CHECKS * DualScreenDetector.CHECK_INTERVAL_MS);
         DualScreenDetector d = showing(FULL);
         DualScreenDetector.View shown = d.view();
         int[] darkTop = {0, 200, 1920, 1960};
@@ -334,6 +364,20 @@ public class DualScreenDetectorTest {
     }
 
     @Test
+    public void aBoxEnlargedPastTheContentShrinksToIt() {
+        // A window moved up by half its height: the box takes it in at once, and the same check
+        // is the first of the way down to it
+        DualScreenDetector d = showing(LETTERBOX);
+        assertEquals("content box [0, 0, 1920, 1620]", d.check(grid(TOP)));
+        assertTrue(d.pending());
+        assertNull(feed(d, grid(TOP), DualScreenDetector.BOX_CHECKS - 2));
+        assertTrue(d.pending());
+        assertEquals("content box [0, 0, 1920, 1080]", d.check(grid(TOP)));
+        assertFalse(d.pending());
+        assertArrayEquals(TOP, d.view().main);
+    }
+
+    @Test
     public void contentThatBlinksOutsideTheBoxStaysShown() {
         DualScreenDetector d = showing(TOP);
         int[] text = {760, 1500, 400, 60};
@@ -406,6 +450,38 @@ public class DualScreenDetectorTest {
         d.giveUp();
         d.check(grid(FULL));
         assertFalse(d.pending());
+    }
+
+    @Test
+    public void aStillPictureIsSettledWhenNoCheckIsWanted() {
+        int[][] rects = {TOP, BOTTOM, FULL, LETTERBOX, {0, 676, 1920, 808}, {480, 808, 960, 540}, {928, 1048, 64, 64},
+                {1240, 1080, 4, 4}, {0, 0, 1280, 720}, {0, 1080, 828, 720}, {300, 0, 1620, 2160}, {0, 0, 1240, 2160}};
+        Random random = new Random(1);
+        ByteBuffer[] grids = new ByteBuffer[24];
+        grids[0] = BLACK;
+        for (int i = 1; i < grids.length; i++) {
+            grids[i] = grid(rects[random.nextInt(rects.length)], rects[random.nextInt(rects.length)]);
+        }
+        for (int run = 0; run < 400; run++) {
+            DualScreenDetector d = new DualScreenDetector(run % 2 == 0);
+            ByteBuffer still = BLACK;
+            for (int i = random.nextInt(12); i >= 0; i--) {
+                still = grids[random.nextInt(grids.length)];
+                d.check(still);
+            }
+            // A running debounce ends
+            for (int i = 0; d.pending(); i++) {
+                assertTrue(i < DualScreenDetector.NO_BOTTOM_CHECKS);
+                d.check(still);
+            }
+            // And then the same picture changes nothing
+            DualScreenDetector.View settled = d.view();
+            for (int i = 0; i < DualScreenDetector.NO_BOTTOM_CHECKS; i++) {
+                assertNull(d.check(still));
+                assertFalse(d.pending());
+                assertSame(settled, d.view());
+            }
+        }
     }
 
     @Test
