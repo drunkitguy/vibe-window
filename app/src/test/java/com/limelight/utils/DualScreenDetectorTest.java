@@ -507,9 +507,11 @@ public class DualScreenDetectorTest {
     @Test
     public void resetStartsOverAndGivingUpSplitsForGood() {
         DualScreenDetector d = inDual();
-        d.reset();
+        // Ending a split is reported for the log, once
+        assertTrue(d.reset());
         assertFalse(d.view().dual);
         assertArrayEquals(FULL, d.view().main);
+        assertFalse(d.reset());
         // The layout is found again, after the whole debounce
         assertNull(feed(d, DUAL, DualScreenDetector.DUAL_CHECKS - 1));
         assertFalse(d.view().dual);
@@ -534,7 +536,14 @@ public class DualScreenDetectorTest {
         assertTrue(d.view().dual);
         assertSame(TOP, d.view().main);
         assertNull(feed(d, grid(FULL), 20));
-        d.reset();
+        // Nothing changes after giving up, so nothing is reported
+        assertFalse(d.reset());
+        assertTrue(d.view().dual);
+
+        // Given up while split: still nothing changes
+        d = inDual();
+        d.giveUp();
+        assertFalse(d.reset());
         assertTrue(d.view().dual);
     }
 

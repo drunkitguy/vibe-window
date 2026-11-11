@@ -108,15 +108,20 @@ public final class DualScreenDetector {
         return view;
     }
 
-    /** Start over in SINGLE with the whole video: a new decoder or GL context. */
-    public void reset() {
+    /**
+     * Start over in SINGLE with the whole video: a new decoder or GL context.
+     * Returns whether that ended a split, for the log.
+     */
+    public boolean reset() {
         if (gaveUp) {
-            return;
+            return false;
         }
+        boolean wasDual = dual;
         dual = false;
         dualRun = shrinkRun = 0;
         box = FULL;
         view = new View(false, FULL);
+        return wasDual;
     }
 
     /** The picture cannot be analysed: split always, as before there was detection. */

@@ -167,7 +167,12 @@ public class DualScreenRenderer implements GLSurfaceView.Renderer, SurfaceTextur
 
     /** Any thread: the decoder (re)started, so layout detection starts over on the main display. */
     public void resetDetection() {
-        glSurfaceView.queueEvent(detector::reset);
+        glSurfaceView.queueEvent(() -> {
+            // The end of a split is a state change like the others, so it is logged
+            if (detector.reset()) {
+                LimeLog.info("Dual screen: decoder restarted, main display only until the two-window layout is seen again");
+            }
+        });
     }
 
     /** Any thread; safe to call more than once. Everything is released on the GL thread. */
@@ -247,6 +252,7 @@ public class DualScreenRenderer implements GLSurfaceView.Renderer, SurfaceTextur
         positionHandle = GLES20.glGetAttribLocation(program, "a_Position");
         texCoordHandle = GLES20.glGetAttribLocation(program, "a_TexCoord");
         texMatrixHandle = GLES20.glGetUniformLocation(program, "u_TexMatrix");
+        // Never ends a split: a context made after the first one ends the stream above
         detector.reset();
         setUpAnalysis();
 
